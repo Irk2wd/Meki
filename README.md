@@ -40,7 +40,7 @@
 
 ## 获取 Meki
 
-当前为 **1.0.0 源码候选版**，安装包尚未发布。后续的 Windows EXE 安装器与 macOS 通用 DMG 将在 [GitHub Releases](https://github.com/Irk2wd/Meki/releases) 提供。
+从 [GitHub Releases](https://github.com/Irk2wd/Meki/releases) 获取对应平台的安装包：Windows 使用 EXE 安装向导，macOS 使用通用 DMG，打开后将 Meki 拖入 Applications。各版本的可用平台与安装说明见发布页面。
 
 ## 文件属于你
 
@@ -50,7 +50,7 @@ Meki 直接读写本地 Markdown 文件，无需账户，没有云同步或遥�
 
 ## 继续了解
 
-[打开文档 →](docs/README.md) 使用说明、源码运行、开发验证、Markdown 兼容性与更新维护。
+[打开使用说明 →](docs/README.md) 了解文稿编辑、Markdown 兼容性、图片管理和应用内更新。
 
 ---
 

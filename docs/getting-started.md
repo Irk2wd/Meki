@@ -6,9 +6,7 @@ Meki 直接编辑本地 Markdown 文件，适用于 Windows 和 macOS。无需�
 
 ## 获取与安装
 
-当前公开版本为 **1.0.0 源码候选版，安装包尚未发布**。现在可按 [开发指南](development.md) 从源码运行。
-
-安装包发布后，从 [GitHub Releases](https://github.com/Irk2wd/Meki/releases) 获取对应平台的文件：
+从 [GitHub Releases](https://github.com/Irk2wd/Meki/releases) 获取对应平台的文件：
 
 | 平台 | 安装方式 |
 | --- | --- |
@@ -45,7 +43,7 @@ Meki 直接编辑本地 Markdown 文件，适用于 Windows 和 macOS。无需�
 
 图片可通过粘贴、拖放或选择文件插入，支持尺寸调整和本地附件整理。连接本机 PicGo 后可上传单张或整篇文稿的图片；自动上传默认关闭，原图保留。配置方法见 [PicGo 图床](image-hosting.md)。
 
-HTML、PDF 和 PNG 导出使用与预览共用的正文外观、公式和图表规则。安装 **Pandoc 3.12.1 或更新版本**后，还可导出 Word、EPUB，以及导入 Word、HTML；可在导出对话框中选择本机 Pandoc。Word 和 EPUB 使用各自的排版机制，具体限制见 [应用架构中的导出说明](architecture.md)。
+HTML、PDF 和 PNG 导出使用与预览共用的正文外观、公式和图表规则。安装 **Pandoc 3.12.1 或更新版本**后，还可导出 Word、EPUB，以及导入 Word、HTML；可在导出对话框中选择本机 Pandoc。Word 和 EPUB 使用各自的排版机制：Word 中常见公式可以继续编辑，复杂公式可能保留为图片；EPUB 中的公式和图表使用图片。
 
 Pandoc 和 PicGo 均需单独安装，不包含在 Meki 中。
 
@@ -53,6 +51,6 @@ Pandoc 和 PicGo 均需单独安装，不包含在 Meki 中。
 
 从帮助菜单或侧栏的“检查更新”查看版本说明并下载更新，再自行选择重启。启动应用不会自动检查或下载；运行时升级需要完整安装器。详细流程见 [应用内更新](updates.md#检查与安装)。
 
-设置、恢复数据、快照、文件历史与更新缓存保存在系统应用数据目录。为兼容已有数据，该目录仍名为 `Moye`，与界面显示名 Meki 不同；具体规则见 [名称与兼容标识](architecture.md#名称与兼容标识)。
+设置、恢复数据、快照、文件历史与更新缓存保存在系统应用数据目录。为兼容已有数据，该目录仍名为 `Moye`，与界面显示名 Meki 不同。
 
 应用没有账户、云同步或遥测。检查更新、加载网络图片、打开外部链接、PicGo 上传，以及启用拼写检查后的词典下载会按需联网。

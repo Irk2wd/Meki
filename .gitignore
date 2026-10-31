@@ -9,7 +9,17 @@ outputs/
 
 # Local research, generated evidence, and one-off maintenance helpers
 /research/
-/docs/evidence/relocation.json
+/docs/evidence/
+/docs/architecture.md
+/docs/development.md
+/docs/publishing/
+/docs/research/
+/internal-docs/
+AGENTS.md
+CLAUDE.md
+SKILL.md
+.agents/
+.codex/
 /work-debug.mjs
 /refresh-outputs.mjs
 
