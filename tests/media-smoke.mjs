@@ -15,7 +15,7 @@ await sharp({ create: { width: 100, height: 60, channels: 3, background: '#386cb
 const original = '\uFEFF---\r\ntitle: 元数据保留\r\n---\r\n\r\n# 文稿\r\n\r\n图片从这里开始。\r\n';
 await fs.writeFile(documentPath, original); await fs.writeFile(otherPath, '# 不应被切换\n');
 const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: path.join(run, 'profile'), MOYE_TEST_OPEN_PATH: otherPath, MOYE_TEST_SAVE_PATH: newPath, MOYE_TEST_IMAGE_PATHS: JSON.stringify([redPath, bluePath]), MOYE_TEST_IMAGE_DELAY: '250', MOYE_TEST_DISCARD: 'discard' }; delete env.ELECTRON_RUN_AS_NODE;
-let app, page; const results = [], errors = [];
+let app, page, failureState; const results = [], errors = [];
 const record = name => { results.push(name); console.log(`PASS ${name}`); };
 async function launch(launchEnv = env, args = ['--open', documentPath]) {
   app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? args : [root, ...args], env: launchEnv, timeout: 30000 });
@@ -106,7 +106,17 @@ try {
   record('H1–H6 outline folds hierarchically, jumps in both modes and follows the visible section');
 
   await sourceFill('Format me\n\nPlain text\n'); await page.locator('[data-mode="visual"]').click();
-  const first = rich.locator('p').first(); await first.click(); await page.keyboard.press(mac ? 'Meta+ArrowLeft' : 'Home'); await page.keyboard.press(mac ? 'Meta+Shift+ArrowRight' : 'Shift+End');
+  const first = rich.locator('p').first();
+  await (await app.browserWindow(page)).evaluate(win => { win.show(); win.focus(); });
+  await page.waitForFunction(() => document.hasFocus()); await idle();
+  await first.click(); await page.keyboard.press(mac ? 'Meta+ArrowLeft' : 'Home');
+  // macOS line-navigation commands update the DOM selection asynchronously.
+  // Complete the first movement before extending the selection from its new caret.
+  await page.waitForFunction(() => {
+    const selection = getSelection(), paragraph = document.querySelector('.ProseMirror p');
+    return selection?.isCollapsed && paragraph?.contains(selection.anchorNode) && selection.anchorOffset === 0;
+  });
+  await page.keyboard.press(mac ? 'Meta+Shift+ArrowRight' : 'Shift+End');
   // A DOM range can precede Chromium's selectionchange event on macOS. Wait for
   // the model-driven counter as well, rather than assuming one frame is enough.
   await page.waitForFunction(() => {
@@ -184,6 +194,7 @@ try {
   record('canceling Save As preserves untitled text and writes no image or attachment directory');
   assert.deepEqual(errors, []); record('no renderer exceptions');
 } catch (error) {
+  if (page) failureState = await page.evaluate(() => ({ selection: getSelection()?.toString(), anchorOffset: getSelection()?.anchorOffset, focusOffset: getSelection()?.focusOffset, active: document.activeElement?.outerHTML.slice(0,500), focused: document.hasFocus(), counter: document.querySelector('#selection-count')?.outerHTML, toast: document.querySelector('#toast')?.textContent })).catch(() => null);
   if (page) { await page.screenshot({ path: path.join(run, 'last-state.png') }).catch(() => {}); await fs.writeFile(path.join(run, 'last-state.txt'), await page.locator('body').innerText().catch(() => 'unavailable')); await fs.writeFile(path.join(run, 'last-dom.json'), JSON.stringify(await page.evaluate(() => ({ body: document.body.className, lineNumbers: [...document.querySelectorAll('.milkdown-code-block .cm-lineNumbers')].map(node => ({ html: node.outerHTML, display: getComputedStyle(node).display })) })), null, 2)); }
   throw error;
-} finally { await fs.writeFile(path.join(run, 'results.json'), JSON.stringify({ results, errors }, null, 2)); await exit(); console.log(`Evidence: ${run}`); }
+} finally { await fs.writeFile(path.join(run, 'results.json'), JSON.stringify({ results, errors, failureState }, null, 2)); await exit(); console.log(`Evidence: ${run}`); }
