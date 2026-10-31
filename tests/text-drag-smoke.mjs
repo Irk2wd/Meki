@@ -18,7 +18,7 @@ await fs.writeFile(file, original);
 await fs.writeFile(path.join(profile, 'state.json'), JSON.stringify({ settings: { autoSave: false, autoSnapshot: false, spellcheck: false } }));
 const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: profile, MOYE_TEST_DISCARD: 'discard' };
 delete env.ELECTRON_RUN_AS_NODE;
-let app, page;
+let app, page, failure;
 const results = [], errors = [];
 const pass = message => { results.push(message); console.log(`PASS ${message}`); };
 async function selectWord(backward = false) {
@@ -49,6 +49,8 @@ async function drag({ copy = false, cancel = false } = {}) {
   if (copy) await page.keyboard.down(mac ? 'Alt' : 'Control');
   await page.mouse.move(start.x, start.y); await page.mouse.down();
   assert.equal(await page.evaluate(() => getSelection().toString()), 'bravo', 'pressing selected text must preserve the range until the gesture is known');
+  // Chromium on macOS treats movement within 150 ms as a new selection.
+  if (mac) await page.waitForTimeout(200);
   await page.mouse.move(start.x + 12, start.y, { steps: 4 });
   await page.mouse.move(end.x, end.y, { steps: 15 });
   await page.mouse.move(end.x + 1, end.y, { steps: 2 });
@@ -79,6 +81,11 @@ try {
   await page.evaluate(() => {
     window.textDragEvents = [];
     for (const type of ['dragstart', 'drop', 'dragend']) document.addEventListener(type, event => window.textDragEvents.push({ type, text: event.dataTransfer?.getData('text/plain') }));
+    window.selectionEvents = [];
+    for (const type of ['mousedown', 'mouseup', 'keydown', 'selectionchange']) document.addEventListener(type, event => {
+      window.selectionEvents.push({ type, key: event.key, detail: event.detail, selected: getSelection()?.toString(), focused: document.activeElement?.className, countHidden: document.querySelector('#selection-count').hidden });
+      if (window.selectionEvents.length > 40) window.selectionEvents.shift();
+    });
   });
   for (const backward of [false, true]) {
     await selectWord(backward); await drag(); await undo();
@@ -97,12 +104,30 @@ try {
     await undo();
     pass(`a plain click ${paragraph === 0 ? 'inside' : 'outside'} the previous selection followed immediately by typing uses the clicked caret`);
   }
+  for (let attempt = 0; attempt < 10; attempt++) {
+    await page.keyboard.press(`${mod}+a`);
+    const caret = await point(0, 8);
+    await page.mouse.click(caret.x, caret.y);
+    await page.keyboard.press(`${mod}+a`);
+    await page.waitForFunction(() => getSelection()?.toString().includes('Second paragraph destination.') && !document.querySelector('#selection-count').hidden);
+  }
+  pass('clicking an existing full-document selection and immediately selecting all keeps browser and editor selections synchronized');
+  const word = await point(0, 8), extension = await point(1, 7);
+  // Start a fresh click sequence after the rapid single-click regression.
+  await page.waitForTimeout(550);
+  await page.mouse.dblclick(word.x, word.y);
+  await page.waitForFunction(() => getSelection()?.toString().trim() === 'bravo' && !document.querySelector('#selection-count').hidden);
+  await page.keyboard.down('Shift'); await page.mouse.click(extension.x, extension.y); await page.keyboard.up('Shift');
+  await page.waitForFunction(() => getSelection()?.toString().includes('charlie delta echo foxtrot.') && getSelection()?.toString().includes('Second'));
+  assert.equal(await fs.readFile(file, 'utf8'), original);
+  pass('native double-click word selection and Shift-click extension keep their usual behavior without changing the file');
   assert.deepEqual(errors, []);
 } catch (error) {
+  failure = { message: error.message, selectionEvents: page ? await page.evaluate(() => window.selectionEvents).catch(() => []) : [] };
   if (page) { await page.screenshot({ path: path.join(run, 'last-state.png') }).catch(() => {}); await fs.writeFile(path.join(run, 'last-state.txt'), await page.locator('body').innerText().catch(() => 'unavailable')); }
   throw error;
 } finally {
-  await fs.writeFile(path.join(run, 'results.json'), JSON.stringify({ results, errors }, null, 2));
+  await fs.writeFile(path.join(run, 'results.json'), JSON.stringify({ results, errors, failure }, null, 2));
   if (app) { await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await app.close().catch(() => {}); }
   console.log(`Evidence: ${run}`);
 }
