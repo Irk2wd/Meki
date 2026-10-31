@@ -134,7 +134,7 @@ try {
   assert.equal(await fs.readFile(file, 'utf8'), original);
   assert.deepEqual(errors, []);
   pass('switching back restores Chinese and keeps the original document unchanged without renderer errors');
-  await fs.writeFile(path.join(run, 'result.json'), JSON.stringify({ passed: results.length, results, errors }, null, 2));
+  await fs.writeFile(path.join(run, 'results.json'), JSON.stringify({ passed: results.length, results, errors }, null, 2));
 } catch (error) {
   if (page && !page.isClosed()) await page.screenshot({ path: path.join(run, 'failure.png') }).catch(() => {});
   await fs.writeFile(path.join(run, 'failure.txt'), `${error.stack}\n${errors.join('\n')}`); throw error;
