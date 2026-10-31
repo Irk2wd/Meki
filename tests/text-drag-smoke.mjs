@@ -45,6 +45,9 @@ async function undo() {
 }
 async function drag({ copy = false, cancel = false } = {}) {
   const start = await point(0, 8), end = await point(1, 7);
+  // Each case is an independent gesture. ProseMirror infers triple clicks from
+  // nearby mousedowns within 500 ms even when keyboard selection/undo intervenes.
+  await page.waitForTimeout(550);
   await page.evaluate(() => { window.textDragEvents = []; });
   if (copy) await page.keyboard.down(mac ? 'Alt' : 'Control');
   await page.mouse.move(start.x, start.y); await page.mouse.down();
