@@ -195,9 +195,13 @@ async function synchronizeWorkspace() {
     const [tree, status] = await Promise.allSettled([root ? window.moye.refreshWorkspace() : Promise.resolve(null), documentPath ? window.moye.checkDocument(documentPath,revision) : Promise.resolve(null)]);
     if (busy) return;
     if (tree.status === 'fulfilled' && root === workspace?.root && tree.value && JSON.stringify(tree.value) !== JSON.stringify(workspace)) { workspace = tree.value; renderFiles(); }
-    if (status.status === 'fulfilled' && documentPath === current.path && revision === current.revision) {
+    if (status.status === 'fulfilled' && selected === documents.active && documentPath === current.path && revision === current.revision) {
       selected.status = status.value;
       if (status.value && status.value.state !== 'unchanged' && !['history', 'recovered'].includes(selected.paused || '')) selected.paused = 'external';
+      // A transient replacement or a reverted external edit may leave a pause
+      // after the disk returns to our saved revision. Other pause reasons still
+      // require the user's explicit save; autosave rechecks the revision itself.
+      else if (status.value?.state === 'unchanged' && selected.paused === 'external') selected.paused = null;
       renderExternalStatus(); updateStatus();
     }
   } finally { syncingWorkspace = false; }

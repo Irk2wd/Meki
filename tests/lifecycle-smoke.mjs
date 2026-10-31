@@ -103,12 +103,18 @@ try {
   assert.ok((await page.evaluate(file => window.moye.listVersions(file), a)).length >= 2);
   pass('opt-in interval autosave writes saved documents and preserves their previous versions');
 
+  const savedA = await fs.readFile(a);
   await append('\nBackground conflicting edit'); await tab(b); await fs.writeFile(a, 'External bytes must survive');
   await setting('MOYE_TEST_CONFLICT', 'overwrite');
   await poll(() => page.locator('.document-tab').filter({ has: page.locator(`[title="${a.replace(/\\/g, '\\\\')}"]`) }).locator('.tab-paused').count().then(count => count > 0));
   await page.waitForTimeout(11000); assert.equal(await fs.readFile(a, 'utf8'), 'External bytes must survive');
   await tab(a); assert.match(await page.locator('#source-editor').innerText(), /Background conflicting edit/); assert.match(await page.locator('#document-state').innerText(), /暂停/);
   pass('external changes in inactive tabs pause autosave without conflict dialogs or repeated overwrites');
+
+  await fs.writeFile(a, savedA);
+  await poll(() => page.locator('.document-tab.active .tab-paused').count().then(count => count === 0));
+  await poll(async () => (await fs.readFile(a, 'utf8')).includes('Background conflicting edit'));
+  pass('restoring the exact saved disk version clears only the external pause and resumes safe autosave');
 
   await tab(b); const diskB = await fs.readFile(b);
   await append('\nUnsaved before history restore'); await setting('MOYE_TEST_DISCARD', 'cancel');

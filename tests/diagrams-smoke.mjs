@@ -1,4 +1,4 @@
-import { _electron as electron } from 'playwright';
+import { _electron as electron, expect } from 'playwright/test';
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -92,8 +92,8 @@ try {
   // Print layout can remount Crepe's lazy code views. Wait for their observer-
   // driven previews to settle before inspecting the editor's print DOM.
   await waitReady(9, 'night');
-  assert.equal(await page.locator('.ProseMirror .moye-diagram svg').count(), 9);
-  assert.ok(await page.locator('.ProseMirror .moye-diagram svg').last().isVisible());
+  await expect(page.locator('.ProseMirror .moye-diagram svg')).toHaveCount(9);
+  await expect(page.locator('.ProseMirror .moye-diagram svg').last()).toBeVisible();
   await page.emulateMedia({ media: 'screen' });
   pass('standalone HTML and PDF contain complete styled SVG, including diagrams never scrolled into view');
 
