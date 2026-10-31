@@ -1,0 +1,24 @@
+#editor-workspace { flex:1; min-height:0; min-width:0; overflow:auto; position:relative; }
+.editor-layout { height:100%; min-height:150px; min-width:240px; }
+.editor-pane { height:100%; min-height:0; min-width:0; display:flex; flex-direction:column; container-type:inline-size; }
+.pane-body { flex:1; min-height:0; min-width:0; display:flex; }
+.pane-body > .document-scroll { min-height:0; min-width:0; }
+.editor-split { display:flex; height:100%; min-height:0; min-width:0; }
+.editor-split.row { flex-direction:row; }
+.editor-split.column { flex-direction:column; }
+.editor-split > :first-child { flex:var(--pane-ratio) 1 0; }
+.editor-split > :last-child { flex:calc(1 - var(--pane-ratio)) 1 0; }
+.editor-split.row > :first-child,.editor-split.row > :last-child { height:100%; }
+.pane-divider { flex:0 0 6px; background:var(--border); touch-action:none; position:relative; z-index:5; }
+.row > .pane-divider { cursor:col-resize; }.column > .pane-divider { cursor:row-resize; }
+.pane-divider:hover,.pane-divider:focus-visible,.resizing-panes .pane-divider:active { background:var(--accent); }
+.pane-tabs { display:flex; align-items:stretch; flex-shrink:0; min-height:34px; overflow:auto; scrollbar-width:thin; border-bottom:1px solid var(--border); background:var(--side); }
+.active-pane > .pane-tabs { box-shadow:inset 0 2px var(--accent); }
+.pane-merge { margin-left:auto; padding:3px 8px; color:var(--muted); flex-shrink:0; }
+.document-tab [role=tab] { cursor:grab; touch-action:none; user-select:none; }
+.pane-drop-preview { position:fixed; z-index:180; pointer-events:none; border:2px solid var(--accent); border-radius:5px; background:color-mix(in srgb,var(--accent) 15%,transparent); }
+.pane-drag-label { position:fixed; pointer-events:none; z-index:181; border:1px solid var(--border); border-radius:6px; padding:8px 12px; background:var(--surface); color:var(--text); box-shadow:var(--shadow); font:12px var(--ui); }
+.dragging-tab,.resizing-panes { user-select:none; }
+.dragging-tab * { cursor:grabbing!important; }
+@container (max-width:560px) { .editor-host { padding:26px 25px 70px 45px; } .document-scroll .editor-host { padding-left:45px; } }
+@media print { #editor-workspace,.editor-layout,.editor-pane,.pane-body,.editor-split { display:block!important; height:auto!important; overflow:visible!important; } .pane-tabs,.pane-divider,.editor-pane:not(.active-pane) { display:none!important; } }

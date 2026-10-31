@@ -1,0 +1,42 @@
+.document-tabs { display:flex; align-items:stretch; min-height:35px; flex-shrink:0; border-bottom:1px solid var(--border); background:var(--sidebar-bg,var(--bg)); padding:0 10px; gap:3px }
+.document-tab-list { display:flex; flex:1; min-width:0; overflow-x:auto; scrollbar-width:thin; gap:2px }
+.document-tab { display:flex; align-items:center; min-width:95px; max-width:220px; border-bottom:2px solid transparent; color:var(--muted); flex-shrink:0 }
+.document-tab.active { color:var(--text); border-bottom-color:var(--accent); background:var(--hover) }
+.document-tab button { border:0; background:transparent; color:inherit; cursor:pointer; padding:8px 3px; display:flex; gap:6px; align-items:center; font:inherit; font-size:12px; min-width:0 }
+.document-tab button[role="tab"] { padding-left:8px; flex:1 }
+.document-tab button[role="tab"] > span:nth-child(2) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.document-tab .close-document-tab { padding:6px 8px; opacity:.6; font-size:16px }
+.close-document-tab:hover { opacity:1; color:var(--accent) }
+.tab-dirty { font-size:8px; opacity:0; color:var(--accent) }.tab-dirty.visible { opacity:1 }.tab-paused { color:#ac7c36; font-size:10px }
+.tab-add,.tab-settings { border:0; color:var(--muted); background:transparent; cursor:pointer; padding:4px 10px }
+.tab-add:hover,.tab-settings:hover { background:var(--hover); color:var(--text) }
+.tab-windows { padding:4px 9px; font-size:12px; color:var(--muted); white-space:nowrap }
+.window-panel { top:88px; right:40px; width:290px; padding:16px; z-index:45 }
+.window-panel button { display:flex; justify-content:space-between; align-items:center; width:100%; padding:10px 8px; font-size:12px; border-radius:5px; text-align:left }
+.window-panel button span { font-size:10px; color:var(--muted) }
+@media(max-width:760px) {
+  .sidebar { display:none!important }
+  .titlebar { padding-left:16px; padding-right:12px; gap:8px }
+  .title-actions { gap:6px }
+  .title-actions { flex-shrink:0 }
+  .document-location { flex:1 }
+  .formatbar { overflow-x:auto; flex-shrink:0; white-space:nowrap }
+  .format-actions,.view-actions { flex-shrink:0 }
+  .editor-host { padding-left:34px; padding-right:24px }
+  .statusbar { padding-left:16px; padding-right:16px }
+}
+.lifecycle-settings { top:88px; right:18px; width:325px; z-index:40 }
+.lifecycle-settings .setting-note { line-height:1.7 }
+#style-panel,#export-panel { top:143px; max-height:calc(100vh - 165px) }
+#find-panel { top:145px }
+#history-dialog { width:min(850px,90vw); max-width:none }
+.history-help { font-size:13px; color:var(--muted); line-height:1.7 }
+.history-layout { display:grid; grid-template-columns:240px 1fr; height:340px; gap:12px }
+#history-list { overflow:auto; display:flex; flex-direction:column; gap:4px }
+#history-list button { padding:10px 8px; text-align:left; border:1px solid var(--border); border-radius:6px; background:transparent; color:var(--text); font-size:12px; cursor:pointer }
+#history-list button.active { border-color:var(--accent); background:var(--hover) }
+#history-preview { resize:none; width:100%; padding:12px; font:13px/1.65 var(--mono); background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px }
+#history-status { font-size:12px; color:var(--muted); min-height:20px }
+#history-dialog .dialog-actions > span { font-size:11px; color:var(--muted) }
+.focus-mode .document-tabs { display:none }
+@media print { .document-tabs,.lifecycle-settings,#history-dialog { display:none!important } }

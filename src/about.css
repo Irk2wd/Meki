@@ -1,0 +1,20 @@
+#about-dialog{width:min(500px,92vw);max-height:88vh;overflow:auto}
+#about-dialog .dialog-heading{margin-bottom:18px}
+.about-brand{display:flex;align-items:center;gap:16px}
+.about-mark{display:grid;place-items:center;width:64px;height:64px;border-radius:16px;background:var(--accent-soft);color:var(--accent);flex-shrink:0}
+.about-mark svg{width:38px;height:38px}
+.about-description{color:var(--soft);font:16px/1.8 var(--body-font);margin:0 0 22px}
+.about-info{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px 24px;padding:20px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-size:13px}
+.about-info dt{color:var(--muted)}
+.about-info dd{margin:0;overflow-wrap:anywhere}
+.about-info a{color:var(--accent);text-decoration:none}
+.about-info a:hover{text-decoration:underline}
+#about-version{font-variant-numeric:tabular-nums}
+.about-note{font-size:12px;line-height:1.8;color:var(--soft)}
+#about-notices{margin-top:22px;font-size:12px}
+#about-notices summary{cursor:pointer;color:var(--soft)}
+#about-notices-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;font:11px/1.7 var(--mono);padding:12px;background:var(--side);border:1px solid var(--border);border-radius:6px}
+#about-feedback{color:var(--soft);font-size:12px;line-height:1.7}
+#about-feedback:empty{display:none}
+.about-actions{display:flex;justify-content:flex-end;margin-top:24px}
+.brand button.brand-mark{padding:0;flex-shrink:0}

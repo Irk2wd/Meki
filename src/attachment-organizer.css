@@ -1,0 +1,9 @@
+#attachment-dialog { width:min(580px,90vw); max-width:none }
+#attachment-summary { font-size:16px; line-height:1.7; margin:20px 0 }
+.attachment-target { display:grid; gap:7px; padding:14px; background:var(--hover); border:1px solid var(--border); border-radius:8px }
+.attachment-target span { color:var(--muted); font-size:11px }
+.attachment-target code { overflow-wrap:anywhere; font:12px/1.6 var(--mono) }
+#attachment-details,.attachment-help { color:var(--muted); font-size:12px; line-height:1.8 }
+#attachment-details { margin:12px 0 18px }
+#attachment-dialog .dialog-actions { justify-content:flex-end; gap:10px }
+@media print { #attachment-dialog { display:none!important } }

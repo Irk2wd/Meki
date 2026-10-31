@@ -1,0 +1,18 @@
+.moye-toc{border:1px solid var(--border,#d9d9d5);border-radius:8px;padding:18px 22px;margin:1.5em 0;font-size:.9em}
+.moye-toc-title{font-weight:650;letter-spacing:.08em;margin-bottom:.6em}
+.moye-toc ul{list-style:none;padding:0;margin:0}
+.moye-toc li{margin:.25em 0}
+.moye-toc li[data-depth="2"]{padding-left:1em}.moye-toc li[data-depth="3"]{padding-left:2em}.moye-toc li[data-depth="4"]{padding-left:3em}.moye-toc li[data-depth="5"]{padding-left:4em}.moye-toc li[data-depth="6"]{padding-left:5em}
+.moye-toc a{color:inherit;text-decoration:none}.moye-toc a:hover{text-decoration:underline}
+.moye-alert{--alert-color:#537ca0;border-left:4px solid var(--alert-color);padding:.7em 1.1em;margin:1.5em 0;background:color-mix(in srgb,var(--alert-color) 6%,transparent);border-radius:0 5px 5px 0}
+.moye-alert[data-kind="tip"]{--alert-color:#4c8a65}.moye-alert[data-kind="important"]{--alert-color:#8565ae}.moye-alert[data-kind="warning"]{--alert-color:#b68b32}.moye-alert[data-kind="caution"]{--alert-color:#b65f58}
+.moye-alert-title{color:var(--alert-color);font-weight:650;margin:0 0 .35em}.moye-alert>p:last-child,.moye-alert-content>p:last-child{margin-bottom:0}
+.moye-document mark,.ProseMirror mark{background:#f6e7a0;color:inherit;padding:.03em .12em;border-radius:2px}
+.moye-document sub,.ProseMirror sub{vertical-align:sub;font-size:.75em}.moye-document sup,.ProseMirror sup{vertical-align:super;font-size:.75em}
+.moye-emoji{font-family:"Apple Color Emoji","Segoe UI Emoji",sans-serif}
+.moye-raw-html{white-space:pre-wrap;overflow-wrap:anywhere;border:1px dashed var(--border,#ccc);padding:1em;opacity:.8}
+.moye-raw-inline{white-space:pre-wrap;opacity:.8}
+.moye-document .footnotes{font-size:.85em;border-top:1px solid var(--border,#ccc);margin-top:3em}
+.moye-document .footnotes .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.milkdown-code-block-placeholder:has(+.moye-lazy-math){display:none!important}
+.moye-lazy-math{font-family:var(--body-font,serif);font-size:var(--writing-size,18px);line-height:normal;padding:.8em 0}

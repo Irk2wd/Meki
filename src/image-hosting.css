@@ -1,0 +1,13 @@
+#image-host-dialog,#image-upload-dialog,#image-insert-upload{width:min(560px,92vw);max-height:88vh;overflow:auto}
+#image-host-dialog p,#image-upload-dialog p{font-size:13px;line-height:1.8}
+#image-host-dialog .image-host-note,#image-upload-dialog .image-host-note{font-size:11px;color:var(--soft)}
+#picgo-port{display:block;width:150px;padding:8px 10px;margin:8px 0;border:1px solid var(--border);border-radius:6px;background:var(--bg)}
+.image-host-toggle{display:flex;align-items:center;gap:8px;margin:18px 0 6px;font-size:13px}
+#image-host-status,#image-upload-status{min-height:1.8em;overflow-wrap:anywhere}
+#image-upload-files{max-height:150px;overflow:auto;margin:12px 0;padding-left:24px;font-size:12px;line-height:1.8;overflow-wrap:anywhere}
+#image-upload-progress{width:100%;height:8px;accent-color:var(--accent)}
+#image-insert-upload progress{width:100%;height:8px;accent-color:var(--accent)}
+#image-insert-upload .image-host-note{font-size:11px;line-height:1.8;color:var(--soft)}
+#image-host-dialog .dialog-actions,#image-upload-dialog .dialog-actions{flex-wrap:wrap}
+.image-host-entry{white-space:nowrap}
+#image-directory-base,#image-directory{display:block;width:100%;padding:8px 10px;margin:8px 0;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)}

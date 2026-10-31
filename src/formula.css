@@ -1,0 +1,12 @@
+.milkdown .ProseMirror .milkdown-code-block:has(.moye-math) { border-color:transparent; background:transparent; }
+.milkdown .ProseMirror .milkdown-code-block:has(.moye-math) .preview-panel { padding:0; }
+.milkdown .ProseMirror .milkdown-code-block:has(.moye-math) .preview { cursor:text; }
+.milkdown .ProseMirror .milkdown-code-block:has(.moye-math):has(.codemirror-host:not(.hidden)) { border-color:var(--border); background:var(--surface); }
+.milkdown .ProseMirror .milkdown-code-block:has(.moye-math) mjx-container[display="true"] { margin:.8em 0; }
+@media print { .milkdown .ProseMirror .milkdown-code-block:has(.moye-math) { border:0!important; background:transparent!important; } }
+.math-copy-menu { position:fixed; z-index:120; width:245px; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--surface); box-shadow:var(--shadow) }
+.math-copy-menu button { display:block; width:100%; padding:9px 10px; text-align:left; font-size:12px; border-radius:4px }
+.math-copy-menu button:disabled { opacity:.45; cursor:default }
+.math-copy-controls { display:flex; justify-content:flex-end; gap:8px; margin:-12px 0 20px }
+.math-copy-controls button { border:1px solid var(--border); border-radius:5px; padding:5px 9px; font-size:11px }
+@media print { .math-copy-menu,.math-copy-controls { display:none!important } }

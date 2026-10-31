@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "generator": "scripts/icons.mjs",
+  "generatorSha256": "d55be0b01ff53d9c2f88f87b0daee110ed20cdc8405db45cb2817836e54f6d9e",
+  "assets": [
+    {
+      "path": "assets/icon.icns",
+      "sha256": "754a6ca1d912fcd1ae1e9c7b96dbaeb9e9d57aa372ea334897657566a8dc4124",
+      "license": "MIT",
+      "origin": "scripts/icons.mjs"
+    },
+    {
+      "path": "assets/icon.ico",
+      "sha256": "4a62c41626f928c59e8119fd2aa17beb7afd81fa542fddc07806bd087fd3a991",
+      "license": "MIT",
+      "origin": "scripts/icons.mjs"
+    },
+    {
+      "path": "assets/icon.png",
+      "sha256": "23d9828983428a3e5892f00347f738fb1de4f7d4d5577e80db8f206c81357b51",
+      "license": "MIT",
+      "origin": "scripts/icons.mjs"
+    },
+    {
+      "path": "assets/icon.svg",
+      "sha256": "c5f0f527a63024b951b4341f6d2b589e1952baa4ceec3d0efd21c5e2fcbcce99",
+      "license": "MIT",
+      "origin": "scripts/icons.mjs"
+    },
+    {
+      "path": "assets/installer-background.png",
+      "sha256": "6fc661052effe73a32f2336a7296d5592bf41e272cd14f6de42b3173097404fa",
+      "license": "MIT",
+      "origin": "scripts/icons.mjs"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+#update-dialog{width:min(540px,92vw);max-height:88vh;overflow:auto}
+#update-version{color:var(--soft);font-size:12px}
+#update-message{min-height:3em;font-size:13px;line-height:1.7}
+#update-message.error{color:#b34e3e}
+#update-auth,#update-release-notes{border-top:1px solid var(--border);padding:13px 0;font-size:12px}
+#update-dialog summary{cursor:pointer;color:var(--soft)}
+#update-dialog details p,.update-note{font-size:11px;line-height:1.8;color:var(--muted)}
+#update-credential{font-size:11px;color:var(--muted)}
+#update-token{display:block;width:100%;margin:8px 0;padding:9px;border:1px solid var(--border);border-radius:5px;background:var(--bg)}
+.update-auth-actions,.update-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0}
+.update-auth-actions button,.update-actions button{border:1px solid var(--border);padding:7px 11px;border-radius:6px;font-size:12px}
+.update-auth-actions label{font-size:11px;display:flex;align-items:center;gap:5px}
+.update-actions{justify-content:flex-end;margin:18px 0 0;flex-wrap:wrap}
+#update-progress{width:100%;height:8px;accent-color:var(--accent)}
+#update-progress-text{font-size:11px;color:var(--soft)}
+#update-notes{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.8 var(--ui);max-height:190px;overflow:auto}
+.sidebar-bottom .update-entry{font-size:10px;color:var(--soft);margin-left:auto;white-space:nowrap}
+.sidebar-bottom .update-entry+.icon-button{margin-left:0}

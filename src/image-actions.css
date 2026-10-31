@@ -1,0 +1,9 @@
+.image-actions-menu{position:fixed;z-index:90;min-width:220px;padding:6px;border:1px solid var(--border);border-radius:8px;background:var(--surface);box-shadow:var(--shadow)}
+.image-actions-menu button{display:block;width:100%;text-align:left;padding:10px;font-size:12px;border-radius:5px}
+#image-copy-dialog{width:min(560px,92vw);max-height:88vh;overflow:auto}
+#image-copy-dialog p{font-size:12px;line-height:1.7;color:var(--soft);overflow-wrap:anywhere}
+#image-copy-source{max-height:65px;overflow:auto}
+#image-copy-dialog label{display:block;margin:14px 0;font-size:12px;color:var(--soft)}
+#image-copy-dialog input,#image-copy-dialog select{display:block;width:100%;margin-top:7px;padding:8px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--text)}
+#image-copy-status{min-height:20px;color:var(--accent)}
+@media print{.image-actions-menu,.image-more-actions{display:none!important}}

@@ -1,0 +1,13 @@
+.moye-diagram { display:block; margin:1em 0; overflow:auto; text-align:center; line-height:1.5; }
+.moye-diagram > svg { display:block; margin:auto; max-width:100%; height:auto; }
+.moye-diagram-error { padding:1em; border:1px solid #b2836b; border-radius:6px; color:var(--text,inherit); background:var(--surface,transparent); text-align:left; }
+.moye-diagram-error strong { display:block; margin-bottom:.4em; }
+.moye-diagram-error div { font-size:.85em; white-space:pre-wrap; }
+.moye-diagram-error pre { margin:.75em 0 0; white-space:pre-wrap; font-size:.85em; }
+.milkdown .milkdown-code-block:has(.moye-block-diagram) { background:transparent; }
+.milkdown .moye-block-diagram { width:100%; min-width:0; cursor:text; }
+.milkdown .milkdown-code-block-placeholder:has(+ .moye-lazy-diagram) { display:none!important; }
+@media print {
+  .moye-diagram { overflow:visible; break-inside:avoid; }
+  .milkdown .milkdown-code-block:has(.moye-block-diagram) :is(.codemirror-host,.preview-label,.preview-divider) { display:none!important; }
+}

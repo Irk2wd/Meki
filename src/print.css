@@ -1,0 +1,7 @@
+@media print {
+  :root { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+  .milkdown .ProseMirror { min-height:0!important; }
+  .milkdown .milkdown-latex-inline-edit,.milkdown .milkdown-link-tooltip,
+  .milkdown .milkdown-block-edit,.milkdown .tools,.milkdown .milkdown-slash-menu { display:none!important; }
+  .milkdown .milkdown-code-block:has(.moye-math) :is(.codemirror-host,.preview-label,.preview-divider) { display:none!important; }
+}

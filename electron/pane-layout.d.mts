@@ -1,0 +1,10 @@
+export type PaneGroup = { type: 'group'; id: string; tabs: string[]; activeId: string };
+export type PaneSplit = { type: 'split'; axis: 'row' | 'column'; ratio: number; first: PaneLayout; second: PaneLayout };
+export type PaneLayout = PaneGroup | PaneSplit;
+export type PaneEdge = 'left' | 'right' | 'top' | 'bottom';
+export const MAX_PANES: number;
+export function groups(layout?: PaneLayout): PaneGroup[];
+export function validateLayout(layout: unknown, documents: string[]): PaneLayout;
+export function reconcileLayout(layout: PaneLayout | undefined, documents: string[], activeId: string | null): PaneLayout | undefined;
+export function dockTab(layout: PaneLayout, tabId: string, targetId: string, edge: PaneEdge | null, beforeId: string | null, newId: string): PaneLayout;
+export function mergeGroup(layout: PaneLayout, groupId: string): PaneLayout;

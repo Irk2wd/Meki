@@ -1,0 +1,120 @@
+name: Desktop CI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installers:
+    name: Build installer (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows x64
+            artifact: windows
+          - os: macos-latest
+            label: macOS universal
+            artifact: macos
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Install official Electron runtime
+        run: node node_modules/electron/install.js
+      - name: Build native installer
+        env:
+          MOYE_UPDATE_SIGN_KEY: ${{ secrets.MOYE_UPDATE_SIGN_KEY }}
+        run: npm run package:installer
+      - name: Preserve exact installer and payload manifest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installer-${{ matrix.artifact }}
+          path: |
+            release/installers/*.exe
+            release/installers/*.dmg
+            release/installers/*-build.json
+            release/installers/Moye-update-*.json
+            release/installers/*.asar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  verify:
+    name: Verify installer (${{ matrix.label }})
+    needs: installers
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    env:
+      # Every desktop test launches the installed app; no development runtime is needed.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows x64
+            artifact: windows
+            evidence: win32-x64
+          - os: macos-latest
+            label: macOS Apple Silicon
+            artifact: macos
+            evidence: darwin-arm64
+          - os: macos-15-intel
+            label: macOS Intel
+            artifact: macos
+            evidence: darwin-x64
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Install verified optional Pandoc for conversion tests
+        run: node scripts/setup-pandoc-ci.mjs
+      - name: Download installer from this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: installer-${{ matrix.artifact }}
+          path: release/installers
+      - name: Install, test, reinstall and uninstall
+        run: npm run test:installer
+      - name: Preserve test evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installer-evidence-${{ matrix.evidence }}
+          path: |
+            test-results/**/results.json
+            test-results/**/report.json
+            test-results/**/unit-tests.log
+            test-results/**/*.png
+            test-results/**/*.html
+            test-results/**/*.pdf
+            test-results/**/*.docx
+            test-results/**/*.epub
+          if-no-files-found: ignore
+          retention-days: 14

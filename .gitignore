@@ -1,0 +1,26 @@
+node_modules/
+dist/
+release/
+test-results/
+outputs/
+/PUBLIC_SOURCE_MANIFEST.json
+.DS_Store
+*.log
+
+# Local research, generated evidence, and one-off maintenance helpers
+/research/
+/docs/evidence/relocation.json
+/work-debug.mjs
+/refresh-outputs.mjs
+
+# Local credentials and machine-specific settings
+.env
+.env.*
+!.env.example
+.npmrc
+.vscode/
+.idea/
+Thumbs.db
+*.tsbuildinfo
+__pycache__/
+*.pyc

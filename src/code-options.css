@@ -1,0 +1,9 @@
+#code-options-dialog { width:min(480px,calc(100vw - 32px)); max-height:calc(100vh - 40px); overflow:auto; }
+#code-options-dialog label { display:flex; flex-direction:column; gap:6px; margin:12px 0; font-size:13px; }
+#code-options-dialog .code-check { flex-direction:row; align-items:center; }
+#code-options-dialog input[type=checkbox] { width:auto; margin:0; }
+#code-options-dialog :is(input:not([type=checkbox]),select) { width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid var(--border); border-radius:5px; background:var(--bg); color:var(--text); }
+#code-options-dialog :is(input,select):disabled { opacity:.5; }
+#code-options-dialog p { font-size:12px; line-height:1.6; color:var(--soft); }
+#code-options-error { color:#b94737!important; }
+#format-menu { max-height:calc(100vh - 120px); overflow-y:auto; }

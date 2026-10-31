@@ -1,0 +1,24 @@
+/* Share the first text baseline instead of Crepe's fixed 32px marker box. */
+.milkdown .ProseMirror .milkdown-list-item-block > .list-item { align-items: baseline; }
+.milkdown .ProseMirror .list-item > .label-wrapper {
+  display: block;
+  flex-shrink: 0;
+  height: auto;
+  line-height: normal;
+}
+.milkdown .ProseMirror .list-item > .label-wrapper > .label {
+  display: block;
+  position: relative;
+  height: auto;
+  padding: 0;
+}
+/* Invisible font metrics give SVG markers the same baseline as numbered labels.
+   This generated text stays outside the editable document and its serializer. */
+.milkdown .ProseMirror .list-item > .label-wrapper > .label:has(svg)::before { content: '\200b'; }
+.milkdown .ProseMirror .list-item > .label-wrapper > .label svg {
+  display: block;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}

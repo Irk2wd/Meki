@@ -1,0 +1,412 @@
+{
+  "@electron-internal/extract-zip@1.0.5": {
+    "license": "BSD-2-Clause",
+    "reason": "License text omitted by the published package; preserved from the upstream repository license blob. Package metadata declares the same SPDX license.",
+    "files": [
+      {
+        "path": "licenses/upstream/_electron-internal_extract-zip-1.0.5.txt",
+        "url": "https://api.github.com/repos/electron/extract-zip/git/blobs/dc1402e83313f575de14f1cfcdf72181d7bf375d",
+        "sha256": "edab8abb78d9c5b36944c3e00aebf6a90eb32378993f49ac8a3904007029c629"
+      }
+    ]
+  },
+  "@mathjax/mathjax-mhchem-font-extension@4.1.3": {
+    "license": "Apache-2.0",
+    "reason": "Package declares Apache-2.0 but omits its license text; reproduced verbatim from the accompanying @mathjax/src 4.1.3 LICENSE.",
+    "files": [
+      {
+        "path": "licenses/upstream/mathjax-apache-2.0.txt",
+        "url": "https://registry.npmjs.org/@mathjax/src/-/src-4.1.3.tgz",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      }
+    ]
+  },
+  "@mathjax/mathjax-newcm-font@4.1.3": {
+    "license": "Apache-2.0",
+    "reason": "Package declares Apache-2.0 but omits its license text; reproduced verbatim from the accompanying @mathjax/src 4.1.3 LICENSE.",
+    "files": [
+      {
+        "path": "licenses/upstream/mathjax-apache-2.0.txt",
+        "url": "https://registry.npmjs.org/@mathjax/src/-/src-4.1.3.tgz",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      }
+    ]
+  },
+  "@rolldown/binding-android-arm-eabi@1.2.14": {
+    "license": "MIT",
+    "reason": "This exact-version native binding declares MIT and shares the root Rolldown license preserved below. It is an optional platform variant of the same upstream release.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "@rolldown/binding-android-arm64@1.2.14": {
+    "license": "MIT",
+    "reason": "This exact-version native binding declares MIT and shares the root Rolldown license preserved below. It is an optional platform variant of the same upstream release.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "@rolldown/binding-darwin-arm64@1.2.14": {
+    "license": "MIT",
+    "reason": "This exact-version native binding declares MIT and shares the root Rolldown license preserved below. It is an optional platform variant of the same upstream release.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "@rolldown/binding-darwin-x64@1.2.14": {
+    "license": "MIT",
+    "reason": "This exact-version native binding declares MIT and shares the root Rolldown license preserved below. It is an optional platform variant of the same upstream release.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "@rolldown/binding-freebsd-x64@1.2.14": {
+    "license": "MIT",
+    "reason": "This exact-version native binding declares MIT and shares the root Rolldown license preserved below. It is an optional platform variant of the same upstream release.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "@rolldown/binding-linux-arm-gnueabihf@1.2.14": {
+    "license": "MIT",
+    "reason": "This exact-version native binding declares MIT and shares the root Rolldown license preserved below. It is an optional platform variant of the same upstream release.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "@rolldown/binding-linux-arm64-gnu@1.2.14": {
+    "license": "MIT",
+    "reason": "This exact-version native binding declares MIT and shares the root Rolldown license preserved below. It is an optional platform variant of the same upstream release.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "@rolldown/binding-linux-arm64-musl@1.2.14": {
+    "license": "MIT",
+    "reason": "This exact-version native binding declares MIT and shares the root Rolldown license preserved below. It is an optional platform variant of the same upstream release.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "@rolldown/binding-linux-ppc64-gnu@1.2.14": {
+    "license": "MIT",
+    "reason": "This exact-version native binding declares MIT and shares the root Rolldown license preserved below. It is an optional platform variant of the same upstream release.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "@rolldown/binding-linux-s390x-gnu@1.2.14": {
+    "license": "MIT",
+    "reason": "This exact-version native binding declares MIT and shares the root Rolldown license preserved below. It is an optional platform variant of the same upstream release.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "@rolldown/binding-linux-x64-gnu@1.2.14": {
+    "license": "MIT",
+    "reason": "This exact-version native binding declares MIT and shares the root Rolldown license preserved below. It is an optional platform variant of the same upstream release.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "@rolldown/binding-linux-x64-musl@1.2.14": {
+    "license": "MIT",
+    "reason": "This exact-version native binding declares MIT and shares the root Rolldown license preserved below. It is an optional platform variant of the same upstream release.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "@rolldown/binding-openharmony-arm64@1.2.14": {
+    "license": "MIT",
+    "reason": "This exact-version native binding declares MIT and shares the root Rolldown license preserved below. It is an optional platform variant of the same upstream release.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "@rolldown/binding-win32-arm64-msvc@1.2.14": {
+    "license": "MIT",
+    "reason": "This exact-version native binding declares MIT and shares the root Rolldown license preserved below. It is an optional platform variant of the same upstream release.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "@rolldown/binding-win32-x64-msvc@1.2.14": {
+    "license": "MIT",
+    "reason": "License text omitted by the published package; preserved from the upstream repository license blob. Package metadata declares the same SPDX license.",
+    "files": [
+      {
+        "path": "licenses/upstream/_rolldown_binding-win32-x64-msvc-1.2.14.txt",
+        "url": "https://api.github.com/repos/rolldown/rolldown/git/blobs/afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+        "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      }
+    ]
+  },
+  "app-builder-lib@26.15.3": {
+    "license": "MIT",
+    "reason": "License text omitted by the published package; preserved from the upstream repository license blob. Package metadata declares the same SPDX license.",
+    "files": [
+      {
+        "path": "licenses/upstream/app-builder-lib-26.15.3.txt",
+        "url": "https://api.github.com/repos/electron-userland/electron-builder/git/blobs/7d8fa01c28f3b5888f349b062cf3fff47baf1c0a",
+        "sha256": "bed8d0ab3e6031817f775a641ff37313b0f5591bc8ba0ed79b978dafbd4231ce"
+      }
+    ]
+  },
+  "chromium-pickle-js@0.2.0": {
+    "license": "MIT",
+    "reason": "The published package and upstream repository do not supply a standalone license file. Its locked package.json declares this license; the standard license text is reproduced without inventing an upstream copyright notice. Preserve any notices in the original source.",
+    "packageSource": "https://registry.npmjs.org/chromium-pickle-js/-/chromium-pickle-js-0.2.0.tgz",
+    "author": null,
+    "files": [
+      {
+        "path": "licenses/upstream/mit-standard.txt",
+        "url": "https://opensource.org/license/mit",
+        "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+      }
+    ]
+  },
+  "compare-version@0.1.2": {
+    "license": "MIT",
+    "reason": "The published package and upstream repository do not supply a standalone license file. Its locked package.json declares this license; the standard license text is reproduced without inventing an upstream copyright notice. Preserve any notices in the original source.",
+    "packageSource": "https://registry.npmjs.org/compare-version/-/compare-version-0.1.2.tgz",
+    "author": {
+      "name": "Kevin Mårtensson",
+      "email": "kevinmartensson@gmail.com",
+      "url": "https://github.com/kevva"
+    },
+    "files": [
+      {
+        "path": "licenses/upstream/mit-standard.txt",
+        "url": "https://opensource.org/license/mit",
+        "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+      }
+    ]
+  },
+  "cross-dirname@0.1.0": {
+    "license": "MIT",
+    "reason": "The published package and upstream repository do not supply a standalone license file. Its locked package.json declares this license; the standard license text is reproduced without inventing an upstream copyright notice. Preserve any notices in the original source.",
+    "packageSource": "https://registry.npmjs.org/cross-dirname/-/cross-dirname-0.1.0.tgz",
+    "author": null,
+    "files": [
+      {
+        "path": "licenses/upstream/mit-standard.txt",
+        "url": "https://opensource.org/license/mit",
+        "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+      }
+    ]
+  },
+  "dmg-builder@26.15.3": {
+    "license": "MIT",
+    "reason": "License text omitted by the published package; preserved from the upstream repository license blob. Package metadata declares the same SPDX license.",
+    "files": [
+      {
+        "path": "licenses/upstream/dmg-builder-26.15.3.txt",
+        "url": "https://api.github.com/repos/electron-userland/electron-builder/git/blobs/7d8fa01c28f3b5888f349b062cf3fff47baf1c0a",
+        "sha256": "bed8d0ab3e6031817f775a641ff37313b0f5591bc8ba0ed79b978dafbd4231ce"
+      }
+    ]
+  },
+  "err-code@2.0.3": {
+    "license": "MIT",
+    "reason": "The published package and upstream repository do not supply a standalone license file. Its locked package.json declares this license; the standard license text is reproduced without inventing an upstream copyright notice. Preserve any notices in the original source.",
+    "packageSource": "https://registry.npmjs.org/err-code/-/err-code-2.0.3.tgz",
+    "author": "IndigoUnited <hello@indigounited.com> (http://indigounited.com)",
+    "files": [
+      {
+        "path": "licenses/upstream/mit-standard.txt",
+        "url": "https://opensource.org/license/mit",
+        "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+      }
+    ]
+  },
+  "filelist@1.0.6": {
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "path": "licenses/upstream/filelist-1.0.6.txt",
+        "url": "https://raw.githubusercontent.com/mde/filelist/v1.0.6/LICENSE",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      }
+    ]
+  },
+  "isarray@1.0.0": {
+    "license": "MIT",
+    "reason": "License text omitted by the published package; preserved from the upstream repository license blob. Package metadata declares the same SPDX license.",
+    "files": [
+      {
+        "path": "licenses/upstream/isarray-1.0.0.txt",
+        "url": "https://api.github.com/repos/juliangruber/isarray/git/blobs/de3226673c3874b1c6506db022393c753495655c",
+        "sha256": "68f12f6e2c33688699249c01d8f9623c534da20aa71989c57b061b7bc1676d14"
+      }
+    ]
+  },
+  "jake@10.9.4": {
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "path": "licenses/upstream/jake-10.9.4.txt",
+        "url": "https://raw.githubusercontent.com/jakejs/jake/v10.9.4/LICENSE",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      }
+    ]
+  },
+  "keyv@4.5.4": {
+    "license": "MIT",
+    "reason": "License text omitted by the published package; preserved from the upstream repository license blob. Package metadata declares the same SPDX license.",
+    "files": [
+      {
+        "path": "licenses/upstream/keyv-4.5.4.txt",
+        "url": "https://api.github.com/repos/jaredwray/keyv/git/blobs/ddd98d3e0276bdf324dfe8e24709322217531466",
+        "sha256": "f3a25fb846504d92627388f112f326ce91a9202e65d787d0b6ec79c96076d84d"
+      }
+    ]
+  },
+  "khroma@2.1.0": {
+    "license": "MIT",
+    "reason": "The published package has no license field; its bundled license file is MIT."
+  },
+  "lazy-val@1.0.5": {
+    "license": "MIT",
+    "reason": "The published package and upstream repository do not supply a standalone license file. Its locked package.json declares this license; the standard license text is reproduced without inventing an upstream copyright notice. Preserve any notices in the original source.",
+    "packageSource": "https://registry.npmjs.org/lazy-val/-/lazy-val-1.0.5.tgz",
+    "author": "Vladimir Krivosheev",
+    "files": [
+      {
+        "path": "licenses/upstream/mit-standard.txt",
+        "url": "https://opensource.org/license/mit",
+        "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+      }
+    ]
+  },
+  "node-api-version@0.2.1": {
+    "license": "MIT",
+    "reason": "The published package and upstream repository do not supply a standalone license file. Its locked package.json declares this license; the standard license text is reproduced without inventing an upstream copyright notice. Preserve any notices in the original source.",
+    "packageSource": "https://registry.npmjs.org/node-api-version/-/node-api-version-0.2.1.tgz",
+    "author": "Tim Fish <tim@timfish.uk>",
+    "files": [
+      {
+        "path": "licenses/upstream/mit-standard.txt",
+        "url": "https://opensource.org/license/mit",
+        "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+      }
+    ]
+  },
+  "read-binary-file-arch@1.0.6": {
+    "license": "MIT",
+    "reason": "The published package and upstream repository do not supply a standalone license file. Its locked package.json declares this license; the standard license text is reproduced without inventing an upstream copyright notice. Preserve any notices in the original source.",
+    "packageSource": "https://registry.npmjs.org/read-binary-file-arch/-/read-binary-file-arch-1.0.6.tgz",
+    "author": "Samuel Maddock",
+    "files": [
+      {
+        "path": "licenses/upstream/mit-standard.txt",
+        "url": "https://opensource.org/license/mit",
+        "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+      }
+    ]
+  },
+  "remark-math@6.0.0": {
+    "license": "MIT",
+    "files": [
+      {
+        "path": "licenses/upstream/remark-math-6.0.0.txt",
+        "url": "https://raw.githubusercontent.com/remarkjs/remark-math/d5d0660b150810a535bbb07eac6cc96a4510aa24/license",
+        "sha256": "cb992262f361a5359e6771c28740d33c7041e15332ae8537fae40538992591a9"
+      }
+    ]
+  },
+  "temp-file@3.4.0": {
+    "license": "MIT",
+    "reason": "The published package and upstream repository do not supply a standalone license file. Its locked package.json declares this license; the standard license text is reproduced without inventing an upstream copyright notice. Preserve any notices in the original source.",
+    "packageSource": "https://registry.npmjs.org/temp-file/-/temp-file-3.4.0.tgz",
+    "author": "Vladimir Krivosheev",
+    "files": [
+      {
+        "path": "licenses/upstream/mit-standard.txt",
+        "url": "https://opensource.org/license/mit",
+        "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+      }
+    ]
+  },
+  "tmp-promise@3.0.3": {
+    "license": "MIT",
+    "reason": "The published package and upstream repository do not supply a standalone license file. Its locked package.json declares this license; the standard license text is reproduced without inventing an upstream copyright notice. Preserve any notices in the original source.",
+    "packageSource": "https://registry.npmjs.org/tmp-promise/-/tmp-promise-3.0.3.tgz",
+    "author": "Benjamin Gruenbaum and Collaborators.",
+    "files": [
+      {
+        "path": "licenses/upstream/mit-standard.txt",
+        "url": "https://opensource.org/license/mit",
+        "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+      }
+    ]
+  },
+  "truncate-utf8-bytes@1.0.2": {
+    "license": "WTFPL",
+    "reason": "The published package and upstream repository do not supply a standalone license file. Its locked package.json declares this license; the standard license text is reproduced without inventing an upstream copyright notice. Preserve any notices in the original source.",
+    "packageSource": "https://registry.npmjs.org/truncate-utf8-bytes/-/truncate-utf8-bytes-1.0.2.tgz",
+    "author": "Carl Xiong <xiongc05@gmail.com>",
+    "files": [
+      {
+        "path": "licenses/upstream/wtfpl-standard.txt",
+        "url": "https://api.github.com/repos/spdx/license-list-data/git/blobs/7a3094a826e652c23d90a7dcb54b0963790b538b",
+        "sha256": "13d8825a59e5e546d41e8711405d0f335a9934362a47c04a3b4280fa7932dc4a"
+      }
+    ]
+  }
+}
