@@ -27,7 +27,13 @@ async function idle() { await page.waitForFunction(() => !document.body.classLis
 async function action(name) { if (name === 'folder') await page.keyboard.press(`${modifier}+Shift+O`); else await page.locator(`[data-action="${name}"]`).first().evaluate(node => node.click()); await idle(); }
 async function setting(name, value) { await app.evaluate((_electron, { name, value }) => { process.env[name] = value; }, { name, value }); }
 async function open(file) { await setting('MOYE_TEST_OPEN_PATH', file); await action('open'); }
-async function tab(file) { await page.locator('.document-tab [role="tab"]').evaluateAll((buttons, file) => { const button = buttons.find(button => button.title === file); if (!button) throw Error(`Missing tab ${file}`); button.click(); }, file); await idle(); }
+async function tab(file) {
+  // A disk write can finish before autosave's session commit releases the UI.
+  await idle();
+  await page.locator('.document-tab [role="tab"]').evaluateAll((buttons, file) => { const button = buttons.find(button => button.title === file); if (!button) throw Error(`Missing tab ${file}`); button.click(); }, file);
+  await idle();
+  await page.waitForFunction(file => document.querySelector('.document-tab.active [role="tab"]')?.title === file, file);
+}
 async function source() { await page.locator('[data-mode="source"]').click(); return page.locator('#source-editor .cm-content'); }
 async function append(text) { const editor = await source(); await editor.click(); await page.keyboard.press(end); await page.keyboard.insertText(text); }
 async function closeTab() { await page.locator('.document-tab.active .close-document-tab').click(); await idle(); }

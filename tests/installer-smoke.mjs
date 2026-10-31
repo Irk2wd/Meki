@@ -138,11 +138,15 @@ try {
     pass('replacing the Mac application preserves documents and user settings');
   }
   const previous = new Set(await fs.readdir(resultRoot));
+  const failedSuites = [];
   for (const command of pkg.scripts['test:ui'].split(' && ')) {
     assert.match(command, /^node tests\/[a-z-]+-smoke\.mjs$/);
     await new Promise((resolve, reject) => {
       const child = spawn(process.execPath, [command.slice(5)], { cwd: root, windowsHide: true, stdio: 'inherit', env: { ...process.env, MOYE_EXECUTABLE: executable, MOYE_REQUIRE_PANDOC: '1' } });
       child.on('error', reject); child.on('exit', code => code === 0 ? resolve() : reject(new Error(`${command} failed (${code})`)));
+    }).catch(error => {
+      failedSuites.push(error.message);
+      console.error(`FAIL ${error.message}; continuing to collect the remaining suite results`);
     });
   }
   for (const folder of await fs.readdir(resultRoot)) {
@@ -155,6 +159,7 @@ try {
     report.ui.push({ suite: folder, results: result.results });
   }
   assert.equal(report.ui.length, pkg.scripts['test:ui'].split(' && ').length);
+  assert.deepEqual(failedSuites, [], failedSuites.join('\n'));
   report.uiChecks = report.ui.reduce((sum, item) => sum + item.results.length, 0);
   assert.ok(report.uiChecks >= 237);
   pass(`${report.uiChecks} desktop checks against the installed application, including real Pandoc conversion`);

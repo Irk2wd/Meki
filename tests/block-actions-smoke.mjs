@@ -129,8 +129,12 @@ try {
   await page.waitForFunction(() => [...document.querySelectorAll('.ProseMirror > p')].filter(node => node.textContent === 'Alpha bold text.').length === 2); await undo();
   pass('Alt/Option dragging copies the block while retaining its source and undo removes only the copy');
 
+  // Hosted macOS displays can clamp the window height. Keep the destination's
+  // insertion line inside the viewport before testing a nested task move.
+  await paragraph('Task todo').evaluate(node => node.scrollIntoView({ block: 'center' })); await frames();
   await dragStart(paragraph('Task done')); const todo = await paragraph('Task todo').boundingBox();
-  await page.mouse.move(todo.x + 40, todo.y + todo.height - 2, { steps: 12 }); await page.mouse.up();
+  await page.mouse.move(todo.x + 40, todo.y + todo.height - 2, { steps: 12 });
+  await page.locator('.moye-block-drop-line').waitFor({ state: 'visible' }); await page.mouse.up();
   await page.waitForFunction(() => { const text = document.querySelector('.ProseMirror').textContent; return text.indexOf('Task todo') < text.indexOf('Task done'); });
   await paragraph('Nested child').waitFor(); await undo();
   pass('native dragging reorders a task with its nested list instead of extracting or flattening its contents');
