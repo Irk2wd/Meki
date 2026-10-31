@@ -10,6 +10,10 @@ export const textPointerSelection = $prose(() => new Plugin({
       !(event.target instanceof Element) || event.target.closest('[contenteditable="false"]')) return false;
     const point = view.posAtCoords({ left: event.clientX, top: event.clientY });
     if (!point) return false;
+    // Keep an existing range intact until the browser distinguishes a click
+    // from a drag. Collapsing it here prevents native text dragging entirely.
+    const current = view.state.selection;
+    if (!current.empty && point.pos >= current.from && point.pos <= current.to) return false;
     const position = view.state.doc.resolve(point.pos);
     if (!position.parent.inlineContent && event.target !== view.dom) return false;
     const selection = TextSelection.near(position);
