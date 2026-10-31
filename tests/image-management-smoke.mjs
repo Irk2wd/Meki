@@ -55,12 +55,18 @@ async function copyOptions(directory, name = '') {
   await page.locator('#image-copy-dialog button[type="submit"]').click();
 }
 async function complete() { await page.locator('#image-copy-dialog').waitFor({ state: 'hidden' }); await idle(); }
-async function undo() { await page.locator('.ProseMirror').click(); await page.keyboard.press(`${mod}+z`); }
+async function undo() {
+  await idle();
+  // The editor's center can hit an image caption; focus document text before undo.
+  await page.locator('.ProseMirror h1').click();
+  await page.waitForFunction(() => document.activeElement?.classList.contains('ProseMirror'));
+  await page.keyboard.press(`${mod}+z`);
+}
 try {
   app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? ['--open', doc] : [root, '--open', doc], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
   await page.route('https://images.moye.test/**', route => route.fulfill({ contentType: 'image/png', body: png }));
-  await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].show(); BrowserWindow.getAllWindows()[0].focus(); });
+  await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.setSize(1024, 694); window.show(); window.focus(); });
   await page.waitForSelector('#shell[data-ready="true"]');
   await action('image-hosting'); await page.locator('#picgo-port').fill(String(port));
   await page.locator('#image-directory').fill('images/${filename}'); await page.locator('[data-host="save"]').click();

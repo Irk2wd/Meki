@@ -19,7 +19,7 @@ async function poll(check, label) { const until = Date.now() + 20000; while (Dat
 async function ready(target) { target.setDefaultTimeout(15000); target.on('pageerror', error => errors.push(error.message)); await target.waitForSelector('#shell[data-ready="true"]'); return target; }
 async function focus(target = page) { await (await app.browserWindow(target)).evaluate(win => { win.show(); win.focus(); }); await target.waitForFunction(() => document.hasFocus()); }
 async function launch(args = []) {
-  app = await electron.launch({ executablePath: require('electron'), args: [root, ...args], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? args : [root, ...args], env, timeout: 30000 });
   page = await ready(await app.firstWindow()); await focus();
 }
 async function stop() { if (!app) return; await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await app.close().catch(() => {}); app = null; }
