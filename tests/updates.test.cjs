@@ -88,12 +88,12 @@ test('a bad manifest signature prevents the code download', async t => {
 });
 
 test('download cancellation can be retried and overlapping update operations are rejected', async t => {
-  const { service, remote, runtime } = await connected(t); await service.check(); remote.slow = true;
+  const { service, remote, runtime } = await connected(t); await service.check(); remote.holdDownloads = true;
   const download = service.download();
   await assert.rejects(() => service.check(), /正在进行/);
   await new Promise(resolve => setTimeout(resolve, 60)); service.cancel();
   assert.equal((await download).status, 'available'); assert.equal(runtime.readState().current, null);
-  remote.slow = false; assert.equal((await service.download()).status, 'ready');
+  remote.holdDownloads = false; assert.equal((await service.download()).status, 'ready');
 });
 
 test('runtime changes require the signed installer and its bytes are rechecked before launch', async t => {

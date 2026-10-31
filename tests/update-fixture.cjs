@@ -20,7 +20,7 @@ function fixture(pair, { version = '0.12.0', platform = process.platform, electr
   return { manifest, envelope, payload, compressed, installer, blobs, release };
 }
 async function server(initial) {
-  const context = { current: initial, requests: [], slow: false, unauthorized: false, redirect: null, publicAvailable: false, latest: null, releases: null };
+  const context = { current: initial, requests: [], holdDownloads: false, unauthorized: false, redirect: null, publicAvailable: false, latest: null, releases: null };
   const instance = http.createServer(async (request, response) => {
     if (request.url === '/__fixture_ready__') { response.writeHead(204).end(); return; }
     context.requests.push({ path: request.url, authorization: request.headers.authorization });
@@ -36,10 +36,9 @@ async function server(initial) {
     const bytes = context.current.blobs.get(Number(request.url.split('/').pop()));
     if (!bytes) { response.writeHead(404).end(); return; }
     response.setHeader('Content-Length', bytes.length);
-    if (context.slow && request.url === '/blob/2') {
+    if (context.holdDownloads && request.url === '/blob/2') {
+      // Keep cancellation tests pending until the client actually aborts the request.
       response.write(bytes.subarray(0, 1));
-      await new Promise(resolve => setTimeout(resolve, 200));
-      if (!response.destroyed) response.end(bytes.subarray(1));
     } else response.end(bytes);
   });
   context.close = () => new Promise(resolve => { instance.closeAllConnections(); instance.close(resolve); });

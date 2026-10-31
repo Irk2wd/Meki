@@ -49,11 +49,11 @@ try {
   assert.equal(await fs.readFile(documentPath, 'utf8'), original);
   pass('sidebar and native menus open updates; private login is required, startup stays offline and release notes render as text');
 
-  remote.slow = true; await action('download');
+  remote.holdDownloads = true; await action('download');
   // The click handler runs asynchronously; the cancel button remains available during the request.
   await status('downloading'); await action('cancel'); await status('available');
   assert.equal(await fs.access(path.join(profile, 'updates-v1', 'active.json')).then(() => true, () => false), false);
-  remote.slow = false; await action('download'); await status('ready');
+  remote.holdDownloads = false; await action('download'); await status('ready');
   assert.ok(remote.requests.filter(item => item.path.startsWith('/blob/')).every(item => !item.authorization));
   pass('downloads show progress, cancel safely and retry; credentials never reach the redirected asset host');
 

@@ -21,6 +21,8 @@ const hash = async file => createHash('sha256').update(await fs.readFile(file)).
 const exists = async file => !!await fs.stat(file).catch(() => null);
 const platform = process.platform === 'win32' ? 'windows' : 'macos';
 const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
+const uiCommands = pkg.scripts['test:ui'].split(' && ');
+for (const command of uiCommands) assert.match(command, /^node tests\/[a-z][a-z0-9-]*-smoke\.mjs$/);
 const artifactFolder = path.join(root, 'release', 'installers');
 const manifest = JSON.parse(await fs.readFile(path.join(artifactFolder, `${platform}-build.json`), 'utf8'));
 const installer = path.join(artifactFolder, manifest.installer);
@@ -139,8 +141,7 @@ try {
   }
   const previous = new Set(await fs.readdir(resultRoot));
   const failedSuites = [];
-  for (const command of pkg.scripts['test:ui'].split(' && ')) {
-    assert.match(command, /^node tests\/[a-z-]+-smoke\.mjs$/);
+  for (const command of uiCommands) {
     await new Promise((resolve, reject) => {
       const child = spawn(process.execPath, [command.slice(5)], { cwd: root, windowsHide: true, stdio: 'inherit', env: { ...process.env, MOYE_EXECUTABLE: executable, MOYE_REQUIRE_PANDOC: '1' } });
       child.on('error', reject); child.on('exit', code => code === 0 ? resolve() : reject(new Error(`${command} failed (${code})`)));
@@ -158,7 +159,7 @@ try {
     assert.equal(result.skipped?.length || 0, 0);
     report.ui.push({ suite: folder, results: result.results });
   }
-  assert.equal(report.ui.length, pkg.scripts['test:ui'].split(' && ').length);
+  assert.equal(report.ui.length, uiCommands.length);
   assert.deepEqual(failedSuites, [], failedSuites.join('\n'));
   report.uiChecks = report.ui.reduce((sum, item) => sum + item.results.length, 0);
   assert.ok(report.uiChecks >= 237);

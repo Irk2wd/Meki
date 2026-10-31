@@ -21,6 +21,14 @@ async function launch() {
   app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? ['--open', files.Alpha] : [root, '--open', files.Alpha], env });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
   await page.waitForSelector('#shell[data-ready="true"]'); await focus();
+  await page.evaluate(() => {
+    globalThis.paneKeyTrace = [];
+    window.addEventListener('keydown', event => {
+      const record = { key: event.key, target: event.target.className, focused: document.hasFocus(), busy: document.body.classList.contains('is-busy'), ctrl: event.ctrlKey, shift: event.shiftKey, alt: event.altKey, meta: event.metaKey };
+      globalThis.paneKeyTrace.push(record); if (globalThis.paneKeyTrace.length > 30) globalThis.paneKeyTrace.shift();
+      setTimeout(() => { record.prevented = event.defaultPrevented; record.focusAfter = document.activeElement?.className; record.ratio = document.querySelector('.pane-divider')?.getAttribute('aria-valuenow'); }, 0);
+    }, true);
+  });
 }
 async function stop() { if (app) { await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await app.close().catch(() => {}); app = null; } }
 async function action(name) { await idle(); await page.locator(`[data-action="${name}"]`).first().evaluate(node => node.click()); }
@@ -60,6 +68,7 @@ try {
   await alphaPane.locator('.ProseMirror').click(); await page.keyboard.press(end); await page.keyboard.insertText(' Alpha edit');
   await page.keyboard.press(`${mod}+s`); await poll(async () => (await fs.readFile(files.Alpha, 'utf8')).includes('Alpha edit'), 'save targets focused pane');
   assert.equal(await fs.readFile(files.Beta, 'utf8'), '\uFEFF# Beta\r\n\r\nBeta original $x+1$.\r\n');
+  await idle();
   await page.locator('.editor-pane').nth(1).locator('.cm-content').click();
   await action('find'); await page.locator('#find-query').fill('Dirty Beta'); await page.locator('#find-count').filter({ hasText: '1 / 1' }).waitFor(); await action('find-close');
   pass('focus routes typing, save shortcuts, mode and search to the correct pane without writing the other document');
@@ -67,6 +76,7 @@ try {
   const divider = page.getByRole('separator', { name: '调整分栏大小' }), bounds = await page.locator('.editor-layout').boundingBox(), handle = await divider.boundingBox();
   await page.mouse.move(handle.x + 3, handle.y + 100); await page.mouse.down(); await page.mouse.move(bounds.x + bounds.width * .63, handle.y + 100, { steps: 12 }); await page.mouse.up();
   await poll(async () => (await session()).layout.ratio > .6, 'resize persists');
+  await idle();
   const ratio = (await session()).layout.ratio;
   const moved = await divider.boundingBox(); await page.mouse.move(moved.x + 3, moved.y + 100); await page.mouse.down(); await page.mouse.move(bounds.x + bounds.width * .4, moved.y + 100, { steps: 8 }); await page.keyboard.press('Escape'); await page.mouse.up();
   assert.ok(Math.abs(Number(await divider.getAttribute('aria-valuenow')) / 100 - ratio) < .02);
@@ -85,28 +95,35 @@ try {
   pass('Escape cancels tab docking, and restart restores split proportions plus unsaved document content');
 
   const separator = page.getByRole('separator', { name: '调整分栏大小' });
-  await separator.focus(); await page.keyboard.press('Home'); await poll(async () => (await session()).layout.ratio === .5, 'keyboard divider reset'); await idle();
-  await page.keyboard.press('ArrowRight'); await poll(async () => (await session()).layout.ratio === .55, 'keyboard divider resize'); await idle();
+  await focus(); await idle();
+  await separator.press('Home'); await poll(async () => (await session()).layout.ratio === .5, 'keyboard divider reset'); await idle();
+  await separator.press('ArrowRight'); await poll(async () => (await session()).layout.ratio === .55, 'keyboard divider resize'); await idle();
   assert.equal(await separator.evaluate(node => document.activeElement === node), true);
   pass('the separator supports keyboard resizing and restoring equal columns');
 
   await tabs('Beta').click(); await idle();
-  await app.evaluate(() => {
-    const fs = process.getBuiltinModule('node:fs/promises'); globalThis.paneTestRename = fs.rename; globalThis.paneWrites = 0;
+  await app.evaluate((_electron, files) => {
+    const fs = process.getBuiltinModule('node:fs/promises'); globalThis.paneTestRename = fs.rename; globalThis.paneActivationStarted = false;
     fs.rename = async (...args) => {
       if (String(args[1]).endsWith('windows-v1.json')) {
-        globalThis.paneWrites++;
-        if (globalThis.paneWrites === 1) await new Promise(resolve => setTimeout(resolve, 700));
-        else if (globalThis.paneWrites === 2) throw Error('pane-close-write-failure');
+        const session = JSON.parse(await fs.readFile(args[0], 'utf8')).windows[0].session;
+        const alpha = session.documents.find(doc => doc.path === files.Alpha), beta = session.documents.find(doc => doc.path === files.Beta);
+        if (alpha && beta && session.activeId === alpha.id && !globalThis.paneActivationStarted) {
+          globalThis.paneActivationStarted = true;
+          await new Promise(resolve => { globalThis.releasePaneActivation = resolve; });
+        }
+        if (!alpha && beta) throw Error('pane-close-write-failure');
       }
       return globalThis.paneTestRename(...args);
     };
-  });
+  }, files);
   await page.locator('.editor-pane').first().locator('.ProseMirror h1').click();
-  await poll(() => app.evaluate(() => globalThis.paneWrites === 1), 'activation save is still pending');
+  await poll(() => app.evaluate(() => typeof globalThis.releasePaneActivation === 'function'), 'activation save is still pending');
   await page.locator('.active-pane [data-close-tab]').evaluate(node => node.click());
+  await page.waitForFunction(() => document.querySelectorAll('.editor-pane').length === 1 && document.body.classList.contains('is-busy'));
+  await app.evaluate(() => globalThis.releasePaneActivation());
   await page.locator('#toast').filter({ hasText: 'pane-close-write-failure' }).waitFor(); await idle();
-  await app.evaluate(() => { process.getBuiltinModule('node:fs/promises').rename = globalThis.paneTestRename; delete globalThis.paneTestRename; delete globalThis.paneWrites; });
+  await app.evaluate(() => { process.getBuiltinModule('node:fs/promises').rename = globalThis.paneTestRename; delete globalThis.paneTestRename; delete globalThis.paneActivationStarted; delete globalThis.releasePaneActivation; });
   await poll(async () => await page.locator('.editor-pane').count() === 2 &&
     (await page.locator('.editor-pane').first().locator('.ProseMirror').innerText()).includes('Alpha edit') &&
     (await page.locator('.editor-pane').last().locator('.source-editor').innerText()).includes('Dirty Beta'), 'failed close restored both pane views');
@@ -181,5 +198,6 @@ try {
   assert.deepEqual(errors, []); pass('no renderer exceptions across split editing, resizing, merging, recovery and rollback');
 } finally {
   if (page && !page.isClosed()) { await page.screenshot({ path: path.join(run, 'last-state.png') }).catch(() => {}); await fs.writeFile(path.join(run, 'last-state.txt'), await page.locator('body').innerText().catch(() => 'unavailable')); }
-  await fs.writeFile(path.join(run, 'results.json'), JSON.stringify({ results, errors }, null, 2)); await stop(); console.log(`Evidence: ${run}`);
+  const diagnostics = page && !page.isClosed() ? await page.evaluate(() => ({ keys: globalThis.paneKeyTrace, toast: document.querySelector('#toast')?.textContent, ratio: document.querySelector('.pane-divider')?.getAttribute('aria-valuenow') })).catch(() => null) : null;
+  await fs.writeFile(path.join(run, 'results.json'), JSON.stringify({ results, errors, diagnostics }, null, 2)); await stop(); console.log(`Evidence: ${run}`);
 }
