@@ -95,6 +95,51 @@ test('a failed commit keeps the original file and removes its temporary file', a
   assert.deepEqual(await fs.readdir(documents), ['keep.md']);
 });
 
+test('transient rename locks retry the atomic replacement and recheck its guard', async (t) => {
+  const { documents } = await fixture(t), filePath = path.join(documents, 'locked.md');
+  await fs.writeFile(filePath, 'Before');
+  const rename = fs.rename; let attempts = 0, checks = 0;
+  t.mock.method(fs, 'rename', async (from, to) => {
+    if (to === filePath && ++attempts <= 2) throw Object.assign(new Error('temporary sharing violation'), { code: 'EPERM' });
+    return rename(from, to);
+  });
+  await atomicWrite(filePath, Buffer.from('After'), { beforeCommit: async () => { checks++; assert.equal(await fs.readFile(filePath, 'utf8'), 'Before'); } });
+  assert.equal(attempts, 3); assert.equal(checks, attempts);
+  assert.equal(await fs.readFile(filePath, 'utf8'), 'After');
+  assert.deepEqual(await fs.readdir(documents), ['locked.md']);
+});
+
+test('persistent rename denial stops retrying and retains the original bytes', async (t) => {
+  const { documents } = await fixture(t), filePath = path.join(documents, 'denied.md');
+  await fs.writeFile(filePath, 'Before');
+  const rename = fs.rename; let attempts = 0;
+  t.mock.method(fs, 'rename', async (from, to) => {
+    if (to === filePath) { attempts++; throw Object.assign(new Error('permission denied'), { code: 'EACCES' }); }
+    return rename(from, to);
+  });
+  await assert.rejects(atomicWrite(filePath, Buffer.from('After')), { code: 'EACCES' });
+  assert.ok(attempts > 1 && attempts <= 10);
+  assert.equal(await fs.readFile(filePath, 'utf8'), 'Before');
+  assert.deepEqual(await fs.readdir(documents), ['denied.md']);
+});
+
+test('retrying a locked save detects an intervening external edit before replacement', async (t) => {
+  const { documents, store } = await fixture(t), filePath = path.join(documents, 'changed.md');
+  await fs.writeFile(filePath, 'Before');
+  const document = await store.readDocument(filePath), rename = fs.rename; let attempts = 0;
+  t.mock.method(fs, 'rename', async (from, to) => {
+    if (to === filePath && ++attempts === 1) {
+      await fs.writeFile(filePath, 'External edit');
+      throw Object.assign(new Error('temporary sharing violation'), { code: 'EBUSY' });
+    }
+    return rename(from, to);
+  });
+  await assert.rejects(store.saveDocument({ ...document, content: 'My edit' }), RevisionConflictError);
+  assert.equal(attempts, 1);
+  assert.equal(await fs.readFile(filePath, 'utf8'), 'External edit');
+  assert.deepEqual(await fs.readdir(documents), ['changed.md']);
+});
+
 test('competing saves cannot silently overwrite a completed save', async (t) => {
   const { documents, store } = await fixture(t);
   const filePath = path.join(documents, 'concurrent.md');

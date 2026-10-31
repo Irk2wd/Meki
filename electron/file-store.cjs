@@ -208,9 +208,16 @@ async function atomicWrite(filePath, bytes, options = {}) {
     await handle.sync();
     await handle.close();
     handle = null;
-    if (options.beforeCommit) await options.beforeCommit();
     // A same-directory rename replaces the complete file atomically. Never unlink the original as a fallback.
-    await fs.rename(temporary, filePath);
+    for (let attempt = 0; ; attempt++) {
+      // A Windows reader or indexer can briefly lock the destination. Recheck conflicts after every wait.
+      if (options.beforeCommit) await options.beforeCommit();
+      try { await fs.rename(temporary, filePath); break; }
+      catch (error) {
+        if (attempt >= 5 || !['EPERM', 'EACCES', 'EBUSY'].includes(error.code)) throw error;
+        await new Promise(resolve => setTimeout(resolve, Math.min(10 * 2 ** attempt, 100)));
+      }
+    }
     if (process.platform !== 'win32') {
       let directory;
       try { directory = await fs.open(path.dirname(filePath), 'r'); await directory.sync(); }
