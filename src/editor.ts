@@ -1,3 +1,4 @@
+import { textPointerSelection } from './editor-selection';
 import { t } from '../electron/i18n.mjs';
 import { Crepe } from '@milkdown/crepe';
 import { editorViewCtx, parserCtx, serializerCtx } from '@milkdown/kit/core';
@@ -127,7 +128,7 @@ export class WritingEditor {
         } },
       }));
       ctx.update(codeBlockConfig.key, config => ({ ...config, renderPreview: (language, content, apply) => language.toLowerCase() === 'latex' ? this.math.blockPreview(content) : language.toLowerCase() === 'mermaid' ? this.diagrams.blockPreview(content) : config.renderPreview(language, content, apply) }));
-    }).use(markdownEditorExtensions).use(this.math.plugin).use(this.diagrams.plugin).use(this.search.plugin).use(this.writing.plugin).use(this.typing.plugin).use(stableTableBlockView).use(this.code.plugin).use(sizedImageBlockView).use(this.blocks.plugin);
+    }).use(markdownEditorExtensions).use(this.math.plugin).use(this.diagrams.plugin).use(this.search.plugin).use(this.writing.plugin).use(textPointerSelection).use(this.typing.plugin).use(stableTableBlockView).use(this.code.plugin).use(sizedImageBlockView).use(this.blocks.plugin);
     this.crepe.on(listener => {
       listener.markdownUpdated((_ctx, value) => {
         if (!this.ready || this.updating || value === this.lastSerialized || this.mode !== 'visual' || value !== this.crepe.getMarkdown()) return;
