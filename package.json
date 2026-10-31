@@ -14,7 +14,9 @@
   },
   "homepage": "https://github.com/Irk2wd/Meki",
   "overrides": {
-    "katex": "$katex"
+    "katex": "$katex",
+    "glob@>=9.0.0 <14.0.2": "14.0.3",
+    "minimatch@>=9.0.0 <11.0.1": "11.0.3"
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -24,7 +26,7 @@
     "check:licenses": "node scripts/notices.mjs --check",
     "check:assets": "node scripts/check-assets.mjs",
     "assets:generate": "node scripts/icons.mjs",
-    "test:ui": "node tests/electron-smoke.mjs && node tests/extensions-smoke.mjs && node tests/appearance-math-smoke.mjs && node tests/pdf-style-smoke.mjs && node tests/diagrams-smoke.mjs && node tests/workspace-smoke.mjs && node tests/writing-smoke.mjs && node tests/find-navigation-smoke.mjs && node tests/export-smoke.mjs && node tests/export-presets-smoke.mjs && node tests/lifecycle-smoke.mjs && node tests/media-smoke.mjs && node tests/heading-numbering-smoke.mjs && node tests/navigation-smoke.mjs && node tests/code-clipboard-smoke.mjs && node tests/image-sizing-smoke.mjs && node tests/attachments-smoke.mjs && node tests/block-handle-smoke.mjs && node tests/block-actions-smoke.mjs && node tests/list-alignment-smoke.mjs && node tests/updates-smoke.mjs && node tests/image-hosting-smoke.mjs && node tests/image-management-smoke.mjs && node tests/snapshots-smoke.mjs && node tests/windows-smoke.mjs && node tests/typing-smoke.mjs && node tests/shortcuts-reopen-smoke.mjs && node tests/about-smoke.mjs && node tests/panes-smoke.mjs && node tests/i18n-smoke.mjs",
+    "test:ui": "node tests/electron-smoke.mjs && node tests/extensions-smoke.mjs && node tests/appearance-math-smoke.mjs && node tests/pdf-style-smoke.mjs && node tests/diagrams-smoke.mjs && node tests/workspace-smoke.mjs && node tests/writing-smoke.mjs && node tests/text-drag-smoke.mjs && node tests/find-navigation-smoke.mjs && node tests/export-smoke.mjs && node tests/export-presets-smoke.mjs && node tests/lifecycle-smoke.mjs && node tests/media-smoke.mjs && node tests/heading-numbering-smoke.mjs && node tests/navigation-smoke.mjs && node tests/code-clipboard-smoke.mjs && node tests/image-sizing-smoke.mjs && node tests/attachments-smoke.mjs && node tests/block-handle-smoke.mjs && node tests/block-actions-smoke.mjs && node tests/list-alignment-smoke.mjs && node tests/updates-smoke.mjs && node tests/image-hosting-smoke.mjs && node tests/image-management-smoke.mjs && node tests/snapshots-smoke.mjs && node tests/windows-smoke.mjs && node tests/typing-smoke.mjs && node tests/shortcuts-reopen-smoke.mjs && node tests/about-smoke.mjs && node tests/panes-smoke.mjs && node tests/i18n-smoke.mjs",
     "package:prepare": "node scripts/notices.mjs && npm run check:assets && npm run build",
     "package:win": "npm run package:prepare && node scripts/package.mjs win32 x64",
     "package:mac": "npm run package:prepare && node scripts/package.mjs darwin arm64,x64",

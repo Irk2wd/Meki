@@ -10,6 +10,50 @@
       }
     ]
   },
+  "@img/sharp-libvips-darwin-arm64@1.3.4": {
+    "license": "LGPL-3.0-or-later",
+    "reason": "The optional macOS libvips binary package omits standalone license texts. Preserve its bundled third-party notice table and the LGPLv3 plus incorporated GPLv3 terms. sharp is development tooling and is not staged in the application.",
+    "packageSource": "https://registry.npmjs.org/@img/sharp-libvips-darwin-arm64/-/sharp-libvips-darwin-arm64-1.3.4.tgz",
+    "files": [
+      {
+        "path": "licenses/upstream/lgpl-3.0.txt",
+        "url": "https://www.gnu.org/licenses/lgpl-3.0.txt",
+        "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+      },
+      {
+        "path": "licenses/upstream/gpl-3.0.txt",
+        "url": "https://www.gnu.org/licenses/gpl-3.0.txt",
+        "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+      },
+      {
+        "path": "licenses/upstream/sharp-libvips-1.3.4-notices.txt",
+        "url": "https://registry.npmjs.org/@img/sharp-libvips-darwin-arm64/-/sharp-libvips-darwin-arm64-1.3.4.tgz",
+        "sha256": "5dd6d3c034f925604681d49b7bedc71bd08dcf3d0cfc6d16b9f0569497d700dc"
+      }
+    ]
+  },
+  "@img/sharp-libvips-darwin-x64@1.3.4": {
+    "license": "LGPL-3.0-or-later",
+    "reason": "The optional macOS libvips binary package omits standalone license texts. Preserve its bundled third-party notice table and the LGPLv3 plus incorporated GPLv3 terms. sharp is development tooling and is not staged in the application.",
+    "packageSource": "https://registry.npmjs.org/@img/sharp-libvips-darwin-x64/-/sharp-libvips-darwin-x64-1.3.4.tgz",
+    "files": [
+      {
+        "path": "licenses/upstream/lgpl-3.0.txt",
+        "url": "https://www.gnu.org/licenses/lgpl-3.0.txt",
+        "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+      },
+      {
+        "path": "licenses/upstream/gpl-3.0.txt",
+        "url": "https://www.gnu.org/licenses/gpl-3.0.txt",
+        "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+      },
+      {
+        "path": "licenses/upstream/sharp-libvips-darwin-x64-1.3.4-notices.txt",
+        "url": "https://registry.npmjs.org/@img/sharp-libvips-darwin-x64/-/sharp-libvips-darwin-x64-1.3.4.tgz",
+        "sha256": "986086beb25bd1b05712a2a0689a64f2e422ae5d7f0d9e46dad44fba3f9a13ff"
+      }
+    ]
+  },
   "@mathjax/mathjax-mhchem-font-extension@4.1.3": {
     "license": "Apache-2.0",
     "reason": "Package declares Apache-2.0 but omits its license text; reproduced verbatim from the accompanying @mathjax/src 4.1.3 LICENSE.",

@@ -27,7 +27,11 @@ export class SnapshotDialog {
       <p class="snapshot-note">${ht("每篇最多 20 份 / 32 MiB，总计 128 MiB。空间不足时清理旧自动快照，手动快照需自行删除。快照保留文字和图片引用，不备份图片文件；关闭文稿后仍可从“全部文稿”找回。")}</p>`;
     document.body.append(this.dialog);
     this.el('#close-snapshots').addEventListener('click', () => this.dialog.close());
-    this.dialog.addEventListener('close', () => { this.request++; this.selected = null; });
+    this.dialog.addEventListener('close', () => {
+      // close is queued: a previous close must not invalidate a reopened dialog.
+      if (this.dialog.open) return;
+      this.request++; this.selected = null;
+    });
     this.dialog.addEventListener('cancel', event => { if (this.working) event.preventDefault(); });
     this.el('#snapshot-scope').addEventListener('change', () => { void this.refresh().catch(error => this.error(error)); });
     this.el('#snapshot-create').addEventListener('submit', event => {

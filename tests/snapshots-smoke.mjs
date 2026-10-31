@@ -67,6 +67,14 @@ async function launch(args = []) {
 async function crash() { if (app) { await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await app.close().catch(() => {}); app = null; } }
 try {
   await launch(['--open', file]);
+  await openSnapshots();
+  await page.evaluate(() => {
+    document.querySelector('#close-snapshots').click();
+    document.querySelector('[data-action="snapshots"]').click();
+  });
+  await poll(async () => await page.locator('#snapshot-dialog').isVisible() && !(await page.locator('#snapshot-status').innerText()).includes('正在读取'));
+  await closeSnapshots();
+  pass('a queued close event cannot invalidate a newly reopened snapshot dialog');
   await action('toggle-autosave'); await poll(() => page.locator('#toggle-autosave').getAttribute('aria-pressed').then(value => value === 'true'));
   const menu = await app.evaluate(({ Menu }) => {
     const visit = items => items.flatMap(item => [{ label: item.label, checked: item.checked }, ...visit(item.submenu?.items || [])]);
