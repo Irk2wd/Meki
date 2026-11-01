@@ -95,6 +95,9 @@ jobs:
         run: npm ci
       - name: Install verified optional Pandoc for conversion tests
         run: node scripts/setup-pandoc-ci.mjs
+      - name: Download previous Windows installer for upgrade regression
+        if: matrix.artifact == 'windows'
+        run: node scripts/setup-upgrade-ci.mjs
       - name: Download installer from this run
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
