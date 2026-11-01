@@ -8,7 +8,7 @@ import { Plugin } from '@milkdown/kit/prose/state';
 import { isHistoryTransaction } from '@milkdown/kit/prose/history';
 import type { Node } from '@milkdown/kit/prose/model';
 import { codeDefaults, newCodeLanguage, validCodeLanguage, type CodeOptions } from './code-options';
-import type { Settings } from '../shared/moye';
+import type { Settings } from '../shared/meki';
 
 export class EditorCode {
   private settings = { ...codeDefaults };
@@ -61,7 +61,7 @@ export class EditorCode {
     } },
     appendTransaction: (transactions, previous, state) => {
       const language = this.language();
-      if (this.loading || this.transferring || !language || !transactions.some(tr => tr.docChanged) || transactions.some(tr => isHistoryTransaction(tr) || tr.getMeta('moye-preserve-code-language') || tr.getMeta('paste') || tr.getMeta('uiEvent') === 'paste')) return;
+      if (this.loading || this.transferring || !language || !transactions.some(tr => tr.docChanged) || transactions.some(tr => isHistoryTransaction(tr) || tr.getMeta('meki-preserve-code-language') || tr.getMeta('paste') || tr.getMeta('uiEvent') === 'paste')) return;
       const oldPositions = new Set<number>();
       previous.doc.descendants((node, pos) => {
         if (node.type.name !== 'code_block') return;

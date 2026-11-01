@@ -123,11 +123,11 @@ export class EditorActions {
     }
     const view = this.visual(); view.dispatch(closeHistory(view.state.tr));
     const { state } = view, { schema } = state;
-    const markNames: Record<string, string> = { sub: 'moye_sub', sup: 'moye_sup', highlight: 'moye_highlight', strike: 'strike_through' };
+    const markNames: Record<string, string> = { sub: 'meki_sub', sup: 'meki_sup', highlight: 'meki_highlight', strike: 'strike_through' };
     let result = false;
     if (markNames[name]) result = toggleMark(schema.marks[markNames[name]])(state, view.dispatch);
-    else if (name === 'toc') { this.apply(state.tr.replaceSelectionWith(schema.nodes.moye_toc.create())); return true; }
-    else if (name === 'alert' || name === 'quote') result = wrapIn(schema.nodes[name === 'alert' ? 'moye_alert' : 'blockquote'], name === 'alert' ? { kind: 'note' } : undefined)(state, view.dispatch);
+    else if (name === 'toc') { this.apply(state.tr.replaceSelectionWith(schema.nodes.meki_toc.create())); return true; }
+    else if (name === 'alert' || name === 'quote') result = wrapIn(schema.nodes[name === 'alert' ? 'meki_alert' : 'blockquote'], name === 'alert' ? { kind: 'note' } : undefined)(state, view.dispatch);
     else if (name === 'task' || name === 'ordered') {
       result = wrapInList(schema.nodes[name === 'task' ? 'bullet_list' : 'ordered_list'])(state, view.dispatch);
       if (name === 'task') {

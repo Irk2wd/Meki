@@ -34,7 +34,7 @@ for (const target of ['win32-x64', 'darwin-arm64', 'darwin-x64']) {
   let architecture = 'x64', links = 0;
   if (mac) {
     const info = plist.parse(await fs.readFile(path.join(contents, 'Info.plist'), 'utf8'));
-    assert.equal(info.CFBundleIdentifier, 'io.moye.editor');
+    assert.equal(info.CFBundleIdentifier, 'io.meki.editor');
     assert.deepEqual(Object.keys(info.ElectronAsarIntegrity), ['Resources/app.asar']);
     assert.equal(digest(await fs.readFile(path.join(contents, 'Resources', info.CFBundleIconFile))), digest(await fs.readFile(path.join(root, 'assets', 'icon.icns'))));
     const executable = await fs.readFile(path.join(contents, 'MacOS', sourcePackage.productName));
@@ -51,7 +51,7 @@ for (const target of ['win32-x64', 'darwin-arm64', 'darwin-x64']) {
     await walk(contents);
     assert.ok(links >= 5);
   } else {
-    const executable = await fs.readFile(path.join(directory, 'Moye.exe'));
+    const executable = await fs.readFile(path.join(directory, 'Meki.exe'));
     assert.equal(executable.subarray(0, 2).toString(), 'MZ');
   }
   results.push({ target, sourceCommit, sourceVersion: sourcePackage.version, asarSha256: digest(await fs.readFile(archive)), archiveMatchesSource: true, architecture, relativeSymlinks: links });

@@ -42,8 +42,8 @@ async function prepareWordMath(ast, execute, folder) {
     if (!value || typeof value !== 'object') return;
     if (value.t === 'Span') {
       const attributes = new Map(value.c?.[0]?.[2] || []);
-      if (attributes.get('moye-word-formula') === '1') {
-        const mathml = attributes.get('moye-word-math');
+      if (attributes.get('meki-word-formula') === '1') {
+        const mathml = attributes.get('meki-word-math');
         const formula = { node: value, mathml: safeMathml(mathml) ? mathml : null };
         formulas.push(formula);
         if (formula.mathml && unique.size < 256 && !unique.has(mathml)) unique.set(mathml, unique.size);
@@ -56,11 +56,11 @@ async function prepareWordMath(ast, execute, folder) {
   const converted = new Map();
   if (unique.size) {
     try {
-      const html = [...unique].map(([mathml, index]) => `<div id="moye-equation-${index}">${mathml}</div>`).join('');
+      const html = [...unique].map(([mathml, index]) => `<div id="meki-equation-${index}">${mathml}</div>`).join('');
       const parsed = JSON.parse((await execute(['--from=html', '--to=json', '--fail-if-warnings'], html)).toString('utf8'));
       for (const block of parsed.blocks) {
         if (block.t !== 'Div') continue;
-        const index = Number(block.c[0][0].replace(/^moye-equation-/, ''));
+        const index = Number(block.c[0][0].replace(/^meki-equation-/, ''));
         const children = block.c[1];
         const math = children.length === 1 && ['Plain', 'Para'].includes(children[0].t) && children[0].c.length === 1 && children[0].c[0].t === 'Math' ? children[0].c[0] : null;
         if (Number.isInteger(index) && math) converted.set(index, math);
@@ -75,7 +75,7 @@ async function prepareWordMath(ast, execute, folder) {
   for (const formula of formulas) {
     const math = formula.mathml && converted.get(unique.get(formula.mathml));
     if (math) { formula.node.t = 'Math'; formula.node.c = math.c; editable++; }
-    else formula.node.c[0][2] = formula.node.c[0][2].filter(([key]) => !key.startsWith('moye-word-'));
+    else formula.node.c[0][2] = formula.node.c[0][2].filter(([key]) => !key.startsWith('meki-word-'));
   }
   return { editable, fallback: formulas.length - editable };
 }

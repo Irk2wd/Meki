@@ -12,7 +12,7 @@ const file = path.join(run, '原文.md'), original = '\uFEFF# 原文\r\n\r\n"原
 await fs.writeFile(file, original);
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
 const start = process.platform === 'darwin' ? 'Meta+ArrowUp' : 'Control+Home', end = process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End';
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: profile, MOYE_TEST_DISCARD: 'discard' }; delete env.ELECTRON_RUN_AS_NODE;
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: profile, MEKI_TEST_DISCARD: 'discard' }; delete env.ELECTRON_RUN_AS_NODE;
 const results = [], errors = []; let app, page;
 const pass = message => { results.push(message); console.log(`PASS ${message}`); };
 async function ready(target) { target.setDefaultTimeout(15000); target.on('pageerror', error => errors.push(error.message)); await target.waitForSelector('#shell[data-ready="true"]'); return target; }
@@ -21,7 +21,7 @@ async function idle(target = page) { await target.waitForFunction(() => !documen
 async function action(name, target = page) { await target.locator(`[data-action="${name}"]`).first().evaluate(button => button.click()); await idle(target); }
 async function mode(value, target = page) { await target.locator(`[data-mode="${value}"]`).click(); await target.locator(value === 'visual' ? '.ProseMirror' : '#source-editor .cm-content').waitFor({ state: 'visible' }); await idle(target); }
 async function launch() {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? ['--open', file] : [root, '--open', file], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', file] : [root, '--open', file], env, timeout: 30000 });
   page = await ready(await app.firstWindow()); await focus();
 }
 async function exit() { if (app) { await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await app.close().catch(() => {}); app = null; } }
@@ -41,7 +41,7 @@ async function setting(key, value, target = page) {
   const details = target.locator('.typing-settings'); if (!await details.evaluate(node => node.open)) await details.locator('summary').click();
   const names = { typingAutoPair: 'typing-auto-pair', typingMarkdownPairs: 'typing-markdown-pairs', typingSmartQuotes: 'typing-smart-quotes', typingSmartDashes: 'typing-smart-dashes' };
   if (key === 'typingAutoPair') await target.locator(`#${names[key]}`).selectOption(value); else await target.locator(`#${names[key]}`).setChecked(value);
-  await target.waitForFunction(async ({ key, value }) => (await window.moye.boot()).settings[key] === value, { key, value });
+  await target.waitForFunction(async ({ key, value }) => (await window.meki.boot()).settings[key] === value, { key, value });
   await action('style', target);
 }
 async function selectAllProse() {
@@ -52,7 +52,7 @@ async function undo() { await page.keyboard.press(`${mod}+z`); }
 
 try {
   await launch();
-  const defaults = (await page.evaluate(() => window.moye.boot())).settings;
+  const defaults = (await page.evaluate(() => window.meki.boot())).settings;
   assert.equal(defaults.typingAutoPair, 'default'); assert.equal(defaults.typingSmartQuotes, false); assert.equal(defaults.typingSmartDashes, false); assert.equal(defaults.typingMarkdownPairs, false);
   await setting('typingSmartQuotes', true); await setting('typingSmartQuotes', false); await mode('source'); await mode('visual'); await action('save');
   assert.equal(await fs.readFile(file, 'utf8'), original);
@@ -69,7 +69,7 @@ try {
   await setting('typingMarkdownPairs', true); await fresh('word'); await selectAllProse(); await page.keyboard.type('*');
   await page.locator('.ProseMirror em').waitFor(); assert.equal(await page.locator('.ProseMirror em').textContent(), 'word');
   await page.keyboard.type('*'); await page.locator('.ProseMirror strong').waitFor(); await undo(); await page.locator('.ProseMirror em').waitFor(); await undo(); assert.equal(await page.locator('.ProseMirror em').count(), 0); await prose('word');
-  await fresh('x^2'); await selectAllProse(); await page.keyboard.type('$'); await page.locator('.moye-inline-math[data-value="x^2"]').waitFor();
+  await fresh('x^2'); await selectAllProse(); await page.keyboard.type('$'); await page.locator('.meki-inline-math[data-value="x^2"]').waitFor();
   await undo(); await prose('x^2');
   pass('Markdown selection symbols create semantic marks and editable formulas with isolated undo');
 
@@ -127,7 +127,7 @@ try {
   await page.locator('#typing-smart-dashes').scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(run, 'typing-settings.png') }); await action('style');
   await exit(); await launch();
-  const restored = (await page.evaluate(() => window.moye.boot())).settings;
+  const restored = (await page.evaluate(() => window.meki.boot())).settings;
   assert.equal(restored.typingAutoPair, 'on'); assert.equal(restored.typingMarkdownPairs, true); assert.equal(restored.typingSmartQuotes, true); assert.equal(restored.typingSmartDashes, true);
   await fresh(); await page.keyboard.type('"persist"'); await prose('“persist”');
   pass('input preferences persist across process restart and the settings remain reachable at a smaller window size');

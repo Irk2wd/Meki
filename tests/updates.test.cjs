@@ -10,13 +10,12 @@ const { UpdateRuntime, atomicJson } = require('../electron/update-runtime.cjs');
 const { UpdateService } = require('../electron/update-service.cjs');
 const { GithubUpdates } = require('../electron/update-network.cjs');
 
-const encryption = { available: () => true, encrypt: value => Buffer.from([...value].reverse().join('')), decrypt: value => [...value.toString()].reverse().join('') };
 function setup(t, pair, overrides = {}) {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'moye-update-test-'));
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'meki-update-test-'));
   t.after(() => {
     const target = fs.realpathSync(folder), parent = fs.realpathSync(os.tmpdir());
     assert.equal(path.dirname(target), parent);
-    assert.ok(path.basename(target).startsWith('moye-update-test-'));
+    assert.ok(path.basename(target).startsWith('meki-update-test-'));
     fs.rmSync(target, { recursive: true, force: true });
   });
   return new UpdateRuntime({ userData: folder, baseVersion: '0.11.3', electron: '45.0.0', platform: process.platform, arch: process.arch, key: pair.publicKey, ...overrides });
@@ -24,8 +23,7 @@ function setup(t, pair, overrides = {}) {
 async function connected(t, overrides = {}) {
   const pair = keys(), update = fixture(pair, overrides), runtime = setup(t, pair), remote = await server(update);
   t.after(() => remote.close());
-  const service = new UpdateService({ runtime, encryption, network: new GithubUpdates({ testOrigin: remote.origin }), cliToken: async () => 'moye-test-token' });
-  await service.credentials({ kind: 'cli' });
+  const service = new UpdateService({ runtime, network: new GithubUpdates({ testOrigin: remote.origin }) });
   return { pair, update, runtime, remote, service };
 }
 function store(runtime, update) {
@@ -52,7 +50,7 @@ test('signed manifests bind the code, installer, platform and release; substitut
   assert.throws(() => policy.verifyManifest(update.envelope, pair.publicKey, { version: '0.13.0' }));
 });
 
-test('private release download strips credentials on redirects and stages verified code without activating it', async t => {
+test('public release download stages verified code without activating it or sending credentials', async t => {
   const { service, runtime, remote, update } = await connected(t);
   assert.equal((await service.check()).status, 'available');
   assert.equal((await service.download()).status, 'ready');
@@ -60,7 +58,7 @@ test('private release download strips credentials on redirects and stages verifi
   assert.equal(fs.readFileSync(runtime.paths(update.manifest.asarSha256).archive).equals(update.payload), true);
   assert.ok(remote.requests.some(item => item.path.startsWith('/blob/')));
   assert.ok(remote.requests.filter(item => item.path.startsWith('/blob/')).every(item => item.authorization === undefined));
-  assert.equal(JSON.stringify(service.snapshot()).includes('moye-test-token'), false);
+  assert.ok(remote.requests.every(item => item.authorization === undefined));
   assert.equal(service.prepareApply().kind, 'payload');
   assert.equal(runtime.readState().current, null, 'validation alone must not activate an update');
 });
@@ -97,82 +95,74 @@ test('download cancellation can be retried and overlapping update operations are
 });
 
 test('runtime changes require the signed installer and its bytes are rechecked before launch', async t => {
-  const { service, runtime } = await connected(t, { electron: '46.0.0' });
-  assert.equal((await service.check()).kind, 'installer'); assert.equal((await service.download()).status, 'ready');
-  const ready = service.prepareApply(); assert.equal(ready.kind, 'installer');
-  fs.appendFileSync(ready.path, 'tampered'); assert.throws(() => service.prepareApply()); assert.equal(runtime.readState().current, null);
+  for (const change of [{ electron: '46.0.0' }, { bootstrap: policy.BOOTSTRAP_VERSION + 1 }]) {
+    const { service, runtime } = await connected(t, change);
+    assert.equal((await service.check()).kind, 'installer'); assert.equal((await service.download()).status, 'ready');
+    const ready = service.prepareApply(); assert.equal(ready.kind, 'installer');
+    assert.ok(path.basename(ready.path).startsWith('Meki-'));
+    fs.appendFileSync(ready.path, 'tampered'); assert.throws(() => service.prepareApply()); assert.equal(runtime.readState().current, null);
+  }
 });
 
 test('current or older releases never offer a downgrade or fetch payload metadata', async t => {
   const { service, remote } = await connected(t, { version: '0.11.2' });
   assert.equal((await service.check()).status, 'current');
-  assert.equal(remote.requests.filter(item => item.path.startsWith('/repos/Irk2wd/moye/')).length, 1);
+  assert.equal(remote.requests.filter(item => item.path.startsWith('/repos/Irk2wd/Meki/')).length, 1);
   assert.equal(remote.requests.some(item => item.path.includes('/assets/')), false);
   await assert.rejects(() => service.download(), /检查更新/);
 });
 
-test('authorization failures are visible and leave the application unchanged', async t => {
-  const { service, remote, runtime } = await connected(t); remote.unauthorized = true;
-  assert.match((await service.check()).message, /读取权限/); assert.equal(runtime.readState().current, null);
-  await service.credentials({ kind: 'none' }); assert.match((await service.check()).message, /先连接/);
+test('rate limits are visible and leave the application unchanged', async t => {
+  const { service, remote, runtime } = await connected(t); remote.errorStatus = 403;
+  assert.match((await service.check()).message, /请求受限/); assert.equal(runtime.readState().current, null);
+  assert.ok(remote.requests.every(item => item.authorization === undefined));
 });
 
-test('remembered tokens are encrypted; transient tokens and renderer snapshots never persist their plaintext', async t => {
-  const pair = keys(), runtime = setup(t, pair), service = new UpdateService({ runtime, encryption });
-  const token = 'private-test-value'; await service.credentials({ kind: 'token', token, remember: true });
-  assert.equal(fs.readFileSync(service.authFile, 'utf8').includes(token), false);
-  assert.equal(JSON.stringify(service.snapshot()).includes(token), false);
-  assert.equal(await new UpdateService({ runtime, encryption }).token(), token);
-  await service.credentials({ kind: 'token', token, remember: false });
-  await assert.rejects(() => new UpdateService({ runtime, encryption }).token());
-  await service.credentials({ kind: 'none' }); await assert.rejects(() => service.token());
+test('a missing release is reported without falling back to another repository', async t => {
+  const { service, remote, runtime } = await connected(t); remote.publicAvailable = false;
+  const state = await service.check();
+  assert.equal(state.status, 'error'); assert.match(state.message, /尚无/);
+  assert.equal(remote.requests.length, 1);
+  assert.equal(remote.requests[0].path, '/repos/Irk2wd/Meki/releases/latest');
+  assert.equal(runtime.readState().current, null);
 });
 
-test('unavailable system encryption never falls back to plaintext storage', async t => {
-  const runtime = setup(t, keys()), service = new UpdateService({ runtime, encryption: { ...encryption, available: () => false } });
-  await assert.rejects(() => service.credentials({ kind: 'token', token: 'private-test-value', remember: true }), /安全存储/);
-  assert.equal(fs.existsSync(service.authFile), false);
-  await service.credentials({ kind: 'token', token: 'private-test-value', remember: false }); assert.equal(await service.token(), 'private-test-value');
+test('unrelated saved credentials are neither required nor sent during public updates', async t => {
+  const { service, remote, runtime } = await connected(t);
+  const saved = path.join(runtime.root, 'auth.json'), content = 'unreadable previous credentials';
+  fs.writeFileSync(saved, content);
+  assert.equal((await service.check()).status, 'available');
+  assert.equal((await service.download()).status, 'ready');
+  assert.ok(remote.requests.every(item => !item.authorization));
+  assert.equal(fs.readFileSync(saved, 'utf8'), content);
 });
 
-test('public updates work without credentials, including download and activation with the original signing identity', async t => {
+test('public Meki updates use the Meki signing identity and canonical asset names', async t => {
   const pair = keys(), update = fixture(pair), runtime = setup(t, pair), remote = await server(update);
   remote.publicAvailable = true; t.after(() => remote.close());
-  const service = new UpdateService({ runtime, encryption, network: new GithubUpdates({ testOrigin: remote.origin }), cliToken: async () => { throw new Error('must not read private credentials'); } });
+  const service = new UpdateService({ runtime, network: new GithubUpdates({ testOrigin: remote.origin }) });
   assert.equal((await service.check()).status, 'available');
   assert.equal(service.snapshot().repository, 'Irk2wd/Meki');
   assert.equal(service.snapshot().releaseUrl, `https://github.com/Irk2wd/Meki/releases/tag/v${update.manifest.version}`);
   assert.equal((await service.download()).status, 'ready');
-  assert.equal(service.prepareApply().manifest.appId, 'io.moye.editor');
+  assert.equal(service.prepareApply().manifest.appId, 'io.meki.editor');
   assert.ok(remote.requests.every(item => !item.authorization));
-  assert.equal(remote.requests.some(item => item.path.startsWith('/repos/Irk2wd/moye/')), false);
+  assert.ok(update.release.assets.every(item => item.name.startsWith('Meki-')));
 });
 
-test('saved private credentials are not decrypted or sent when a public release is available', async t => {
-  const { service, remote } = await connected(t); remote.publicAvailable = true;
-  service.cliToken = async () => { throw new Error('private CLI must not run'); };
-  assert.equal((await service.check()).status, 'available');
-  assert.equal((await service.download()).status, 'ready');
-  assert.ok(remote.requests.every(item => !item.authorization));
-});
-
-test('migration falls back only to the authenticated legacy repository and retains its actual release URL', async t => {
-  const { service, remote } = await connected(t);
-  assert.equal((await service.check()).status, 'available');
-  assert.equal(service.snapshot().repository, 'Irk2wd/moye');
-  assert.match(service.snapshot().releaseUrl, /^https:\/\/github\.com\/Irk2wd\/moye\//);
-  assert.ok(remote.requests.filter(item => item.path.startsWith('/repos/Irk2wd/Meki/')).every(item => !item.authorization));
-  assert.ok(remote.requests.filter(item => item.path.startsWith('/repos/Irk2wd/moye/')).every(item => item.authorization === 'Bearer moye-test-token'));
+test('update repository and loopback test origin cannot be redirected by callers', () => {
   assert.throws(() => new GithubUpdates({ repository: 'attacker/updates' }));
-  await assert.rejects(() => new GithubUpdates().response('releases/latest', 'private-value', new AbortController().signal), /不接受/);
+  assert.throws(() => new GithubUpdates({ testOrigin: 'https://example.invalid' }));
+  assert.throws(() => policy.releaseInfo(fixture(keys()).release, 'attacker/updates'));
 });
 
-test('an invalid public signature never falls back to a private release', async t => {
+test('an invalid public signature never falls back to a different release', async t => {
   const { service, remote } = await connected(t); remote.publicAvailable = true;
   const forged = fixture(keys()); remote.current.blobs.set(1, forged.blobs.get(1));
   remote.current.release.assets[0].digest = `sha256:${policy.digest(forged.blobs.get(1))}`;
   assert.match((await service.check()).message, /签名/);
-  assert.equal(remote.requests.some(item => item.path.startsWith('/repos/Irk2wd/moye/')), false);
+  assert.equal(remote.requests.some(item => item.path.includes('/releases?')), false);
+  assert.equal(remote.requests.some(item => item.path.endsWith('/assets/2')), false);
 });
 
 test('a Windows-only latest release keeps Mac updates on the newest complete Mac release', async t => {
@@ -180,7 +170,7 @@ test('a Windows-only latest release keeps Mac updates on the newest complete Mac
   const runtime = setup(t, pair, { platform: 'darwin', arch: 'arm64' }), remote = await server(mac);
   remote.publicAvailable = true; remote.latest = windows.release; remote.releases = [windows.release, mac.release];
   t.after(() => remote.close());
-  const service = new UpdateService({ runtime, encryption, network: new GithubUpdates({ testOrigin: remote.origin }) });
+  const service = new UpdateService({ runtime, network: new GithubUpdates({ testOrigin: remote.origin }) });
   assert.equal((await service.check()).status, 'available');
   assert.equal(service.snapshot().latestVersion, mac.manifest.version);
   assert.equal((await service.download()).status, 'ready');
@@ -242,7 +232,7 @@ test('release asset generation verifies the key, exact installer and archive, an
   await assert.rejects(() => verifyUpdateAssets(build, runtime.root, pair.publicKey), /checksum/);
 });
 
-test('Meki installers retain byte-identical legacy aliases and the original signed protocol', async t => {
+test('each platform publishes one canonical Meki installer referenced by its signed update manifest', async t => {
   const { createUpdateAssets, verifyUpdateAssets } = await import('../scripts/update-assets.mjs');
   const { installerName } = require('../electron/app-identity.cjs');
   for (const platform of ['win32', 'darwin']) {
@@ -251,16 +241,18 @@ test('Meki installers retain byte-identical legacy aliases and the original sign
     fs.writeFileSync(asar, source.payload); fs.writeFileSync(installer, source.installer);
     const updateAssets = await createUpdateAssets({ directory: runtime.root, asar, installer, version: '1.0.0', platform, electron: '45.0.0',
       signingKey: pair.privateKey.export({ type: 'pkcs8', format: 'pem' }), verificationKey: pair.publicKey });
-    const legacyName = policy.names('1.0.0', platform).installer, alias = path.join(runtime.root, legacyName);
-    assert.deepEqual(fs.readFileSync(alias), fs.readFileSync(installer));
+    const canonical = policy.names('1.0.0', platform).installer;
+    assert.equal(path.basename(installer), canonical);
     const build = { version: '1.0.0', platform: platform === 'win32' ? 'windows' : 'macos', installer: path.basename(installer),
-      compatibilityInstaller: legacyName, sha256: policy.digest(source.installer), asarSha256: policy.digest(source.payload), updateAssets };
+      sha256: policy.digest(source.installer), asarSha256: policy.digest(source.payload), updateAssets };
     const signed = await verifyUpdateAssets(build, runtime.root, pair.publicKey);
-    assert.equal(signed.installer.name, legacyName); assert.equal(signed.appId, 'io.moye.editor');
-    await assert.rejects(verifyUpdateAssets({ ...build, compatibilityInstaller: undefined }, runtime.root, pair.publicKey), /alias/);
+    assert.equal(signed.installer.name, canonical); assert.equal(signed.appId, 'io.meki.editor');
+    const generated = fs.readdirSync(runtime.root).filter(name => name.endsWith('.exe') || name.endsWith('.dmg'));
+    assert.deepEqual(generated, [canonical]);
+    await assert.rejects(verifyUpdateAssets({ ...build, installer: 'unexpected.exe' }, runtime.root, pair.publicKey), /installer name/);
+    await assert.rejects(createUpdateAssets({ directory: runtime.root, asar, installer: path.join(runtime.root, 'unexpected.exe'), version: '1.0.0', platform, electron: '45.0.0',
+      signingKey: pair.privateKey.export({ type: 'pkcs8', format: 'pem' }), verificationKey: pair.publicKey }), /installer name/);
     fs.writeFileSync(installer, Buffer.alloc(source.installer.length, 1));
     await assert.rejects(verifyUpdateAssets(build, runtime.root, pair.publicKey), /Primary installer/);
-    fs.writeFileSync(installer, source.installer); fs.writeFileSync(alias, Buffer.alloc(source.installer.length, 2));
-    await assert.rejects(verifyUpdateAssets(build, runtime.root, pair.publicKey), /checksum/);
   }
 });

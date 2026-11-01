@@ -12,7 +12,7 @@ const file = path.join(run, 'blocks.md');
 const original = '# 段落控件\n\nAlpha 第一段。\n\nBeta 第二段。\n\nGamma 第三段。\n\n## 多行标题对齐验证：' + '文字会自然换行，按钮应跟随第一行。'.repeat(6)
   + '\n\n' + '长段落：对齐第一行，悬停不应改变正文。'.repeat(30) + '\n\n- 清单第一项\n- 清单第二项\n\n> 引用文字\n>\n> 第二段引用\n\n| 表头 | B |\n| --- | --- |\n| 数据 | C |\n\n```js\nconst value = 1;\n```\n\n---\n\n最后一段。\n';
 await fs.writeFile(file, original);
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: path.join(run, 'profile'), MOYE_TEST_DISCARD: 'discard', MOYE_TEST_SAVE_PATH: file };
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: path.join(run, 'profile'), MEKI_TEST_DISCARD: 'discard', MEKI_TEST_SAVE_PATH: file };
 delete env.ELECTRON_RUN_AS_NODE;
 const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 const handle = '.milkdown-block-handle:has(.operation-item)', paragraphs = [1, 2, 3].map(n => `.ProseMirror > p:nth-of-type(${n})`);
@@ -36,7 +36,7 @@ async function aligned(selector, gutter = false) {
 }
 async function action(name) { await page.locator(`[data-action="${name}"]`).first().evaluate(node => node.click()); await page.waitForFunction(() => !document.body.classList.contains('is-busy')); }
 try {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? ['--open', file] : [root, '--open', file], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', file] : [root, '--open', file], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(12000); page.on('pageerror', error => errors.push(error.message));
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.setSize(1200, 1000); window.show(); window.focus(); });
   await page.waitForSelector('#shell[data-ready="true"]'); await page.waitForFunction(() => document.hasFocus());

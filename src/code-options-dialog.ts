@@ -1,5 +1,5 @@
 import { ht, t } from '../electron/i18n.mjs';
-import type { Settings } from '../shared/moye';
+import type { Settings } from '../shared/meki';
 import { validCodeLanguage } from './code-options';
 
 export class CodeOptionsDialog {

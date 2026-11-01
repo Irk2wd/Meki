@@ -2,7 +2,7 @@ import { ht, t } from '../electron/i18n.mjs';
 import { buildOutline, visibleOutline, type OutlineEntry } from './outline';
 import type { WritingEditor } from './editor';
 import { numberHeadings, numberedHeadingTitle } from './heading-numbering';
-import type { Settings } from '../shared/moye';
+import type { Settings } from '../shared/meki';
 const escape = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
 export class OutlinePanel {
   private get editor() { return this.getEditor(); }

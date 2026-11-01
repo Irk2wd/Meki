@@ -9,7 +9,4 @@ export interface UpdateState {
   downloaded: number;
   total: number;
   message: string;
-  credential: 'none' | 'cli' | 'token';
-  canRemember: boolean;
 }
-export type UpdateCredentials = { kind: 'none' | 'cli' } | { kind: 'token'; token: string; remember: boolean };

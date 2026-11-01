@@ -8,7 +8,7 @@ const { atomicWrite, validateAbsolutePath, pathKey } = require('./file-store.cjs
 const { validateExport, validateRaster, validateDiagramSvg, pdfPrintOptions } = require('./export-policy.cjs');
 const { PandocService } = require('./pandoc-service.cjs');
 const { ExportPresets } = require('./export-presets.cjs');
-const TEST = process.env.MOYE_TEST === '1';
+const TEST = process.env.MEKI_TEST === '1';
 
 function createExportService(getWindow, getActiveDocument, store) {
   const pandoc = new PandocService(app.getPath('userData'));
@@ -22,7 +22,7 @@ function createExportService(getWindow, getActiveDocument, store) {
   }
   async function outputPath(kind, name, testKey) {
     let selected;
-    if (TEST) selected = process.env[testKey] || process.env.MOYE_TEST_EXPORT_PATH;
+    if (TEST) selected = process.env[testKey] || process.env.MEKI_TEST_EXPORT_PATH;
     else {
       const stem = path.parse(name || t("未命名")).name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '-').slice(0, 160);
       const result = await dialog.showSaveDialog(getWindow(), { title: t("导出 {0}", kind.toUpperCase()), defaultPath: `${stem}.${kind}`, filters: [{ name: kind.toUpperCase(), extensions: [kind] }], properties: ['showOverwriteConfirmation', 'createDirectory'] });
@@ -37,7 +37,7 @@ function createExportService(getWindow, getActiveDocument, store) {
   }
   async function withSnapshot(html, width, action) {
     const temporaryRoot = await fs.realpath(app.getPath('temp'));
-    const folder = await fs.mkdtemp(path.join(temporaryRoot, 'moye-export-'));
+    const folder = await fs.mkdtemp(path.join(temporaryRoot, 'meki-export-'));
     const file = path.join(folder, 'snapshot.html');
     let win, deadline;
     try {
@@ -45,7 +45,7 @@ function createExportService(getWindow, getActiveDocument, store) {
       const policy = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'none\'; img-src data:; font-src data:; style-src \'unsafe-inline\'; base-uri \'none\'; form-action \'none\';">';
       const source = '<!doctype html>' + policy + html;
       await fs.writeFile(file, source);
-      win = new BrowserWindow({ show: false, width, height: 800, webPreferences: { partition: `moye-export-${crypto.randomUUID()}`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false, offscreen: true } });
+      win = new BrowserWindow({ show: false, width, height: 800, webPreferences: { partition: `meki-export-${crypto.randomUUID()}`, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false, offscreen: true } });
       const contents = win.webContents;
       contents.setWindowOpenHandler(() => ({ action: 'deny' }));
       contents.on('will-navigate', event => event.preventDefault());
@@ -63,7 +63,7 @@ function createExportService(getWindow, getActiveDocument, store) {
     } finally {
       clearTimeout(deadline);
       if (win && !win.isDestroyed()) win.destroy();
-      if (path.dirname(folder) !== temporaryRoot || !path.basename(folder).startsWith('moye-export-')) throw new Error('Invalid temporary directory');
+      if (path.dirname(folder) !== temporaryRoot || !path.basename(folder).startsWith('meki-export-')) throw new Error('Invalid temporary directory');
       await fs.rm(folder, { recursive: true, force: true });
     }
   }
@@ -72,7 +72,7 @@ function createExportService(getWindow, getActiveDocument, store) {
     if (exporting) throw new Error(t("正在导出，请等待完成。")); exporting = true;
     try {
       const extension = input.kind === 'plain-html' ? 'html' : input.kind;
-      const selected = await outputPath(extension, input.suggestedName, `MOYE_TEST_EXPORT_${input.kind.replace('-', '_').toUpperCase()}_PATH`);
+      const selected = await outputPath(extension, input.suggestedName, `MEKI_TEST_EXPORT_${input.kind.replace('-', '_').toUpperCase()}_PATH`);
       if (!selected) return null;
       let bytes;
       if (['html', 'plain-html'].includes(input.kind)) bytes = Buffer.from(input.html);
@@ -82,7 +82,7 @@ function createExportService(getWindow, getActiveDocument, store) {
       }
       else bytes = await withSnapshot(input.html, input.pngWidth, async contents => {
         if (input.kind === 'pdf') {
-          const color = await contents.executeJavaScript('getComputedStyle(document.querySelector(".moye-document") || document.body).color');
+          const color = await contents.executeJavaScript('getComputedStyle(document.querySelector(".meki-document") || document.body).color');
           return contents.printToPDF(pdfPrintOptions(input.pdf, input.suggestedName, color));
         }
         const height = await contents.executeJavaScript('Math.ceil(Math.max(document.body.getBoundingClientRect().bottom, document.body.scrollHeight))');
@@ -110,18 +110,18 @@ function createExportService(getWindow, getActiveDocument, store) {
       const image = nativeImage.createFromBuffer(bytes); const size = image.getSize(); validateRaster(size.width, size.height);
       if (input.kind === 'clipboard') { await clipboard.write([new ClipboardItem({ 'image/png': new Blob([bytes], { type: 'image/png' }) })]); return null; }
     }
-    const selected = await outputPath(input.kind, t("图表"), `MOYE_TEST_DIAGRAM_${input.kind.toUpperCase()}_PATH`);
+    const selected = await outputPath(input.kind, t("图表"), `MEKI_TEST_DIAGRAM_${input.kind.toUpperCase()}_PATH`);
     if (selected) await atomicWrite(selected, bytes); return selected;
   }
   async function choosePandoc() {
     let selected;
-    if (TEST) selected = process.env.MOYE_PANDOC_PATH;
+    if (TEST) selected = process.env.MEKI_PANDOC_PATH;
     else { const result = await dialog.showOpenDialog(getWindow(), { title: t("选择 Pandoc 可执行文件（3.12.1 或更新）"), properties: ['openFile'], ...(process.platform === 'win32' ? { filters: [{ name: 'Pandoc', extensions: ['exe'] }] } : {}) }); if (!result.canceled) selected = result.filePaths[0]; }
     return selected ? pandoc.setExecutable(selected) : pandoc.status();
   }
   async function chooseExportReference() {
     let selected;
-    if (TEST) selected = process.env.MOYE_TEST_REFERENCE_PATH;
+    if (TEST) selected = process.env.MEKI_TEST_REFERENCE_PATH;
     else {
       const result = await dialog.showOpenDialog(getWindow(), { title: t("选择 Word 样式模板"), properties: ['openFile'], filters: [{ name: t("Word 样式模板"), extensions: ['docx'] }] });
       if (!result.canceled) selected = result.filePaths[0];
@@ -133,7 +133,7 @@ function createExportService(getWindow, getActiveDocument, store) {
   }
   async function importDocument() {
     let selected;
-    if (TEST) selected = process.env.MOYE_TEST_IMPORT_PATH;
+    if (TEST) selected = process.env.MEKI_TEST_IMPORT_PATH;
     else { const result = await dialog.showOpenDialog(getWindow(), { title: t("导入为新 Markdown 文稿"), properties: ['openFile'], filters: [{ name: 'Word / HTML', extensions: ['docx', 'html', 'htm'] }] }); if (!result.canceled) selected = result.filePaths[0]; }
     if (!selected) return null;
     const actual = await fs.realpath(validateAbsolutePath(selected)); const result = await pandoc.importDocument(actual); importedPaths.add(pathKey(actual)); return result;

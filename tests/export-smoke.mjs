@@ -34,8 +34,8 @@ $$
 
 ` + '```mermaid\nflowchart LR\n A[开始] --> B[完成]\n```\n\n<img src="sized.png" alt="尺寸集成图" title="尺寸说明" width="180" height="90">\n\n快照末尾。\n';
 await fs.writeFile(documentPath, fixture);
-const env = { ...process.env, MOYE_TEST:'1', MOYE_USER_DATA:path.join(run,'profile'), MOYE_TEST_OPEN_PATH:documentPath, MOYE_TEST_SAVE_PATH:importedPath, MOYE_TEST_IMPORT_PATH:output.docx, MOYE_TEST_DISCARD:'discard', MOYE_TEST_DIAGRAM_SVG_PATH:path.join(run,'diagram.svg'), MOYE_TEST_DIAGRAM_PNG_PATH:path.join(run,'diagram.png') };
-for (const [kind, file] of Object.entries(output)) env[`MOYE_TEST_EXPORT_${kind.replace('-', '_').toUpperCase()}_PATH`] = file;
+const env = { ...process.env, MEKI_TEST:'1', MEKI_USER_DATA:path.join(run,'profile'), MEKI_TEST_OPEN_PATH:documentPath, MEKI_TEST_SAVE_PATH:importedPath, MEKI_TEST_IMPORT_PATH:output.docx, MEKI_TEST_DISCARD:'discard', MEKI_TEST_DIAGRAM_SVG_PATH:path.join(run,'diagram.svg'), MEKI_TEST_DIAGRAM_PNG_PATH:path.join(run,'diagram.png') };
+for (const [kind, file] of Object.entries(output)) env[`MEKI_TEST_EXPORT_${kind.replace('-', '_').toUpperCase()}_PATH`] = file;
 delete env.ELECTRON_RUN_AS_NODE;
 let app, page; const results = [], errors = [], skipped = [];
 function pass(name) { results.push(name); console.log(`PASS ${name}`); }
@@ -64,23 +64,23 @@ async function zipEntries(file) {
   return entries;
 }
 try {
-  app = await electron.launch({ executablePath:process.env.MOYE_EXECUTABLE || require('electron'), args:process.env.MOYE_EXECUTABLE ? [] : [root], env, timeout:30000 });
+  app = await electron.launch({ executablePath:process.env.MEKI_EXECUTABLE || require('electron'), args:process.env.MEKI_EXECUTABLE ? [] : [root], env, timeout:30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(20000); page.on('pageerror', error => errors.push(error.message));
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].show());
   await page.waitForSelector('#shell[data-ready="true"]'); await action('open');
-  await page.waitForSelector('.ProseMirror .moye-diagram svg');
-  const inlineMath = page.locator('.ProseMirror .moye-inline-math').first();
+  await page.waitForSelector('.ProseMirror .meki-diagram svg');
+  const inlineMath = page.locator('.ProseMirror .meki-inline-math').first();
   await inlineMath.click({ button: 'right' }); await page.locator('[data-math-copy="tex"]').click();
-  await page.waitForFunction(async () => (await window.moye.readClipboardText()) === 'E=mc^2');
+  await page.waitForFunction(async () => (await window.meki.readClipboardText()) === 'E=mc^2');
   await inlineMath.click({ button: 'right' }); await page.locator('[data-math-copy="mathml"]').click();
-  await page.waitForFunction(async () => (await window.moye.readClipboardText()).startsWith('<math'));
-  const copied = await page.evaluate(async () => { const xml = new DOMParser().parseFromString(await window.moye.readClipboardText(), 'application/xml'); return { error: !!xml.querySelector('parsererror'), namespace: xml.documentElement.namespaceURI, text: xml.documentElement.textContent }; });
+  await page.waitForFunction(async () => (await window.meki.readClipboardText()).startsWith('<math'));
+  const copied = await page.evaluate(async () => { const xml = new DOMParser().parseFromString(await window.meki.readClipboardText(), 'application/xml'); return { error: !!xml.querySelector('parsererror'), namespace: xml.documentElement.namespaceURI, text: xml.documentElement.textContent }; });
   assert.equal(copied.error, false); assert.equal(copied.namespace, 'http://www.w3.org/1998/Math/MathML'); assert.match(copied.text, /E/);
   await action('math'); await page.locator('#math-input').fill('\\frac{1}{2}'); await page.locator('[data-preview-copy="mathml"]').click();
-  await page.waitForFunction(async () => (await window.moye.readClipboardText()).includes('<mfrac>'));
-  await page.locator('#math-input').fill('\\unknownMoyeCommand'); await page.locator('[data-preview-copy="mathml"]').click();
+  await page.waitForFunction(async () => (await window.meki.readClipboardText()).includes('<mfrac>'));
+  await page.locator('#math-input').fill('\\unknownMekiCommand'); await page.locator('[data-preview-copy="mathml"]').click();
   await page.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('公式存在错误'));
-  assert.ok((await page.evaluate(() => window.moye.readClipboardText())).includes('<mfrac>'));
+  assert.ok((await page.evaluate(() => window.meki.readClipboardText())).includes('<mfrac>'));
   await page.locator('[aria-label="关闭公式窗口"]').click(); assert.equal(await fs.readFile(documentPath, 'utf8'), fixture);
   pass('formula context menu and dialog copy LaTeX or valid MathML without changing document bytes; invalid formulas retain the clipboard');
   await page.locator('#format-menu-button').click(); await page.locator('[data-edit-command="heading-numbering"]').click();
@@ -93,7 +93,7 @@ try {
   await action('export-options'); await page.locator('#pdf-margin').fill('5'); await page.locator('#confirm-export').click();
   assert.equal(await page.locator('#export-dialog').isVisible(),true); assert.match(await page.locator('#export-feedback').innerText(),/12/); await page.locator('#export-dialog [aria-label="关闭导出设置"]').click();
   await exportWith('png'); const png = await bytes(output.png); assert.equal(png.readUInt32BE(16),1920); assert.ok(png.readUInt32BE(20)>800);
-  await action('style'); await page.locator('[data-theme="night"]').click(); await page.waitForSelector('.ProseMirror .moye-diagram[data-diagram-theme="night"]');
+  await action('style'); await page.locator('[data-theme="night"]').click(); await page.waitForSelector('.ProseMirror .meki-diagram[data-diagram-theme="night"]');
   await exportWith('plain-html'); const plain = (await bytes(output['plain-html'])).toString();
   const plainState = await page.evaluate(html => { const doc = new DOMParser().parseFromString(html,'text/html'), sized = [...doc.images].find(image => image.alt === '尺寸集成图'); return { styles:doc.querySelectorAll('style,[style]').length, svg:doc.querySelectorAll('svg').length, images:[...doc.images].map(image=>image.src), text:doc.body.textContent, heading:doc.querySelector('h1')?.textContent, numberedAttributes:doc.querySelectorAll('[data-heading-number]').length, sized: sized && { width:sized.width, height:sized.height, title:sized.title } }; },plain);
   assert.equal(plainState.heading, '1 导出验证'); assert.equal(plainState.numberedAttributes, 0);
@@ -102,10 +102,10 @@ try {
   assert.equal(plainState.styles,0); assert.equal(plainState.svg,0); assert.ok(plainState.images.length>=4); assert.ok(plainState.images.every(src=>src.startsWith('data:image/png;base64,'))); assert.match(plainState.text,/正文与行内公式/);
   const sharp = require('sharp'); for (const image of plainState.images) { const buffer=Buffer.from(image.split(',')[1],'base64'); assert.ok((await sharp(buffer).stats()).channels.some(channel=>channel.stdev>0)); await readableInk(buffer); }
   pass('PNG exports the full document; plain HTML from night mode retains dark formula, chemistry and diagram images without CSS');
-  await page.locator('.diagram-actions').first().click(); await page.locator('[data-diagram-save="svg"]').click(); await bytes(env.MOYE_TEST_DIAGRAM_SVG_PATH);
-  assert.match((await bytes(env.MOYE_TEST_DIAGRAM_SVG_PATH)).toString(),/<svg/);
-  await page.locator('.ProseMirror .moye-diagram svg').first().click({button:'right'}); await page.locator('[data-diagram-save="png"]').click();
-  await page.waitForTimeout(200); assert.ok((await bytes(env.MOYE_TEST_DIAGRAM_PNG_PATH)).readUInt32BE(16)>100);
+  await page.locator('.diagram-actions').first().click(); await page.locator('[data-diagram-save="svg"]').click(); await bytes(env.MEKI_TEST_DIAGRAM_SVG_PATH);
+  assert.match((await bytes(env.MEKI_TEST_DIAGRAM_SVG_PATH)).toString(),/<svg/);
+  await page.locator('.ProseMirror .meki-diagram svg').first().click({button:'right'}); await page.locator('[data-diagram-save="png"]').click();
+  await page.waitForTimeout(200); assert.ok((await bytes(env.MEKI_TEST_DIAGRAM_PNG_PATH)).readUInt32BE(16)>100);
   await page.locator('.diagram-actions').first().click(); await page.locator('[data-diagram-save="clipboard"]').click();
   await page.waitForFunction(()=>document.querySelector('#toast')?.textContent.includes('已复制图表'));
   assert.ok(await app.evaluate(async ({clipboard})=>(await clipboard.read()).some(item=>item.types.includes('image/png'))));
@@ -115,23 +115,23 @@ try {
   assert.match(await page.locator('#source-editor .cm-content').innerText(),/导出过程中新增的文字/); assert.equal(await page.locator('#dirty-dot').isVisible(),true);
   await action('save'); assert.match(await fs.readFile(documentPath,'utf8'),/导出过程中新增的文字/); await page.locator('[data-mode="visual"]').click();
   pass('export uses a snapshot while concurrent typing remains dirty and can be saved');
-  const tooLarge = await page.evaluate(async () => { try { await window.moye.exportFile({kind:'png',suggestedName:'large',html:'<div style="height:30000px">超长</div>',pngWidth:960,pngScale:2}); return ''; } catch(error) { return String(error); } });
+  const tooLarge = await page.evaluate(async () => { try { await window.meki.exportFile({kind:'png',suggestedName:'large',html:'<div style="height:30000px">超长</div>',pngWidth:960,pngScale:2}); return ''; } catch(error) { return String(error); } });
   assert.match(tooLarge,/20,000/); assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().length),1);
   pass('oversized document images fail clearly and close the temporary rendering window');
   const requests = [], server = createServer((request,response)=>{requests.push(request.url);response.end('outside-resource');});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   try {
-    await app.evaluate((_electron,file)=>{process.env.MOYE_TEST_EXPORT_PNG_PATH=file;},path.join(run,'isolated-snapshot.png'));
-    await app.evaluate(({app})=>{global.__moyeUnsafeExecuted=false;app.once('browser-window-created',(_event,win)=>win.webContents.on('console-message',(...args)=>{if(args.some(value=>value==='MOYE_UNSAFE_EXECUTED'||value?.message==='MOYE_UNSAFE_EXECUTED'))global.__moyeUnsafeExecuted=true;}));});
+    await app.evaluate((_electron,file)=>{process.env.MEKI_TEST_EXPORT_PNG_PATH=file;},path.join(run,'isolated-snapshot.png'));
+    await app.evaluate(({app})=>{global.__mekiUnsafeExecuted=false;app.once('browser-window-created',(_event,win)=>win.webContents.on('console-message',(...args)=>{if(args.some(value=>value==='MEKI_UNSAFE_EXECUTED'||value?.message==='MEKI_UNSAFE_EXECUTED'))global.__mekiUnsafeExecuted=true;}));});
     const remote = `http://127.0.0.1:${server.address().port}/resource`;
-    await page.evaluate(async remote=>window.moye.exportFile({kind:'png',suggestedName:'security',html:`<meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline'"><style>body{background-image:url('${remote}')}</style><h1>隔离快照</h1><script>console.log('MOYE_UNSAFE_EXECUTED');fetch('${remote}')</script><iframe src="${remote}"></iframe>`}),remote);
-    assert.equal(await app.evaluate(()=>global.__moyeUnsafeExecuted),false); assert.deepEqual(requests,[]);
-    const blocked = await page.evaluate(async src=>{try {await window.moye.exportFile({kind:'pdf',suggestedName:'blocked',html:`<img src="${src}">`});return '';}catch(error){return String(error);}},pathToFileURL(output.png).href);
+    await page.evaluate(async remote=>window.meki.exportFile({kind:'png',suggestedName:'security',html:`<meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline'"><style>body{background-image:url('${remote}')}</style><h1>隔离快照</h1><script>console.log('MEKI_UNSAFE_EXECUTED');fetch('${remote}')</script><iframe src="${remote}"></iframe>`}),remote);
+    assert.equal(await app.evaluate(()=>global.__mekiUnsafeExecuted),false); assert.deepEqual(requests,[]);
+    const blocked = await page.evaluate(async src=>{try {await window.meki.exportFile({kind:'pdf',suggestedName:'blocked',html:`<img src="${src}">`});return '';}catch(error){return String(error);}},pathToFileURL(output.png).href);
     assert.match(blocked,/无法解码或被阻止/); assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().length),1);
-  } finally { await app.evaluate((_electron,file)=>{process.env.MOYE_TEST_EXPORT_PNG_PATH=file;},output.png); await new Promise(resolve=>server.close(resolve)); }
+  } finally { await app.evaluate((_electron,file)=>{process.env.MEKI_TEST_EXPORT_PNG_PATH=file;},output.png); await new Promise(resolve=>server.close(resolve)); }
   pass('isolated snapshots block scripts, network/CSS/iframe resources and unauthorized local images, and clean up on failure');
-  const tools = await page.evaluate(()=>window.moye.exportTools());
-  if(process.env.MOYE_REQUIRE_PANDOC==='1'||process.env.CI==='true') assert.equal(tools.available,true,`CI requires actual Pandoc conversions: ${tools.message}`);
+  const tools = await page.evaluate(()=>window.meki.exportTools());
+  if(process.env.MEKI_REQUIRE_PANDOC==='1'||process.env.CI==='true') assert.equal(tools.available,true,`CI requires actual Pandoc conversions: ${tools.message}`);
   if (tools.available) {
     await exportWith('docx'); await exportWith('epub');
     for (const kind of ['docx','epub']) {
@@ -155,16 +155,16 @@ try {
     await action('save'); const imported = await fs.readFile(importedPath,'utf8'); assert.match(imported,/导出验证/); assert.ok((imported.match(/data:image\/png;base64,/g)||[]).length>=3); assert.match(imported, /\\frac/); assert.deepEqual(await bytes(output.docx),original);
     const htmlInput = path.join(run,'import.html'), secret = path.join(run,'private.txt'); await fs.writeFile(secret,'PRIVATE_FILE_MUST_NOT_LEAK');
     await fs.writeFile(htmlInput,`<h1>安全导入</h1><p>普通文字</p><math xmlns="http://www.w3.org/1998/Math/MathML"><mi>x</mi></math><script>throw new Error('must-not-run')</script><iframe src="${secret}"></iframe><img src="file://${secret}">`);
-    await app.evaluate((_electron,file)=>{process.env.MOYE_TEST_IMPORT_PATH=file;},htmlInput); await action('import-document');
+    await app.evaluate((_electron,file)=>{process.env.MEKI_TEST_IMPORT_PATH=file;},htmlInput); await action('import-document');
     await page.locator('[data-mode="source"]').click(); const importedHtml = await page.locator('#source-editor .cm-content').innerText(); assert.match(importedHtml,/安全导入/); assert.match(importedHtml,/\$x\$/); assert.ok(!importedHtml.includes('PRIVATE_FILE_MUST_NOT_LEAK')); assert.match(importedHtml,/未导入图片/);
-    await app.evaluate((_electron,file)=>{process.env.MOYE_TEST_EXPORT_HTML_PATH=file;},htmlInput);
-    const blocked = await page.evaluate(async()=>{try {await window.moye.exportFile({kind:'html',html:'<p>overwrite</p>',suggestedName:'import'}); return ''; } catch(error) {return String(error);} }); assert.match(blocked,/原文件/);
+    await app.evaluate((_electron,file)=>{process.env.MEKI_TEST_EXPORT_HTML_PATH=file;},htmlInput);
+    const blocked = await page.evaluate(async()=>{try {await window.meki.exportFile({kind:'html',html:'<p>overwrite</p>',suggestedName:'import'}); return ''; } catch(error) {return String(error);} }); assert.match(blocked,/原文件/);
     pass('DOCX and HTML import into new dirty Markdown, retain images/math and never read or overwrite outside resources');
     const nativeWord = path.join(run,'native-equations.docx');
     await new Promise((resolve,reject)=>{const child=execFile(tools.path,['--sandbox','--from=markdown+tex_math_dollars','--to=docx',`--output=${nativeWord}`],{windowsHide:true,timeout:30000},error=>error?reject(error):resolve());child.stdin.end('# Word 原生公式\n\n行内 $x^2$。\n\n$$\\frac{1}{2}$$\n');});
-    await app.evaluate((_electron,file)=>{process.env.MOYE_TEST_IMPORT_PATH=file;},nativeWord); await action('import-document');
+    await app.evaluate((_electron,file)=>{process.env.MEKI_TEST_IMPORT_PATH=file;},nativeWord); await action('import-document');
     const nativeSource=await page.locator('#source-editor .cm-content').innerText(); assert.match(nativeSource,/\$x\^\{?2\}?\$/); assert.match(nativeSource,/\\frac\{1\}\{2\}/);
-    await page.locator('[data-mode="visual"]').click(); await page.waitForFunction(()=>document.querySelectorAll('.ProseMirror .moye-math mjx-container[jax="SVG"]').length>=2);
+    await page.locator('[data-mode="visual"]').click(); await page.waitForFunction(()=>document.querySelectorAll('.ProseMirror .meki-math mjx-container[jax="SVG"]').length>=2);
     pass('native Word OMML equations import as editable TeX and render through the same offline math engine');
   } else { skipped.push(`Pandoc conversion: ${tools.message}`); console.log(`SKIP ${skipped.at(-1)}`); await action('export-options'); await page.locator('#export-kind').selectOption('docx'); await page.locator('#confirm-export').click(); assert.equal(await page.locator('#export-dialog').isVisible(),true); }
   assert.deepEqual(errors,[]); pass('no renderer exceptions in the export/import workflow');

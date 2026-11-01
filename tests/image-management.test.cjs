@@ -7,8 +7,8 @@ const { AttachmentStore } = require('../electron/attachment-store.cjs');
 const { FileStore, digest, validateSettings } = require('../electron/file-store.cjs');
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 async function fixture(t, options = {}) {
-  const parent = await fs.realpath(os.tmpdir()), root = await fs.realpath(await fs.mkdtemp(path.join(parent, 'moye-image-management-')));
-  t.after(async () => { assert.equal(path.dirname(root), parent); assert.ok(path.basename(root).startsWith('moye-image-management-')); await fs.rm(root, { recursive: true, force: true }); });
+  const parent = await fs.realpath(os.tmpdir()), root = await fs.realpath(await fs.mkdtemp(path.join(parent, 'meki-image-management-')));
+  t.after(async () => { assert.equal(path.dirname(root), parent); assert.ok(path.basename(root).startsWith('meki-image-management-')); await fs.rm(root, { recursive: true, force: true }); });
   const folder = path.join(root, 'notes'); await fs.mkdir(folder); const documentPath = path.join(folder, 'Draft.md'), raw = Buffer.from('\uFEFF# Draft\r\n');
   await fs.writeFile(documentPath, raw); await fs.writeFile(path.join(folder, 'source.png'), png);
   const settings = () => ({ imageDirectoryBase: 'workspace', imageDirectory: 'media/${filename}' });

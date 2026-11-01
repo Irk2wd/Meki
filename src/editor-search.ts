@@ -12,13 +12,13 @@ import { replacementText, type SearchMatch, type SearchOptions, type SearchSegme
 
 interface Target extends SearchSegment { kind: 'text' | 'attribute' | 'source'; pos: number; size?: number; attribute?: string; code?: boolean }
 export interface FindStatus { index: number; total: number; error: string | null; truncated: boolean; pending: boolean }
-const searchKey = new PluginKey('moye-search');
+const searchKey = new PluginKey('meki-search');
 const setCodeMarks = StateEffect.define<Array<{ from: number; to: number; active: boolean }>>();
 const codeMarks = StateField.define({
   create: () => CodeDecoration.none,
   update(value, transaction) {
     value = value.map(transaction.changes);
-    for (const effect of transaction.effects) if (effect.is(setCodeMarks)) value = CodeDecoration.set(effect.value.filter(match => match.to > match.from).map(match => CodeDecoration.mark({ class: match.active ? 'moye-search-hit moye-search-current' : 'moye-search-hit' }).range(match.from, match.to)), true);
+    for (const effect of transaction.effects) if (effect.is(setCodeMarks)) value = CodeDecoration.set(effect.value.filter(match => match.to > match.from).map(match => CodeDecoration.mark({ class: match.active ? 'meki-search-hit meki-search-current' : 'meki-search-hit' }).range(match.from, match.to)), true);
     return value;
   }, provide: field => CodeView.decorations.from(field),
 });
@@ -28,7 +28,7 @@ export function visualSearchTargets(doc: ProseNode): Target[] {
   const targets: Target[] = [];
   const add = (target: Omit<Target, 'id'>) => { targets.push({ ...target, id: targets.length }); };
   const attribute = (node: ProseNode, pos: number) => {
-    if (['math_inline', 'html', 'moye_raw'].includes(node.type.name)) add({ kind: 'attribute', pos, size: node.nodeSize, attribute: 'value', text: String(node.attrs.value || '') });
+    if (['math_inline', 'html', 'meki_raw'].includes(node.type.name)) add({ kind: 'attribute', pos, size: node.nodeSize, attribute: 'value', text: String(node.attrs.value || '') });
   };
   doc.descendants((node, pos) => {
     if (!node.isTextblock) { attribute(node, pos); return; }
@@ -79,7 +79,7 @@ export class EditorSearch {
     props: { decorations: state => {
       if (this.snapshot !== state.doc || this.mode() !== 'visual') return DecorationSet.empty;
       const marks = this.matches.flatMap((match, index) => {
-        const target = this.targets[match.segment], attrs = { class: index === this.index ? 'moye-search-hit moye-search-current' : 'moye-search-hit' };
+        const target = this.targets[match.segment], attrs = { class: index === this.index ? 'meki-search-hit meki-search-current' : 'meki-search-hit' };
         if (target.code) return [];
         if (target.kind === 'attribute') return [Decoration.node(target.pos, target.pos + target.size!, attrs)];
         return match.from === match.to ? [] : [Decoration.inline(target.pos + match.from, target.pos + match.to, attrs)];
@@ -157,7 +157,7 @@ export class EditorSearch {
         if (!this.active || this.mode() !== 'visual' || this.matches[this.index] !== match || this.snapshot !== view.state.doc || !view.dom.isConnected) return;
         if (target.code && this.revealCode(match)) return;
         const scroll = view.dom.closest<HTMLElement>('.document-scroll'); if (!scroll) return;
-        const hit = view.dom.querySelector<HTMLElement>('.moye-search-current');
+        const hit = view.dom.querySelector<HTMLElement>('.meki-search-current');
         const block = target.code ? view.nodeDOM(target.pos - 1) : null;
         const blockTop = block instanceof HTMLElement ? block.getBoundingClientRect().top : null;
         const rect = hit?.getBoundingClientRect() || (blockTop === null ? view.coordsAtPos(selection.from, 1) : { top: blockTop, bottom: blockTop + 1 });

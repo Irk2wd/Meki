@@ -17,7 +17,7 @@ export class EditorDiagrams {
   updateSettings(settings: { theme?: string }) { this.theme = diagramTheme(settings.theme); this.schedule(); }
   private schedule() { if (!this.timer) this.timer = window.setTimeout(() => { this.timer = 0; void this.render(); }, 80); }
   async flush() { if (this.timer) clearTimeout(this.timer); this.timer = 0; await this.render(); }
-  blockPreview(_source: string) { const dom = document.createElement('div'); dom.className = 'moye-block-diagram'; dom.textContent = t("图表渲染中…"); this.schedule(); return dom; }
+  blockPreview(_source: string) { const dom = document.createElement('div'); dom.className = 'meki-block-diagram'; dom.textContent = t("图表渲染中…"); this.schedule(); return dom; }
   private entries() {
     const entries: Array<{ pos: number; source: string }> = [];
     this.view?.state.doc.descendants((node, pos) => { if (node.type.name === 'code_block' && String(node.attrs.language).toLowerCase() === 'mermaid') entries.push({ pos, source: node.textContent }); });
@@ -47,11 +47,11 @@ export class EditorDiagrams {
       const node = view.nodeDOM(pos), result = this.results[index];
       if (!(node instanceof HTMLElement) || !result) return;
       active.add(node);
-      let dom = node.querySelector<HTMLElement>('.moye-block-diagram');
-      if (!dom && node.querySelector('.milkdown-code-block-placeholder')) { dom = document.createElement('div'); dom.className = 'moye-block-diagram moye-lazy-diagram'; node.append(dom); }
+      let dom = node.querySelector<HTMLElement>('.meki-block-diagram');
+      if (!dom && node.querySelector('.milkdown-code-block-placeholder')) { dom = document.createElement('div'); dom.className = 'meki-block-diagram meki-lazy-diagram'; node.append(dom); }
       if (dom && dom.dataset.diagramHtml !== result.html) { dom.dataset.diagramHtml = result.html; dom.innerHTML = result.html; }
     });
-    view.dom.querySelectorAll<HTMLElement>('.moye-lazy-diagram').forEach(dom => { if (!active.has(dom.parentElement!)) dom.remove(); });
+    view.dom.querySelectorAll<HTMLElement>('.meki-lazy-diagram').forEach(dom => { if (!active.has(dom.parentElement!)) dom.remove(); });
   }
   plugin = $prose(() => new Plugin({ view: view => {
     this.view = view; this.signature = ''; this.results = []; this.generation++;

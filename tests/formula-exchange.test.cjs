@@ -6,9 +6,9 @@ const expression = tex => ({ tex, display: true });
 const simple = '<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><msup><mi>x</mi><mn>2</mn></msup></math>';
 const mathNode = { t: 'Math', c: [{ t: 'DisplayMath' }, 'x^{2}'] };
 const image = () => ({ t: 'Image', c: [['', [], []], [{ t: 'Str', c: 'fallback' }], ['data:image/png;base64,original', '']] });
-const wrapper = mathml => ({ t: 'Span', c: [['', [], [['moye-word-formula', '1'], ...(mathml ? [['moye-word-math', mathml]] : [])]], [image()]] });
+const wrapper = mathml => ({ t: 'Span', c: [['', [], [['meki-word-formula', '1'], ...(mathml ? [['meki-word-math', mathml]] : [])]], [image()]] });
 const document = (...nodes) => ({ 'pandoc-api-version': [1, 23, 1, 2], meta: {}, blocks: [{ t: 'Para', c: nodes }] });
-const result = (...nodes) => Buffer.from(JSON.stringify({ blocks: nodes.map((node, i) => ({ t: 'Div', c: [[`moye-equation-${i}`, [], []], [{ t: 'Plain', c: [node] }]] })) }));
+const result = (...nodes) => Buffer.from(JSON.stringify({ blocks: nodes.map((node, i) => ({ t: 'Div', c: [[`meki-equation-${i}`, [], []], [{ t: 'Plain', c: [node] }]] })) }));
 
 test('MathML exchange preserves fractions, integrals, matrices and extended glyphs as structured offline math', async () => {
   const { renderMathDocument } = await engine;

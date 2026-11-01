@@ -73,7 +73,7 @@ function sanitizeSvg(markup: string, theme: DiagramTheme) {
 
 function errorResult(source: string, message: string): RenderedDiagram {
   const error = message.slice(0, 1200);
-  return { error, html: `<div class="moye-diagram moye-diagram-error" data-diagram-state="error" role="status"><strong>${ht("图表未能渲染")}</strong><div>${escapeDiagramText(error)}</div><pre>${escapeDiagramText(source)}</pre></div>` };
+  return { error, html: `<div class="meki-diagram meki-diagram-error" data-diagram-state="error" role="status"><strong>${ht("图表未能渲染")}</strong><div>${escapeDiagramText(error)}</div><pre>${escapeDiagramText(source)}</pre></div>` };
 }
 
 /** One local Mermaid instance, serialized initialization/rendering, no callbacks or remote icon packs. */
@@ -86,9 +86,9 @@ export function renderDiagram(source: string, options: DiagramOptions): Promise<
   const job = queue.then(async () => {
     const palette = diagramPalettes[theme];
     const branchColors = Object.fromEntries(Array.from({ length: 12 }, (_, index) => [[`cScale${index}`, diagramBranchColors[theme][index % 3]], [`cScaleLabel${index}`, palette.foreground], [`cScaleInv${index}`, palette.border]]).flat());
-    const id = `moye-diagram-${++serial}-${options.id.replace(/[^a-z0-9_-]/gi, '-')}`;
+    const id = `meki-diagram-${++serial}-${options.id.replace(/[^a-z0-9_-]/gi, '-')}`;
     const host = document.createElement('div');
-    host.className = 'moye-diagram-measure'; host.setAttribute('aria-hidden', 'true');
+    host.className = 'meki-diagram-measure'; host.setAttribute('aria-hidden', 'true');
     Object.assign(host.style, { position: 'fixed', left: '-20000px', top: '0', width: '1200px', visibility: 'hidden', pointerEvents: 'none' });
     document.body.append(host);
     try {
@@ -98,7 +98,7 @@ export function renderDiagram(source: string, options: DiagramOptions): Promise<
       });
       const rendered = await mermaid.render(id, source, host);
       const svg = sanitizeSvg(rendered.svg, theme);
-      return { html: `<div class="moye-diagram" data-diagram-state="ready" data-diagram-theme="${theme}">${svg}</div>` };
+      return { html: `<div class="meki-diagram" data-diagram-state="ready" data-diagram-theme="${theme}">${svg}</div>` };
     } catch (error) { return errorResult(source, error instanceof Error ? error.message : String(error)); }
     finally { host.remove(); }
   });

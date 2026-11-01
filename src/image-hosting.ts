@@ -1,5 +1,5 @@
 import { t, ht } from '../electron/i18n.mjs';
-import type { DocumentFile, ImageInput, ImageUploadPlan, Settings } from '../shared/moye';
+import type { DocumentFile, ImageInput, ImageUploadPlan, Settings } from '../shared/meki';
 import type { WritingEditor } from './editor';
 import { scanAttachmentImages, attachmentEdits } from './attachment-markdown';
 import './image-hosting.css';
@@ -83,7 +83,7 @@ export class ImageHostingDialog {
       await this.hooks.saveSettings({ picgoPort: Number(this.settingsDialog.querySelector<HTMLInputElement>('#picgo-port')!.value), imageAutoUpload: this.settingsDialog.querySelector<HTMLInputElement>('#image-auto-upload')!.checked,
         imageDirectoryBase: this.settingsDialog.querySelector<HTMLSelectElement>('#image-directory-base')!.value as 'document' | 'workspace', imageDirectory: this.settingsDialog.querySelector<HTMLInputElement>('#image-directory')!.value });
       feedback.textContent = check ? t("正在检测 PicGo…") : t("设置已保存。");
-      if (check) feedback.textContent = await window.moye.checkImageHost();
+      if (check) feedback.textContent = await window.meki.checkImageHost();
       return true;
     } catch (error) { feedback.textContent = message(error); return false; }
     finally { this.checking = false; buttons.forEach(button => { button.disabled = false; }); }
@@ -97,14 +97,14 @@ export class ImageHostingDialog {
     this.canceled = true;
     this.uploadDialog.querySelector('#image-upload-status')!.textContent = t("正在取消等待…");
     this.insertDialog.querySelector('#image-insert-status')!.textContent = t("正在取消等待…");
-    try { await window.moye.cancelImageUpload(); } catch (error) { this.hooks.notify(message(error), true); }
+    try { await window.meki.cancelImageUpload(); } catch (error) { this.hooks.notify(message(error), true); }
   }
   async uploadNew(images: ImageInput[]) {
     this.canceled = false; this.uploading = true;
     this.insertDialog.querySelector('#image-insert-status')!.textContent = t("等待 PicGo 上传 {0} 张图片…", images.length);
     this.insertDialog.showModal();
     try {
-      const urls = await window.moye.uploadImages(images);
+      const urls = await window.meki.uploadImages(images);
       if (this.canceled) throw new Error(t("已取消等待。"));
       return urls;
     } finally { this.uploading = false; this.insertDialog.close(); }
@@ -136,13 +136,13 @@ export class ImageHostingDialog {
         const unchanged = () => { editor.flush(); const current = this.hooks.document();
           if (tab !== this.hooks.activeId() || current.path !== snapshot.path || current.revision !== snapshot.revision || current.content !== snapshot.content) throw new Error(t("文稿在上传期间已变化，未替换图片地址。")); };
         try {
-          const plan = await window.moye.prepareImageUpload({ documentPath: snapshot.path, revision: snapshot.revision, sources: [...new Set(images.map(image => image.source))] });
+          const plan = await window.meki.prepareImageUpload({ documentPath: snapshot.path, revision: snapshot.revision, sources: [...new Set(images.map(image => image.source))] });
           if (!await this.confirm(plan)) return;
           unchanged(); this.uploading = true;
           this.uploadDialog.querySelector<HTMLButtonElement>('[data-upload="confirm"]')!.hidden = true;
           this.uploadDialog.querySelector<HTMLElement>('#image-upload-progress')!.hidden = false;
           this.uploadDialog.querySelector('#image-upload-status')!.textContent = t("等待 PicGo 上传…");
-          const mapping = await window.moye.uploadPreparedImages(plan.id);
+          const mapping = await window.meki.uploadPreparedImages(plan.id);
           unchanged(); if (this.canceled) throw new Error(t("已取消替换图片地址，文稿保持原样。"));
           const edits = attachmentEdits(snapshot.content, images, mapping.map(item => ({ source: item.source, relativePath: item.url })));
           if (edits.length) { editor.replaceMarkdownRanges(snapshot.content, edits); this.hooks.pause(); await this.hooks.persist(); }
@@ -150,7 +150,7 @@ export class ImageHostingDialog {
         } finally {
           this.uploading = false;
           if (this.uploadDialog.open) this.uploadDialog.close();
-          await window.moye.abandonImageUpload();
+          await window.meki.abandonImageUpload();
         }
       });
     } catch (error) { this.hooks.notify(message(error), true); }

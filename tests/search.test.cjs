@@ -60,7 +60,7 @@ test('selection word count handles CJK characters, words and punctuation', async
 });
 
 test('writing preferences default off, validate types and survive older profiles', async t => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'moye-writing-settings-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'meki-writing-settings-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   await fs.writeFile(path.join(root, 'state.json'), JSON.stringify({ settings: { theme: 'linen', fontSize: 20 } }));
   const store = new FileStore(root); await store.init();

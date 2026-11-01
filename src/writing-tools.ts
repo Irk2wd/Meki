@@ -1,5 +1,5 @@
 import { ht, t, getLocale } from '../electron/i18n.mjs';
-import type { Settings } from '../shared/moye';
+import type { Settings } from '../shared/meki';
 import type { WritingEditor } from './editor';
 import type { FindStatus } from './editor-search';
 import { installTypingSettings } from './typing-settings';

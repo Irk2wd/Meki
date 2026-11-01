@@ -1,5 +1,5 @@
 import { ht, t } from '../electron/i18n.mjs';
-import type { DocumentFile, RecentFile, RecentFolder, RecentFolderChange, SearchMatch, Workspace, WorkspaceEntry, WorkspaceRequest } from '../shared/moye';
+import type { DocumentFile, RecentFile, RecentFolder, RecentFolderChange, SearchMatch, Workspace, WorkspaceEntry, WorkspaceRequest } from '../shared/meki';
 import { icon } from './icons';
 import { navigationRows, retainNavigationPath, navigationKey, type NavigationRow } from './workspace-navigation';
 import './workspace.css';
@@ -110,7 +110,7 @@ export class WorkspaceUI {
   render(workspace: Workspace | null, currentPath: string | null, recent: RecentFile[]) {
     if (workspace?.root !== this.workspace?.root) {
       this.collapsed.clear(); this.selection = ''; this.visibleRows = []; this.sort = 'name';
-      try { const saved = JSON.parse(localStorage.getItem(`moye.workspace.${workspace?.root}`) || '{}'); if (Array.isArray(saved.collapsed)) this.collapsed = new Set(saved.collapsed.filter((v: unknown) => typeof v === 'string').slice(0,2000)); if (['name', 'name-desc', 'modified'].includes(saved.sort)) this.sort = saved.sort; } catch { /* View preferences are optional. */ }
+      try { const saved = JSON.parse(localStorage.getItem(`meki.workspace.${workspace?.root}`) || '{}'); if (Array.isArray(saved.collapsed)) this.collapsed = new Set(saved.collapsed.filter((v: unknown) => typeof v === 'string').slice(0,2000)); if (['name', 'name-desc', 'modified'].includes(saved.sort)) this.sort = saved.sort; } catch { /* View preferences are optional. */ }
     }
     this.workspace = workspace; this.recent = recent;
     if (currentPath !== this.currentPath && currentPath) {
@@ -124,7 +124,7 @@ export class WorkspaceUI {
     this.renderTree();
   }
 
-  private remember() { if (this.workspace) try { localStorage.setItem(`moye.workspace.${this.workspace.root}`, JSON.stringify({ collapsed: [...this.collapsed], sort: this.sort })); } catch { /* Quota/full disk does not affect documents. */ } }
+  private remember() { if (this.workspace) try { localStorage.setItem(`meki.workspace.${this.workspace.root}`, JSON.stringify({ collapsed: [...this.collapsed], sort: this.sort })); } catch { /* Quota/full disk does not affect documents. */ } }
   remap(map: (path: string) => string | null | undefined) {
     const selected = map(this.selection); if (selected) this.selection = selected;
     this.collapsed = new Set([...this.collapsed].flatMap(path => { const next = map(path); return next === null ? [] : [next || path]; }));
@@ -206,7 +206,7 @@ export class WorkspaceUI {
   private async menuAction(action: string) {
     if (action === 'open') return this.hooks.open({path:this.contextPath});
     if (action === 'choose') return this.hooks.choose();
-    if (action === 'reveal' || action === 'copy-path') { await window.moye.workspacePathAction(action,this.contextPath); if(action==='copy-path') this.hooks.notify(t("已复制完整路径")); return; }
+    if (action === 'reveal' || action === 'copy-path') { await window.meki.workspacePathAction(action,this.contextPath); if(action==='copy-path') this.hooks.notify(t("已复制完整路径")); return; }
     if (action === 'trash') return this.hooks.operation({action,path:this.contextPath});
     this.showOperation({action:action as WorkspaceRequest['action'],path:this.contextPath});
   }
@@ -232,7 +232,7 @@ export class WorkspaceUI {
   async showFolders() {
     this.folderMessage(t("正在读取最近位置…"));
     if (!this.folderDialog.open) this.folderDialog.showModal();
-    try { this.folders = await window.moye.listRecentFolders(); this.renderFolders(); this.folderMessage(t("最多保留 20 个位置，可固定 10 个。清除记录不会删除文件。")); }
+    try { this.folders = await window.meki.listRecentFolders(); this.renderFolders(); this.folderMessage(t("最多保留 20 个位置，可固定 10 个。清除记录不会删除文件。")); }
     catch (error) { this.folderMessage(String(error)); }
   }
   private folderMessage(message: string) { this.folderDialog.querySelector('#recent-folder-status')!.textContent = message.replace(/^Error: (Error invoking remote method '[^']+': Error: )?/, ''); }
@@ -252,7 +252,7 @@ export class WorkspaceUI {
       if (action === 'open' && path) { await this.hooks.openFolder(path); this.folderDialog.close(); }
       else {
         const oldIndex = this.folders.findIndex(folder => folder.path === path);
-        this.folders = await window.moye.changeRecentFolders({action:action as RecentFolderChange['action'], ...(path ? {path} : {})});
+        this.folders = await window.meki.changeRecentFolders({action:action as RecentFolderChange['action'], ...(path ? {path} : {})});
         this.renderFolders(); this.folderMessage(action === 'clear' ? t("已清除未固定记录，文件与当前工作区保持不变。") : action === 'remove' ? t("已从记录中移除，文件保持不变。") : t("已更新固定位置。"));
         const rows = [...this.folderDialog.querySelectorAll<HTMLElement>('[data-folder-path]')];
         const row = rows.find(row => row.dataset.folderPath === path) || rows[Math.max(0, Math.min(rows.length - 1, oldIndex))];
@@ -292,7 +292,7 @@ export class WorkspaceUI {
       status.textContent=t("正在搜索…");
       this.locations=[]; this.picker.querySelector('#workspace-results')!.innerHTML='';
       try {
-        const result=await window.moye.searchWorkspace(query,this.picker.querySelector<HTMLInputElement>('#workspace-case')!.checked);
+        const result=await window.meki.searchWorkspace(query,this.picker.querySelector<HTMLInputElement>('#workspace-case')!.checked);
         if(request!==this.request || !this.picker.open)return;
         this.locations=result.matches.map(match=>({path:match.path,line:match.line,column:match.column}));
         status.textContent=t("{0} 处匹配 · 已查 {1} 份文稿{2}{3}", result.matches.length, result.scanned, result.skipped?t(" · 跳过 {0} 份不可读或过大文件", result.skipped):'', result.truncated?t(" · 已达到扫描或结果上限"):'');

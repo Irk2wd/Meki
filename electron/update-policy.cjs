@@ -2,8 +2,8 @@
 const { t } = require('./i18n.mjs');
 
 const crypto = require('node:crypto');
-const { APP_ID, REPOSITORY, LEGACY_REPOSITORY, UPDATE_PREFIX } = require('./app-identity.cjs');
-const BOOTSTRAP_VERSION = 1;
+const { APP_ID, REPOSITORY, UPDATE_PREFIX, installerName } = require('./app-identity.cjs');
+const BOOTSTRAP_VERSION = 2;
 const MAX_PAYLOAD = 512 * 1024 * 1024;
 const MAX_DOWNLOAD = 2 * 1024 * 1024 * 1024;
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -22,7 +22,7 @@ function names(value, platform) {
   if (!['win32', 'darwin'].includes(platform)) throw new Error(t("当前平台不支持应用内更新。"));
   const target = platform === 'win32' ? 'windows' : 'macos';
   return { manifest: `${UPDATE_PREFIX}-update-${target}.json`, payload: `${UPDATE_PREFIX}-${value}-${target}-app.asar.gz`,
-    installer: platform === 'win32' ? `${UPDATE_PREFIX}-${value}-Setup-x64.exe` : `${UPDATE_PREFIX}-${value}-macOS-universal.dmg` };
+    installer: installerName(value, platform) };
 }
 function fileInfo(value, name, maximum) {
   if (!value || value.name !== name || !hashPattern.test(value.sha256) || !Number.isSafeInteger(value.size) || value.size < 1 || value.size > maximum) throw new Error(t("更新文件信息无效。"));
@@ -48,7 +48,7 @@ function compatible(manifest, { electron, arch, bootstrap = BOOTSTRAP_VERSION })
     (manifest.platform === 'darwin' ? ['x64', 'arm64'].includes(arch) : arch === 'x64');
 }
 function releaseInfo(release, repository = REPOSITORY) {
-  if (![REPOSITORY, LEGACY_REPOSITORY].includes(repository)) throw new Error(t("更新仓库无效。"));
+  if (repository !== REPOSITORY) throw new Error(t("更新仓库无效。"));
   if (!release || release.draft || release.prerelease || !release.published_at || !Array.isArray(release.assets) || release.assets.length > 100) throw new Error(t("未找到可用的正式更新。"));
   const value = String(release.tag_name || '').replace(/^v/, ''); version(value);
   return { version: value, notes: String(release.body || '').slice(0, 16000), url: `https://github.com/${repository}/releases/tag/v${value}` };
@@ -58,4 +58,4 @@ function asset(release, name) {
   if (matches.length !== 1 || !Number.isSafeInteger(matches[0].id) || matches[0].id <= 0 || !Number.isSafeInteger(matches[0].size) || matches[0].size <= 0) throw new Error(t("此版本缺少应用内更新文件，请等待发布者补齐。"));
   return matches[0];
 }
-module.exports = { REPOSITORY, LEGACY_REPOSITORY, BOOTSTRAP_VERSION, MAX_PAYLOAD, MAX_DOWNLOAD, digest, hashPattern, version, newer, names, verifyManifest, compatible, releaseInfo, asset };
+module.exports = { REPOSITORY, BOOTSTRAP_VERSION, MAX_PAYLOAD, MAX_DOWNLOAD, digest, hashPattern, version, newer, names, verifyManifest, compatible, releaseInfo, asset };

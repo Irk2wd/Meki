@@ -1,7 +1,7 @@
 import { t } from '../electron/i18n.mjs';
 import postcss, { type Container } from 'postcss';
 import selectorParser from 'postcss-selector-parser';
-import type { Settings } from '../shared/moye';
+import type { Settings } from '../shared/meki';
 import { codeAppearance, type CodeOptions } from './code-options.ts';
 
 const properties = new Set((
@@ -16,7 +16,7 @@ const properties = new Set((
 ).split(/\s+/));
 
 /** Only typography rules inside document content are accepted; CSS cannot load resources or alter app controls. */
-export function normalizeCustomCss(css: string, scope = '.moye-document'): string {
+export function normalizeCustomCss(css: string, scope = '.meki-document'): string {
   if (new TextEncoder().encode(css).length > 256 * 1024) throw new Error(t("自定义 CSS 不能超过 256 KiB。"));
   if (!/^\.[a-z][a-z0-9-]*$/i.test(scope)) throw new Error('Invalid document CSS scope.');
   if (!css.trim()) return '';
@@ -35,7 +35,7 @@ export function normalizeCustomCss(css: string, scope = '.moye-document'): strin
         selectors.walkTags(tag => { if (['html', 'body'].includes(tag.value.toLowerCase())) tag.replaceWith(selectorParser.className({ value: scopeName })); });
         // Earlier saved custom CSS can use this root alias; it is never an application DOM ID.
         selectors.walkIds(id => { if (id.value === 'write') id.replaceWith(selectorParser.className({ value: scopeName })); });
-        selectors.walkClasses(name => { if (['ProseMirror', 'moye-document', 'meki-document'].includes(name.value)) name.value = scopeName; });
+        selectors.walkClasses(name => { if (['ProseMirror', 'meki-document'].includes(name.value)) name.value = scopeName; });
         selectors.walkPseudos(pseudo => { if (pseudo.value === ':root') pseudo.replaceWith(selectorParser.className({ value: scopeName })); });
         const safeSelectors: string[] = [];
         selectors.each(selector => {
@@ -75,7 +75,7 @@ type Appearance = Pick<Settings, 'theme' | 'font' | 'fontSize' | 'lineWidth' | '
 export function writingAppearance(input: Partial<Appearance> = {}, options: { scope?: string; exporting?: boolean } = {}): string {
   const settings = { ...appearanceDefaults, ...input };
   const writingSize = Math.min(options.exporting ? 32 : 24, Math.max(options.exporting ? 12 : 14, settings.fontSize));
-  const rootScope = options.scope || '.moye-document';
+  const rootScope = options.scope || '.meki-document';
   const scope = `${rootScope}${rootScope}`;
   const colors = settings.theme === 'night' ? ['#202521', '#d9dfd5', '#a6b09e', '#aac49c', '#343d33', '#1a1f1c']
     : settings.theme === 'linen' ? ['#faf6ee', '#433f34', '#827760', '#816a40', '#e7e0d2', '#f1ecdf']
@@ -105,7 +105,7 @@ ${scope} pre code{display:block;padding:0;background:none;color:var(--text);font
 ${scope} table{border:1px solid var(--border);border-collapse:collapse;width:100%;font-family:var(--ui);font-size:.84em;margin:1.5em 0;}
 ${scope} :is(td,th){border:1px solid var(--border);padding:10px 14px;text-align:left;line-height:1.7;}${scope} :is(td,th) p{margin:0;line-height:1.7;}${scope} th{background:var(--side);font-weight:600;}
 ${scope} img{max-width:100%;height:auto;border-radius:5px;}${scope} hr{border:0;border-top:1px solid var(--border);margin:2.2em 0;padding:0;height:0;background:none;}
-${scope} .moye-inline-math{display:inline-block;vertical-align:bottom;padding:0 4px;color:var(--accent);}
+${scope} .meki-inline-math{display:inline-block;vertical-align:bottom;padding:0 4px;color:var(--accent);}
 ${custom}
 ${codeAppearance(input, scope)}
 @media print{${scope}{print-color-adjust:exact;-webkit-print-color-adjust:exact;}${scope} :is(pre,blockquote,tr){break-inside:avoid;}${scope} :is(h1,h2,h3,h4,h5,h6){break-after:avoid;}}

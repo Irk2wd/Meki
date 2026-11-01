@@ -7,8 +7,8 @@ test('Mermaid Markdown slots preserve source and order, leaving other code and m
   const rendered = renderMarkdown(`# 图表\n\n\`\`\`mermaid\n${sources[0]}\n\`\`\`\n\n> \`\`\`Mermaid\n> ${sources[1].replace(/\n/g, '\n> ')}\n> \`\`\`\n\n\`\`\`js\nconst mermaid = '<img>';\n\`\`\`\n\n$x=1$`);
   assert.deepEqual(rendered.diagrams, sources);
   assert.deepEqual(rendered.expressions, [{ tex: 'x=1', display: false }]);
-  assert.match(rendered.html, /data-moye-diagram="0"/);
-  assert.match(rendered.html, /data-moye-diagram="1"/);
+  assert.match(rendered.html, /data-meki-diagram="0"/);
+  assert.match(rendered.html, /data-meki-diagram="1"/);
   assert.match(rendered.html, /class="language-js"/);
   assert.ok(!rendered.html.includes('<img>'));
 });

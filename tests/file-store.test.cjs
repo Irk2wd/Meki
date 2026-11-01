@@ -12,7 +12,7 @@ const {
 } = require('../electron/file-store.cjs');
 
 async function fixture(t) {
-  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'moye-store-test-')));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'meki-store-test-')));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const userData = path.join(root, 'user-data');
   const documents = path.join(root, 'documents');

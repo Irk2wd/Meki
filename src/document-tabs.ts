@@ -1,5 +1,5 @@
 import { t, ht, getLocale } from '../electron/i18n.mjs';
-import type { DocumentFile, DocumentSession, DocumentSnapshot, DocumentStatus, RestoredSession, SavePause, SessionDocument, Settings } from '../shared/moye';
+import type { DocumentFile, DocumentSession, DocumentSnapshot, DocumentStatus, RestoredSession, SavePause, SessionDocument, Settings } from '../shared/meki';
 import type { WritingEditor, EditorSnapshot } from './editor';
 import { ClosedDocuments, type ClosedDocument } from '../electron/closed-documents.mjs';
 import './document-tabs.css';
@@ -145,7 +145,7 @@ export class DocumentTabs {
   }
   async persist() {
     this.hooks.panes().flush(); const session = this.snapshot();
-    await window.moye.saveSession(session);
+    await window.meki.saveSession(session);
     // An older write may finish while a close is awaiting its own commit.
     // Keep the views owned by either that committed snapshot or the current UI.
     await this.hooks.panes().prune(new Set([...session.documents.map(doc => doc.id), ...this.tabs.map(tab => tab.id)]));
@@ -155,7 +155,7 @@ export class DocumentTabs {
     if (tabId) this.activate(tabId);
     this.hooks.editor().flush(); await this.persist();
     const tab = this.active;
-    if (!await window.moye.detachDocument(tab.id)) return;
+    if (!await window.meki.detachDocument(tab.id)) return;
     const index = this.tabs.indexOf(tab); this.tabs.splice(index, 1); this.activeId = null;
     if (!this.tabs.length) { const tab = this.create(blank()); await this.hooks.panes().prepare(tab); this.tabs.push(tab); }
     this.show(this.tabs[Math.min(index, this.tabs.length - 1)]); await this.persist();
@@ -224,10 +224,10 @@ export class DocumentTabs {
     const snapshot = { ...tab.document };
     let result: DocumentFile | null;
     if (automatic) {
-      const outcome = await window.moye.autoSaveDocument({ ...snapshot, tabId: tab.id });
+      const outcome = await window.meki.autoSaveDocument({ ...snapshot, tabId: tab.id });
       if (outcome.status === 'paused') { tab.paused = 'external'; this.render(); this.hooks.notify(`${tab.document.name}：${outcome.reason}`, true); await this.persist(); return false; }
       result = outcome.document;
-    } else result = await window.moye.saveDocument({ ...snapshot, saveAs, tabId: tab.id, otherPaths: this.tabs.filter(other => other !== tab && other.document.path).map(other => other.document.path!) });
+    } else result = await window.meki.saveDocument({ ...snapshot, saveAs, tabId: tab.id, otherPaths: this.tabs.filter(other => other !== tab && other.document.path).map(other => other.document.path!) });
     if (!result) return false;
     // Only the bytes submitted to this save become the baseline. Later keystrokes stay dirty.
     this.hooks.editor().flush();
@@ -250,7 +250,7 @@ export class DocumentTabs {
     this.hooks.editor().flush();
     const input = { ...tab.document, tabId: tab.id, kind, label };
     await this.persist();
-    const result = await window.moye.createSnapshot(input);
+    const result = await window.meki.createSnapshot(input);
     tab.snapshotContent = input.content; tab.snapshotAt = Date.now();
     return result;
   }
@@ -275,7 +275,7 @@ export class DocumentTabs {
   }
   async mayClose(tab = this.active) {
     this.hooks.editor().flush(); if (!this.dirty(tab)) return 'discard';
-    const answer = await window.moye.confirmDiscard(tab.document.name);
+    const answer = await window.meki.confirmDiscard(tab.document.name);
     if (answer === 'save') return (await this.save(tab)) && !this.dirty(tab) ? 'save' : 'cancel';
     return answer;
   }
@@ -306,7 +306,7 @@ export class DocumentTabs {
       const session = this.snapshot(); session.documents = session.documents.filter(doc => !discarded.has(doc.id));
       if (!session.documents.some(doc => doc.id === session.activeId)) session.activeId = session.documents[0]?.id || null;
       session.layout = reconcileLayout(session.layout, session.documents.map(doc => doc.id), session.activeId);
-      await window.moye.saveSession(session, true);
+      await window.meki.saveSession(session, true);
     } else {
       this.capture(); const previous = [...this.tabs], active = this.activeId, layout = this.hooks.panes().snapshot();
       const records = [...this.tabs.filter(tab => tab !== this.active), this.active].map(tab => this.closedRecord(tab));
@@ -325,7 +325,7 @@ export class DocumentTabs {
     this.hooks.editor().flush(); this.capture();
     const local = record.document.path ? this.findPath(record.document.path) : undefined;
     if (local && !record.dirty) { this.activate(local.id); await this.persist(); this.closed.pop(); this.render(); return; }
-    const result = record.document.path && !local ? await window.moye.reopenClosedDocument({ path: record.document.path, revision: record.document.revision, dirty: record.dirty }) : { kind: 'copy' as const };
+    const result = record.document.path && !local ? await window.meki.reopenClosedDocument({ path: record.document.path, revision: record.document.revision, dirty: record.dirty }) : { kind: 'copy' as const };
     if (result.kind === 'existing') { this.closed.pop(); this.render(); if (result.message) this.hooks.notify(result.message); return; }
     const recovered = record.dirty || result.kind === 'copy';
     const doc = result.kind === 'disk' ? result.document! : result.kind === 'buffer' ? { ...record.document, path: result.document!.path, revision: result.document!.revision } : { ...record.document, path: null, revision: null, name: record.document.path ? t("{0}（恢复副本）.md", record.document.name.replace(/\.(md|markdown|txt)$/i, '')) : record.document.name };
@@ -341,7 +341,7 @@ export class DocumentTabs {
       await this.persist();
     } catch (error) {
       this.tabs = previous; if (active) this.show(this.tabs.find(item => item.id === active)!);
-      if (doc.path && !local) await window.moye.releaseDocument(doc.path).catch(() => {});
+      if (doc.path && !local) await window.meki.releaseDocument(doc.path).catch(() => {});
       throw error;
     }
     this.closed.pop(); this.render();
@@ -364,7 +364,7 @@ export class DocumentTabs {
     if (!path) { this.hooks.notify(t("先保存文稿，再查看它的本地版本历史。")); return; }
     this.settingsPanel.hidden = true;
     const request = ++this.historyRequest;
-    const versions = await window.moye.listVersions(path);
+    const versions = await window.meki.listVersions(path);
     if (request !== this.historyRequest || tab !== this.active) return;
     this.historySelection = null;
     this.history.querySelector<HTMLButtonElement>('#restore-version')!.disabled = true;
@@ -378,7 +378,7 @@ export class DocumentTabs {
       button.addEventListener('click', () => {
         const selection = { path, id: version.id, tabId: tab.id }; this.historySelection = selection;
         this.history.querySelector<HTMLButtonElement>('#restore-version')!.disabled = true;
-        void window.moye.readVersion(path, version.id).then(value => {
+        void window.meki.readVersion(path, version.id).then(value => {
           if (this.historySelection !== selection) return;
           this.history.querySelector<HTMLTextAreaElement>('#history-preview')!.value = value.content;
           this.history.querySelector<HTMLButtonElement>('#restore-version')!.disabled = false;
@@ -392,7 +392,7 @@ export class DocumentTabs {
   }
   async restoreVersion(selection: { path: string; id: string; tabId: string }) {
     if (selection.tabId !== this.activeId || selection.path !== this.active.document.path) throw new Error(t("文稿已切换，请重新选择历史版本。"));
-    const version = await window.moye.readVersion(selection.path, selection.id);
+    const version = await window.meki.readVersion(selection.path, selection.id);
     this.hooks.editor().flush();
     if (this.dirty() && await this.mayClose() === 'cancel') return;
     await this.createSnapshot('restore', t("恢复历史前"));

@@ -49,7 +49,7 @@ test('closing or failing to restore a document prunes only its pane and keeps su
   assert.equal(reconcileLayout(layout, [], null), undefined);
 });
 test('window recovery persists split layout, dirty exact bytes and mode; old sessions stay compatible', async t => {
-  const parent = await fs.realpath(os.tmpdir()), root = await fs.mkdtemp(path.join(parent, 'moye-pane-session-'));
+  const parent = await fs.realpath(os.tmpdir()), root = await fs.mkdtemp(path.join(parent, 'meki-pane-session-'));
   t.after(async () => { assert.equal(path.dirname(await fs.realpath(root)), parent); await fs.rm(root, { recursive: true, force: true }); });
   const store = new FileStore(root); await store.init(); const history = new LifecycleStore(store); await history.init();
   const windows = new WindowSessions(store, history); await windows.init();

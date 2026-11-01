@@ -7,10 +7,9 @@ import { build, Platform, Arch } from 'electron-builder';
 import config from '../electron-builder.cjs';
 import { root, stageApplication } from './stage-application.mjs';
 import { createUpdateAssets } from './update-assets.mjs';
-import policy from '../electron/update-policy.cjs';
 
 if (!['win32', 'darwin'].includes(process.platform)) throw new Error('Build installers on native Windows or macOS.');
-if (!process.env.MOYE_UPDATE_SIGN_KEY) throw new Error('Set MOYE_UPDATE_SIGN_KEY before explicitly building a release.');
+if (!process.env.MEKI_UPDATE_SIGN_KEY) throw new Error('Set MEKI_UPDATE_SIGN_KEY before explicitly building a release.');
 const platform = process.platform === 'win32' ? 'windows' : 'macos';
 const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
 const { stage, pkg, release } = await stageApplication();
@@ -30,10 +29,9 @@ const asar = path.join(output, process.platform === 'win32' ? 'win-unpacked/reso
 const sha256 = async filename => createHash('sha256').update(await fs.readFile(filename)).digest('hex');
 const manifest = { version: pkg.version, sourceCommit, platform, arch: process.platform === 'win32' ? 'x64' : 'universal',
   installer: path.basename(installer), sha256: await sha256(installer), asarSha256: await sha256(asar),
-  compatibilityInstaller: policy.names(pkg.version, process.platform).installer,
   signing: process.platform === 'win32' ? 'unsigned' : 'ad-hoc, not notarized',
   builtOn: `${process.platform}-${process.arch}`, };
 manifest.updateAssets = await createUpdateAssets({ directory: output, asar, installer, version: pkg.version, platform: process.platform,
-  electron: pkg.devDependencies.electron, signingKey: process.env.MOYE_UPDATE_SIGN_KEY });
+  electron: pkg.devDependencies.electron, signingKey: process.env.MEKI_UPDATE_SIGN_KEY });
 await fs.writeFile(path.join(output, `${platform}-build.json`), JSON.stringify(manifest, null, 2) + '\n');
 console.log(JSON.stringify(manifest, null, 2));

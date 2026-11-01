@@ -11,12 +11,12 @@ await fs.mkdir(path.join(root, 'test-results'), { recursive: true });
 const run = await fs.mkdtemp(path.join(root, 'test-results', 'about-'));
 const documentPath = path.join(run, 'about.md'), original = '\uFEFF# About check\r\n\r\nKeep these bytes.\r\n';
 await fs.writeFile(documentPath, original);
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: path.join(run, 'profile'), MOYE_TEST_DISCARD: 'discard' };
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: path.join(run, 'profile'), MEKI_TEST_DISCARD: 'discard' };
 delete env.ELECTRON_RUN_AS_NODE;
 const results = [], errors = [], pass = name => { results.push(name); console.log(`PASS ${name}`); };
 let app, page;
 try {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? ['--open', documentPath] : [root, '--open', documentPath], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', documentPath] : [root, '--open', documentPath], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000);
   page.on('pageerror', error => errors.push(error.message));
   await app.evaluate(({ BrowserWindow, shell }) => {
@@ -59,7 +59,7 @@ try {
   await page.locator('[data-about="updates"]').click();
   await page.locator('#update-dialog').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#about-dialog').isVisible(), false);
-  assert.equal(await page.evaluate(async () => (await window.moye.updateState()).status), 'idle');
+  assert.equal(await page.evaluate(async () => (await window.meki.updateState()).status), 'idle');
   await page.locator('[data-update="close"]').click();
   assert.equal(await source.innerText(), unsaved);
   assert.equal(await fs.readFile(documentPath, 'utf8'), original);

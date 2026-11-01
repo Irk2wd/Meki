@@ -5,7 +5,7 @@ import english from './locales/en.json' with { type: 'json' };
 export const locales = Object.freeze(['zh-CN', 'en']);
 // The installed bootstrap and an activated update can load separate module copies.
 // Share the effective language within each process, never across worker boundaries.
-const localeKey = Symbol.for('moye.ui-locale');
+const localeKey = Symbol.for('meki.ui-locale');
 export function isLocale(value) { return locales.includes(value); }
 export function setLocale(value) { globalThis[localeKey] = isLocale(value) ? value : 'zh-CN'; }
 export function getLocale() { return globalThis[localeKey] || 'zh-CN'; }

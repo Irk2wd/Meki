@@ -55,7 +55,7 @@ export class AboutDialog {
   private async action(action: string) {
     if (action === 'close') { this.dialog.close(); return; }
     try {
-      if (action === 'project') await window.moye.openExternal('https://github.com/Irk2wd/Meki');
+      if (action === 'project') await window.meki.openExternal('https://github.com/Irk2wd/Meki');
       if (action === 'updates') { this.dialog.close(); await this.updates(); }
     } catch (error) {
       this.element('#about-feedback').textContent = t("操作未完成：{0}", String(error).replace(/^Error: /, ''));

@@ -6,7 +6,7 @@ async function fixture(text = '', options = {}, code = false) {
   const { history, undo, redo, undoDepth } = await import('@milkdown/kit/prose/history');
   const { typingPlugin } = await import('../src/editor-typing.ts');
   const { typingDefaults } = await import('../src/typing-rules.ts');
-  const schema = new Schema({ nodes: { doc: { content: 'block+' }, paragraph: { content: 'inline*', group: 'block' }, code_block: { content: 'text*', group: 'block', code: true }, text: { group: 'inline' }, math_inline: { group: 'inline', inline: true, atom: true, attrs: { value: {} } } }, marks: { emphasis: {}, strong: {}, inlineCode: { code: true }, moye_sub: {}, moye_sup: {}, moye_highlight: {}, strike_through: {} } });
+  const schema = new Schema({ nodes: { doc: { content: 'block+' }, paragraph: { content: 'inline*', group: 'block' }, code_block: { content: 'text*', group: 'block', code: true }, text: { group: 'inline' }, math_inline: { group: 'inline', inline: true, atom: true, attrs: { value: {} } } }, marks: { emphasis: {}, strong: {}, inlineCode: { code: true }, meki_sub: {}, meki_sup: {}, meki_highlight: {}, strike_through: {} } });
   let settings = { ...typingDefaults, ...options };
   const plugin = typingPlugin(() => settings);
   const state = EditorState.create({ schema, doc: schema.node('doc', null, schema.node(code ? 'code_block' : 'paragraph', null, text ? schema.text(text) : undefined)), plugins: [history(), plugin] });

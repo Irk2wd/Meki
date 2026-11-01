@@ -11,7 +11,7 @@ await fs.mkdir(profile);
 const file = path.join(run, '保存.md'), original = '\uFEFF# 保存\r\n\r\n当前设置 / Save / 中文文稿 {0}\r\n';
 await fs.writeFile(file, original);
 await fs.writeFile(path.join(profile, 'state.json'), JSON.stringify({ settings: { autoSnapshot: false, theme: 'linen' } }));
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: profile, MOYE_TEST_DISCARD: 'cancel' }; delete env.ELECTRON_RUN_AS_NODE;
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: profile, MEKI_TEST_DISCARD: 'cancel' }; delete env.ELECTRON_RUN_AS_NODE;
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control', end = process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End';
 const results = [], errors = []; let app, page;
 const pass = name => { results.push(name); console.log(`PASS ${name}`); };
@@ -19,7 +19,7 @@ async function poll(check, label) { const until = Date.now() + 20000; while (Dat
 async function ready(target) { target.setDefaultTimeout(15000); target.on('pageerror', error => errors.push(error.message)); await target.waitForSelector('#shell[data-ready="true"]'); return target; }
 async function focus(target = page) { await (await app.browserWindow(target)).evaluate(win => { win.show(); win.focus(); }); await target.waitForFunction(() => document.hasFocus()); }
 async function launch(args = []) {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? args : [root, ...args], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? args : [root, ...args], env, timeout: 30000 });
   page = await ready(await app.firstWindow()); await focus();
 }
 async function stop() { if (!app) return; await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await app.close().catch(() => {}); app = null; }
@@ -30,7 +30,7 @@ async function nativeLabels() { return app.evaluate(({ Menu }) => Menu.getApplic
 async function language(value, target = page) {
   if (!await target.locator('#style-panel').isVisible()) await action('style', target);
   await target.locator('#ui-language').selectOption(value);
-  await poll(async () => (await target.evaluate(() => window.moye.boot())).settings.locale === value, 'language persisted');
+  await poll(async () => (await target.evaluate(() => window.meki.boot())).settings.locale === value, 'language persisted');
   await target.waitForFunction(() => !document.querySelector('#ui-language').disabled);
 }
 async function noChinese(selector) {
@@ -50,13 +50,13 @@ try {
   assert.equal(await buffer(), unsaved); assert.equal(await fs.readFile(file, 'utf8'), original);
   pass('old profiles default to Chinese; changing language preserves unsaved text and original BOM/CRLF bytes');
 
-  const created = app.waitForEvent('window'); await page.evaluate(() => window.moye.newWindow());
+  const created = app.waitForEvent('window'); await page.evaluate(() => window.meki.newWindow());
   const second = await ready(await created); await focus(second);
   assert.equal(await second.locator('html').getAttribute('lang'), 'zh-CN');
   await language('zh-CN', second);
   await poll(async () => await page.locator('#ui-language').inputValue() === 'zh-CN', 'preference broadcasts');
   await language('en', second);
-  assert.equal((await second.evaluate(() => window.moye.boot())).locale, 'zh-CN');
+  assert.equal((await second.evaluate(() => window.meki.boot())).locale, 'zh-CN');
   assert.ok((await nativeLabels()).includes('文件'));
   await action('style', second);
   await second.locator('[data-mode="source"]').click();
@@ -70,7 +70,7 @@ try {
   page = windows.find(target => target === page) || windows[0];
   for (const target of windows) {
     assert.equal(await target.locator('html').getAttribute('lang'), 'en');
-    assert.equal((await target.evaluate(() => window.moye.boot())).locale, 'en');
+    assert.equal((await target.evaluate(() => window.meki.boot())).locale, 'en');
     if (await target.locator('#document-name').innerText() === '保存.md') page = target;
   }
   await focus();
@@ -109,7 +109,7 @@ try {
   assert.equal(await page.locator('#export-preset em').count(), 0);
   await page.keyboard.press('Escape');
   const exported = path.join(run, 'english-ui-chinese-document.html');
-  await app.evaluate((_electron, filename) => { process.env.MOYE_TEST_EXPORT_PATH = filename; }, exported);
+  await app.evaluate((_electron, filename) => { process.env.MEKI_TEST_EXPORT_PATH = filename; }, exported);
   await action('export-html');
   await page.waitForFunction(() => document.querySelector('#toast').textContent.startsWith('Exported HTML'));
   const html = await fs.readFile(exported, 'utf8');

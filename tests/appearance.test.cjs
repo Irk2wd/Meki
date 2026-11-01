@@ -5,21 +5,21 @@ const { normalizeCustomCss, writingAppearance, writingFont } = require('../src/a
 
 test('custom theme typography is scoped to the document with its own selector aliases', () => {
   const css = normalizeCustomCss('body { color: #234; } .meki-document h1, .ProseMirror h2 { font-size: 2em; } @media print { p {line-height:1.5} }');
-  assert.match(css, /\.moye-document:is\(\.moye-document\)/);
-  assert.match(css, /\.moye-document :is\(\.moye-document h1\)/);
+  assert.match(css, /\.meki-document:is\(\.meki-document\)/);
+  assert.match(css, /\.meki-document :is\(\.meki-document h1\)/);
   assert.match(css, /@media print/);
   assert.match(css, /font-size: 2em/);
 });
-test('own and legacy root aliases target the active editor or export scope', () => {
-  const source = '#write h1, .meki-document h2, .moye-document p, .ProseMirror blockquote { color: #123456; }';
+test('document root aliases target the active editor or export scope', () => {
+  const source = '#write h1, .meki-document h2, body p, .ProseMirror blockquote { color: #123456; }';
   const css = normalizeCustomCss(source, '.document-export');
-  assert.doesNotMatch(css, /#write|\.meki-document|\.moye-document|\.ProseMirror/);
+  assert.doesNotMatch(css, /#write|\.meki-document|\.ProseMirror/);
   for (const element of ['h1', 'h2', 'p', 'blockquote']) assert.ok(css.includes(`.document-export ${element}`));
 });
 test('custom themes cannot load resources or style controls outside the document', () => {
-  const css = normalizeCustomCss('@import "https://example.test/a.css"; @font-face {src:url(file:///secret)} .moye-document + .titlebar, body { position:fixed; color:red; background-image:url(https://example.test/x); --evil:u\\72l(https://example.test); cursor:url(x); font-family:var(--safe); }');
+  const css = normalizeCustomCss('@import "https://example.test/a.css"; @font-face {src:url(file:///secret)} .meki-document + .titlebar, body { position:fixed; color:red; background-image:url(https://example.test/x); --evil:u\\72l(https://example.test); cursor:url(x); font-family:var(--safe); }');
   assert.doesNotMatch(css, /@import|@font-face|url|position|background-image|cursor|--evil/);
-  assert.match(css, /\.moye-document :is\(\.moye-document \+ \.titlebar\)/);
+  assert.match(css, /\.meki-document :is\(\.meki-document \+ \.titlebar\)/);
   assert.match(css, /color:\s*red/);
 });
 test('appearance preserves font, theme and font size across editor/export without forcing print colors', () => {

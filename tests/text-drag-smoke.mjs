@@ -16,7 +16,7 @@ const original = `\uFEFF${first}\r\n\r\n${second}\r\n`;
 await fs.mkdir(profile);
 await fs.writeFile(file, original);
 await fs.writeFile(path.join(profile, 'state.json'), JSON.stringify({ settings: { autoSave: false, autoSnapshot: false, spellcheck: false } }));
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: profile, MOYE_TEST_DISCARD: 'discard' };
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: profile, MEKI_TEST_DISCARD: 'discard' };
 delete env.ELECTRON_RUN_AS_NODE;
 let app, page, failure;
 const results = [], errors = [];
@@ -77,7 +77,7 @@ async function drag({ copy = false, cancel = false } = {}) {
   }
 }
 try {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? ['--open', file] : [root, '--open', file], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', file] : [root, '--open', file], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
   await app.evaluate(({ BrowserWindow }) => { const win = BrowserWindow.getAllWindows()[0]; win.show(); win.focus(); });
   await page.waitForSelector('#shell[data-ready="true"]');

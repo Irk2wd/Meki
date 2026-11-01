@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url), root = path.resolve(path.dirname
 await fs.mkdir(path.join(root, 'test-results'), { recursive: true });
 const run = await fs.realpath(await fs.mkdtemp(path.join(root, 'test-results', 'shortcuts-reopen-'))), file = path.join(run, 'clean.md'), owned = path.join(run, 'owned.md');
 await fs.writeFile(file, '# Original\n\nOriginal saved body.\n'); await fs.writeFile(owned, '# Owned\n\nSaved owner body.\n');
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: path.join(run, 'shortcuts-profile'), MOYE_TEST_OPEN_PATH: file, MOYE_TEST_DISCARD: 'discard', MOYE_TEST_CONFLICT: 'cancel' }; delete env.ELECTRON_RUN_AS_NODE;
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: path.join(run, 'shortcuts-profile'), MEKI_TEST_OPEN_PATH: file, MEKI_TEST_DISCARD: 'discard', MEKI_TEST_CONFLICT: 'cancel' }; delete env.ELECTRON_RUN_AS_NODE;
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control', end = process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End';
 let app, page; const results = [], errors = [], tracked = new Set();
 function pass(message) { results.push(message); console.log(`PASS ${message}`); }
@@ -18,18 +18,18 @@ async function focus(target = page) { await (await app.browserWindow(target)).ev
 async function idle(target = page) { await target.waitForFunction(() => !document.body.classList.contains('is-busy')); }
 async function action(name, target = page) { await idle(target); await target.locator(name === 'close-tab' ? '.document-tab.active .close-document-tab' : `[data-action="${name}"]`).first().evaluate(node => node.click()); }
 async function setting(name, value) { await app.evaluate((_electron, { name, value }) => { process.env[name] = value; }, { name, value }); }
-async function active(target = page) { const id = await target.evaluate(async () => (await window.moye.boot()).windowId); const records = JSON.parse(await fs.readFile(path.join(env.MOYE_USER_DATA, 'windows-v1.json'), 'utf8')).windows; const session = records.find(item => item.id === id)?.session; return session?.documents.find(item => item.id === session.activeId); }
-async function launch() { app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? [] : [root], env, timeout: 30000 }); page = await ready(await app.firstWindow()); await focus(); return page; }
+async function active(target = page) { const id = await target.evaluate(async () => (await window.meki.boot()).windowId); const records = JSON.parse(await fs.readFile(path.join(env.MEKI_USER_DATA, 'windows-v1.json'), 'utf8')).windows; const session = records.find(item => item.id === id)?.session; return session?.documents.find(item => item.id === session.activeId); }
+async function launch() { app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? [] : [root], env, timeout: 30000 }); page = await ready(await app.firstWindow()); await focus(); return page; }
 async function stop() { if (app) { await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await app.close().catch(() => {}); app = null; } }
 async function tabs(target = page) { return target.locator('.document-tab').count(); }
-async function open(filePath, target = page) { await setting('MOYE_TEST_OPEN_PATH', filePath); await action('open', target); await poll(async () => (await active(target))?.path === filePath, 'document opens'); await idle(target); }
+async function open(filePath, target = page) { await setting('MEKI_TEST_OPEN_PATH', filePath); await action('open', target); await poll(async () => (await active(target))?.path === filePath, 'document opens'); await idle(target); }
 async function source(target = page) { await focus(target); await idle(target); await target.locator('[data-mode="source"]').click(); await target.locator('#source-editor').waitFor({ state: 'visible' }); return target.locator('#source-editor .cm-content'); }
 async function text(target = page) { return target.locator('#source-editor .cm-line').evaluateAll(nodes => nodes.map(node => node.textContent).join('\n')); }
 async function append(value, target = page) { const editor = await source(target); await editor.click(); await target.keyboard.press(end); await target.keyboard.insertText(value); await poll(async () => (await active(target))?.content.includes(value), 'edited buffer persists'); }
 async function closeTab(target = page) { const before = (await active(target)).id; await action('close-tab', target); await poll(async () => (await active(target))?.id !== before, 'tab closes'); await idle(target); }
 async function reopen(target = page) { const before = (await active(target)).id; await action('reopen-closed', target); await poll(async () => (await active(target))?.id !== before, 'closed document restores'); await idle(target); }
 async function newWindow(target = page) { const created = app.waitForEvent('window'); await action('new-window', target); return ready(await created); }
-async function settings(target = page) { return target.evaluate(async () => (await window.moye.boot()).settings); }
+async function settings(target = page) { return target.evaluate(async () => (await window.meki.boot()).settings); }
 async function shortcuts(target = page) { await action('shortcut-settings', target); await target.locator('#shortcuts-dialog').waitFor({ state: 'visible' }); }
 async function closeShortcuts(target = page) { await target.locator('[aria-label="关闭快捷键设置"]').click(); }
 async function record(command, key, target = page, success = true) {
@@ -67,22 +67,22 @@ try {
   await page.keyboard.press(`${mod}+Alt+K`); assert.equal(await page.locator('#insert-dialog').isVisible(), false);
   await page.keyboard.press(`${mod}+Alt+L`); await page.locator('#insert-dialog').waitFor({ state: 'visible' }); await page.locator('[aria-label="取消插入"]').click();
   await append('clipboard custom command'); await source(); await page.locator('#source-editor .cm-content').click(); await page.keyboard.press(`${mod}+A`);
-  await page.evaluate(() => window.moye.writeClipboardText('sentinel')); await page.keyboard.press(`${mod}+Shift+C`); await page.waitForTimeout(120); assert.equal(await page.evaluate(() => window.moye.readClipboardText()), 'sentinel');
-  await page.keyboard.press(`${mod}+Shift+Y`); await page.waitForFunction(async () => (await window.moye.readClipboardText()).includes('clipboard custom command'));
+  await page.evaluate(() => window.meki.writeClipboardText('sentinel')); await page.keyboard.press(`${mod}+Shift+C`); await page.waitForTimeout(120); assert.equal(await page.evaluate(() => window.meki.readClipboardText()), 'sentinel');
+  await page.keyboard.press(`${mod}+Shift+Y`); await page.waitForFunction(async () => (await window.meki.readClipboardText()).includes('clipboard custom command'));
   pass('source, find, link and clipboard commands use the new map; old Find cannot open CodeMirror search');
 
   const busySave = path.join(run, 'busy-save.md'), beforeBusySave = (await active()).content;
-  await setting('MOYE_TEST_SAVE_PATH', busySave); await setting('MOYE_TEST_SAVE_DELAY', '3000');
+  await setting('MEKI_TEST_SAVE_PATH', busySave); await setting('MEKI_TEST_SAVE_DELAY', '3000');
   await page.locator('#source-editor .cm-content').click(); await page.keyboard.press(end); count = await tabs(); await action('save');
-  await poll(() => app.evaluate(() => process.env.MOYE_TEST_SAVE_PENDING === '1'), 'native delayed save is pending');
+  await poll(() => app.evaluate(() => process.env.MEKI_TEST_SAVE_PENDING === '1'), 'native delayed save is pending');
   assert.equal(await page.evaluate(() => document.body.classList.contains('is-busy')), true);
   await page.keyboard.press(`${mod}+F`); await page.keyboard.press(`${mod}+Shift+P`); await page.keyboard.press(`${mod}+Shift+J`); await page.keyboard.press(`${mod}+N`);
   assert.equal(await page.locator('.cm-panel.cm-search').count(), 0); assert.equal(await page.locator('#find-panel').isVisible(), false);
   assert.equal(await page.locator('#source-editor').isVisible(), true); assert.equal(await tabs(), count);
   await page.keyboard.type(' Busy typing remains editable');
-  assert.equal(await app.evaluate(() => process.env.MOYE_TEST_SAVE_PENDING === '1'), true, 'key assertions must run during the real pending save');
+  assert.equal(await app.evaluate(() => process.env.MEKI_TEST_SAVE_PENDING === '1'), true, 'key assertions must run during the real pending save');
   assert.match(await text(), /Busy typing remains editable/);
-  await idle(); await setting('MOYE_TEST_SAVE_DELAY', '0');
+  await idle(); await setting('MEKI_TEST_SAVE_DELAY', '0');
   assert.equal(await fs.readFile(busySave, 'utf8'), beforeBusySave); assert.equal((await active()).dirty, true);
   pass('a real pending save consumes mapped and retired application keys while ordinary source typing remains editable');
 
@@ -106,7 +106,7 @@ try {
   await page.locator('#shortcut-reset-all').click(); await poll(async () => Object.keys((await settings()).shortcuts).length === 0, 'all defaults restored'); await closeShortcuts();
   pass('shortcut changes synchronize across native windows, survive restart and can all be restored to defaults');
 
-  await stop(); env.MOYE_USER_DATA = path.join(run, 'reopen-profile'); await launch(); await open(file); await source();
+  await stop(); env.MEKI_USER_DATA = path.join(run, 'reopen-profile'); await launch(); await open(file); await source();
   await closeTab(); const latest = '# Latest disk\n\nDisk changed after clean close.\n' + 'Long paragraph for scroll preservation.\n\n'.repeat(90); await fs.writeFile(file, latest);
   await page.keyboard.press(`${mod}+Shift+T`); await poll(async () => (await active())?.path === file, 'default reopen shortcut'); await idle();
   assert.equal((await active()).content, latest); assert.equal((await active()).dirty, false); assert.equal(await page.locator('#source-editor').isVisible(), true);
@@ -125,7 +125,7 @@ try {
 
   await closeTab(); await fs.unlink(file); await reopen(); assert.equal((await active()).path, null); assert.equal((await active()).paused, 'recovered');
   assert.match((await active()).content, /Closed unsaved text/); await assert.rejects(fs.stat(file), { code: 'ENOENT' });
-  const rescued = path.join(run, 'rescued.md'); await setting('MOYE_TEST_SAVE_PATH', rescued); await save(); assert.equal((await active()).path, rescued);
+  const rescued = path.join(run, 'rescued.md'); await setting('MEKI_TEST_SAVE_PATH', rescued); await save(); assert.equal((await active()).path, rescued);
   await append('\nBuffered before external change'); const closedContent = (await active()).content; await closeTab(); await fs.writeFile(rescued, '# External version must survive\n'); await reopen();
   assert.equal((await active()).path, null); assert.equal((await active()).content, closedContent); assert.equal(await fs.readFile(rescued, 'utf8'), '# External version must survive\n');
   pass('missing files and externally changed dirty files recover into untitled copies without recreating or overwriting disk files');
@@ -135,9 +135,9 @@ try {
   assert.equal(await fs.readFile(owned, 'utf8'), '# Owned\n\nSaved owner body.\n');
   pass('a dirty document owned by another window recovers as a separate untitled buffer and preserves the original owner');
 
-  await setting('MOYE_TEST_DISCARD', 'cancel'); let before = await active(); await action('close-tab'); await idle(); await page.waitForTimeout(120); assert.equal((await active()).id, before.id); assert.equal(await page.locator('.document-tabs [data-action="reopen-closed"]').isDisabled(), true);
-  await setting('MOYE_TEST_DISCARD', 'discard'); await action('new'); await poll(async () => (await active()).id !== before.id, 'new document for close all'); await append('Second discarded buffer');
-  count = await tabs(); await setting('MOYE_TEST_DISCARD_SEQUENCE', JSON.stringify(['discard', 'cancel'])); await action('close-all'); await page.waitForFunction(() => !document.body.classList.contains('is-busy')); await poll(() => app.evaluate(() => process.env.MOYE_TEST_DISCARD_SEQUENCE === '[]'), 'close all cancel is consumed');
+  await setting('MEKI_TEST_DISCARD', 'cancel'); let before = await active(); await action('close-tab'); await idle(); await page.waitForTimeout(120); assert.equal((await active()).id, before.id); assert.equal(await page.locator('.document-tabs [data-action="reopen-closed"]').isDisabled(), true);
+  await setting('MEKI_TEST_DISCARD', 'discard'); await action('new'); await poll(async () => (await active()).id !== before.id, 'new document for close all'); await append('Second discarded buffer');
+  count = await tabs(); await setting('MEKI_TEST_DISCARD_SEQUENCE', JSON.stringify(['discard', 'cancel'])); await action('close-all'); await page.waitForFunction(() => !document.body.classList.contains('is-busy')); await poll(() => app.evaluate(() => process.env.MEKI_TEST_DISCARD_SEQUENCE === '[]'), 'close all cancel is consumed');
   assert.equal(await tabs(), count); assert.equal(await page.locator('.document-tabs [data-action="reopen-closed"]').isDisabled(), true);
   await action('close-all'); await poll(async () => await tabs() === 1, 'approved close all'); await idle(); assert.equal(await page.locator('.document-tabs [data-action="reopen-closed"]').isDisabled(), false);
   await reopen(); assert.equal((await active()).paused, 'recovered');
@@ -157,13 +157,13 @@ try {
   await (await app.browserWindow(detached)).evaluate(win => win.close()); await poll(() => Promise.resolve(!app.windows().includes(detached)), 'detached window closes'); assert.equal(await page.locator('.document-tabs [data-action="reopen-closed"]').isDisabled(), true);
   pass('closed history never crosses process restarts, document detaches or window closures');
 
-  await stop(); env.MOYE_USER_DATA = path.join(run, 'cleanup-failure-profile'); await launch();
+  await stop(); env.MEKI_USER_DATA = path.join(run, 'cleanup-failure-profile'); await launch();
   const faultFile = path.join(run, 'cleanup-failure.md'); await fs.writeFile(faultFile, '# Authoritative ownership\n'); await open(faultFile);
-  const legacyDraft = path.join(env.MOYE_USER_DATA, 'recovery.json'); await fs.mkdir(legacyDraft);
+  const legacyDraft = path.join(env.MEKI_USER_DATA, 'recovery.json'); await fs.mkdir(legacyDraft);
   await closeTab(); assert.equal(await page.locator(`.document-tab [role="tab"][title="${faultFile.replaceAll('\\', '\\\\')}"]`).count(), 0);
   const claimant = await newWindow(); await open(faultFile, claimant); assert.equal((await active(claimant)).path, faultFile);
   await closeTab(claimant); await focus(); await reopen(); assert.equal((await active()).path, faultFile);
-  const records = JSON.parse(await fs.readFile(path.join(env.MOYE_USER_DATA, 'windows-v1.json'), 'utf8')).windows;
+  const records = JSON.parse(await fs.readFile(path.join(env.MEKI_USER_DATA, 'windows-v1.json'), 'utf8')).windows;
   assert.equal(records.flatMap(record => record.session?.documents || []).filter(doc => doc.path === faultFile).length, 1);
   assert.equal((await active(claimant)).path, null); await fs.rmdir(legacyDraft);
   pass('legacy-draft cleanup failure cannot roll back committed close/reopen UI or desynchronize single-file ownership');

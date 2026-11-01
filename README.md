@@ -14,7 +14,7 @@
   <a href="#写作所需">功能亮点</a> ·
   <a href="#获取-meki">获取 Meki</a> ·
   <a href="docs/README.md">文档</a> ·
-  <a href="docs/releases/1.0.0.md">版本说明</a>
+  <a href="docs/releases/1.0.1.md">版本说明</a>
 </p>
 
 <picture>

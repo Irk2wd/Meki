@@ -9,13 +9,13 @@ import rehypeStringify from 'rehype-stringify';
 import type { Root, RootContent } from 'mdast';
 import type { Element, ElementContent, Properties } from 'hast';
 import type { Handler, Handlers } from 'mdast-util-to-hast';
-import { alertLabels, headingIds, headingText, remarkMoye, type MoyeAlert } from './markdown-extensions.ts';
+import { alertLabels, headingIds, headingText, remarkMeki, type MekiAlert } from './markdown-extensions.ts';
 import { separateMetadata } from './markdown.ts';
 import { numberHeadings, numberedHeadingTitle } from './heading-numbering.ts';
 import { imageSizeStyle, parseImageTag } from './image-syntax.ts';
 
 export function markdownProcessor() {
-  return unified().use(remarkParse).use(remarkGfm, { singleTilde: false }).use(remarkMath).use(remarkMoye).use(remarkStringify);
+  return unified().use(remarkParse).use(remarkGfm, { singleTilde: false }).use(remarkMath).use(remarkMeki).use(remarkStringify);
 }
 
 export function parseMarkdown(markdown: string): Root {
@@ -46,29 +46,29 @@ export function renderMarkdown(markdown: string, options: { headingNumbering?: b
   collect(tree);
   headingIds(headings.map(item => item.title)).forEach((id, index) => { headings[index].id = id; });
   if (options.headingNumbering) numberHeadings(headings.map(item => item.depth)).forEach((number, index) => { headings[index].number = number; });
-  const mathSlot: Handler = (_state, node) => element(node.type === 'inlineMath' ? 'span' : 'div', { className: ['moye-math-slot'], dataMoyeMath: mathIndices.get(node) }, [text('value' in node ? String(node.value) : '')]);
+  const mathSlot: Handler = (_state, node) => element(node.type === 'inlineMath' ? 'span' : 'div', { className: ['meki-math-slot'], dataMekiMath: mathIndices.get(node) }, [text('value' in node ? String(node.value) : '')]);
   const handlers: Handlers = {
     heading: (state, node) => { const heading = headings.find(item => item.node === node)!; return element(`h${heading.depth}`, { id: heading.id, ...(heading.number ? { dataHeadingNumber: heading.number } : {}) }, state.all(node)); },
-    moyeSub: (state, node) => element('sub', {}, state.all(node)),
-    moyeSup: (state, node) => element('sup', {}, state.all(node)),
-    moyeHighlight: (state, node) => element('mark', {}, state.all(node)),
-    moyeEmoji: (_state, node) => element('span', { className: ['moye-emoji'], title: `:${node.name}:` }, [text(node.value)]),
-    moyeToc: () => element('nav', { className: ['moye-toc'], ariaLabel: t("目录") }, [element('div', { className: ['moye-toc-title'] }, [text(t("目录"))]), element('ul', {}, headings.map(heading => element('li', { dataDepth: heading.depth }, [element('a', { href: `#${heading.id}` }, [text(numberedHeadingTitle(heading.title, heading.number))])])))]),
-    moyeAlert: (state, node) => { const alert = node as MoyeAlert; return element('aside', { className: ['moye-alert'], dataKind: alert.kind }, [element('div', { className: ['moye-alert-title'] }, [text(alertLabels[alert.kind] || alert.kind)]), ...state.all(node)]); },
-    moyeRaw: (_state, node) => element('pre', { className: ['moye-raw-html'] }, [element('code', {}, [text(node.value)])]),
-    moyeImage: (_state, node) => {
+    mekiSub: (state, node) => element('sub', {}, state.all(node)),
+    mekiSup: (state, node) => element('sup', {}, state.all(node)),
+    mekiHighlight: (state, node) => element('mark', {}, state.all(node)),
+    mekiEmoji: (_state, node) => element('span', { className: ['meki-emoji'], title: `:${node.name}:` }, [text(node.value)]),
+    mekiToc: () => element('nav', { className: ['meki-toc'], ariaLabel: t("目录") }, [element('div', { className: ['meki-toc-title'] }, [text(t("目录"))]), element('ul', {}, headings.map(heading => element('li', { dataDepth: heading.depth }, [element('a', { href: `#${heading.id}` }, [text(numberedHeadingTitle(heading.title, heading.number))])])))]),
+    mekiAlert: (state, node) => { const alert = node as MekiAlert; return element('aside', { className: ['meki-alert'], dataKind: alert.kind }, [element('div', { className: ['meki-alert-title'] }, [text(alertLabels[alert.kind] || alert.kind)]), ...state.all(node)]); },
+    mekiRaw: (_state, node) => element('pre', { className: ['meki-raw-html'] }, [element('code', {}, [text(node.value)])]),
+    mekiImage: (_state, node) => {
       const image = parseImageTag(node.value)!;
       return element('p', {}, [element('img', { src: image.src, alt: image.alt, ...(image.title !== null ? { title: image.title } : {}), ...(image.width ? { width: image.width } : {}), ...(image.height ? { height: image.height } : {}), ...(image.width || image.height ? { style: imageSizeStyle(image) } : {}) })]);
     },
-    html: (_state, node) => element('code', { className: ['moye-raw-inline'] }, [text(node.value)]),
+    html: (_state, node) => element('code', { className: ['meki-raw-inline'] }, [text(node.value)]),
     inlineMath: mathSlot,
     math: mathSlot,
     code: (state, node) => {
       if (mathIndices.has(node)) return mathSlot(state, node, undefined);
-      if (diagramIndices.has(node)) return element('div', { className: ['moye-diagram-slot'], dataMoyeDiagram: diagramIndices.get(node) }, [text(node.value)]);
+      if (diagramIndices.has(node)) return element('div', { className: ['meki-diagram-slot'], dataMekiDiagram: diagramIndices.get(node) }, [text(node.value)]);
       return element('pre', {}, [element('code', node.lang ? { className: [`language-${node.lang}`] } : {}, [text(node.value + '\n')])]);
     },
   };
-  const processor = unified().use(remarkRehype, { handlers, footnoteLabel: t("脚注"), footnoteBackLabel: t("返回正文"), clobberPrefix: 'moye-' }).use(rehypeStringify);
+  const processor = unified().use(remarkRehype, { handlers, footnoteLabel: t("脚注"), footnoteBackLabel: t("返回正文"), clobberPrefix: 'meki-' }).use(rehypeStringify);
   return { html: processor.stringify(processor.runSync(tree)), expressions, diagrams };
 }

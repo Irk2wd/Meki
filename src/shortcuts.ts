@@ -1,6 +1,6 @@
 import { ht, t } from '../electron/i18n.mjs';
 import { bindings, commandFor, defaultBinding, eventBinding, shortcutCatalog, shortcutIds, shortcutLabel, validateBindings } from '../electron/shortcuts.mjs';
-import type { Settings, ShortcutChange } from '../shared/moye';
+import type { Settings, ShortcutChange } from '../shared/meki';
 import './shortcuts.css';
 interface Host { settings(): Settings; platform(): string; blocked(): boolean; dispatch(command: string): void; save(change: ShortcutChange): Promise<void>; }
 export class Shortcuts {
@@ -25,10 +25,10 @@ export class Shortcuts {
     document.addEventListener('keydown', event => this.keydown(event), true);
     // Native accelerators must also remain inactive while recording or editing a modal dialog.
     let guarded = false;
-    void window.moye.shortcutCapture(false).catch(() => {});
+    void window.meki.shortcutCapture(false).catch(() => {});
     new MutationObserver(() => {
       const next = !!document.querySelector('dialog[open]');
-      if (next !== guarded) { guarded = next; void window.moye.shortcutCapture(next).catch(() => {}); }
+      if (next !== guarded) { guarded = next; void window.meki.shortcutCapture(next).catch(() => {}); }
     }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['open'] });
     this.apply();
   }
@@ -59,7 +59,7 @@ export class Shortcuts {
     if (command && !event.repeat && !this.host.blocked()) this.host.dispatch(command);
   }
   allowsNative(command: string) { return !shortcutIds.has(command) || !this.composing && !document.querySelector('dialog[open]'); }
-  async open() { await window.moye.shortcutCapture(true); this.recording = null; this.feedback(''); this.render(); this.dialog.showModal(); }
+  async open() { await window.meki.shortcutCapture(true); this.recording = null; this.feedback(''); this.render(); this.dialog.showModal(); }
   private render() {
     const current = bindings(this.host.settings().shortcuts, this.host.platform()), rows = this.dialog.querySelector('#shortcut-rows')!;
     rows.replaceChildren(...shortcutCatalog.map(item => {

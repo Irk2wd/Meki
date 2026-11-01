@@ -7,7 +7,7 @@ import { renderMathDocument, type MathSettings, type RenderedMath } from './math
 /** Compile in document order so duplicate expressions and forward refs retain their identity. */
 export class EditorMath {
   private settings: MathSettings = {};
-  private prefix = `moye-editor-${crypto.randomUUID()}`;
+  private prefix = `meki-editor-${crypto.randomUUID()}`;
   private view?: EditorView;
   private frame = 0;
   private signature = '';
@@ -16,7 +16,7 @@ export class EditorMath {
   updateSettings(settings: MathSettings) { this.settings = { mathNumbering: settings.mathNumbering, mathPhysics: settings.mathPhysics }; this.signature = ''; this.schedule(); }
   flush() { if (this.frame) cancelAnimationFrame(this.frame); this.frame = 0; this.render(); }
   private schedule() { if (!this.frame) this.frame = requestAnimationFrame(() => { this.frame = 0; this.render(); }); }
-  blockPreview(tex: string) { const dom = document.createElement('div'); dom.className = 'moye-block-math'; dom.textContent = tex; this.schedule(); return dom; }
+  blockPreview(tex: string) { const dom = document.createElement('div'); dom.className = 'meki-block-math'; dom.textContent = tex; this.schedule(); return dom; }
   private render() {
     if (!this.view) return;
     const entries: Array<{ pos: number; tex: string; display: boolean }> = [];
@@ -35,13 +35,13 @@ export class EditorMath {
     const activeBlocks = new Set<HTMLElement>();
     for (const { pos, tex, display, result } of this.results) {
       const node = this.view.nodeDOM(pos);
-      let dom = node instanceof HTMLElement ? display ? node.querySelector<HTMLElement>('.moye-block-math') : node : null;
+      let dom = node instanceof HTMLElement ? display ? node.querySelector<HTMLElement>('.meki-block-math') : node : null;
       if (display && node instanceof HTMLElement) {
         activeBlocks.add(node);
         // CodeMirror intentionally unmounts offscreen blocks. Its cheap placeholder still needs
         // a preview for document layout, anchors and printing; Vue replaces this when it mounts.
         if (!dom && node.querySelector('.milkdown-code-block-placeholder')) {
-          dom = document.createElement('div'); dom.className = 'moye-block-math moye-lazy-math'; node.append(dom);
+          dom = document.createElement('div'); dom.className = 'meki-block-math meki-lazy-math'; node.append(dom);
         }
       }
       if (dom && dom.dataset.mathHtml !== result.html) { dom.dataset.mathHtml = result.html; dom.innerHTML = result.html; }
@@ -51,15 +51,15 @@ export class EditorMath {
         dom.title = t("右键复制 LaTeX 或 MathML");
       }
     }
-    this.view.dom.querySelectorAll<HTMLElement>('.moye-lazy-math').forEach(dom => { if (!activeBlocks.has(dom.parentElement!)) dom.remove(); });
+    this.view.dom.querySelectorAll<HTMLElement>('.meki-lazy-math').forEach(dom => { if (!activeBlocks.has(dom.parentElement!)) dom.remove(); });
   }
   plugin = $prose(() => new Plugin({
     props: { nodeViews: { math_inline: node => {
-      const dom = document.createElement('span'); dom.dataset.type = 'math_inline'; dom.dataset.value = node.attrs.value; dom.className = 'moye-inline-math'; dom.contentEditable = 'false'; dom.textContent = node.attrs.value;
+      const dom = document.createElement('span'); dom.dataset.type = 'math_inline'; dom.dataset.value = node.attrs.value; dom.className = 'meki-inline-math'; dom.contentEditable = 'false'; dom.textContent = node.attrs.value;
       return { dom, ignoreMutation: () => true, update: next => { if (next.type.name !== 'math_inline') return false; dom.dataset.value = next.attrs.value; return true; } };
     } } },
     view: view => {
-      this.view = view; this.signature = ''; this.style = document.createElement('style'); this.style.dataset.moyeMath = 'true'; document.head.append(this.style);
+      this.view = view; this.signature = ''; this.style = document.createElement('style'); this.style.dataset.mekiMath = 'true'; document.head.append(this.style);
       const observer = new MutationObserver(() => this.schedule()); observer.observe(view.dom, { childList: true, subtree: true }); this.schedule();
       return { update: next => { this.view = next; this.schedule(); }, destroy: () => { observer.disconnect(); if (this.frame) cancelAnimationFrame(this.frame); this.frame = 0; this.style?.remove(); this.view = undefined; } };
     },

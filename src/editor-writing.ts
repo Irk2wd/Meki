@@ -3,7 +3,7 @@ import { Plugin } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet, type EditorView as ProseView } from '@milkdown/kit/prose/view';
 import { StateEffect } from '@codemirror/state';
 import { Decoration as CodeDecoration, ViewPlugin, type DecorationSet as CodeDecorationSet, type EditorView as CodeView } from '@codemirror/view';
-import type { Settings } from '../shared/moye';
+import type { Settings } from '../shared/meki';
 import { countWords } from './search';
 
 const refreshWriting = StateEffect.define<null>();
@@ -19,7 +19,7 @@ export class EditorWriting {
     document.body.classList.toggle('paragraph-focus-mode', settings.paragraphFocus);
     const view = this.visual(); view.dom.spellcheck = settings.spellcheck;
     this.source().contentDOM.spellcheck = settings.spellcheck;
-    view.dispatch(view.state.tr.setMeta('moye-writing', true).setMeta('addToHistory', false));
+    view.dispatch(view.state.tr.setMeta('meki-writing', true).setMeta('addToHistory', false));
     this.source().dispatch({ effects: refreshWriting.of(null) }); this.updated();
   }
   updated() {
@@ -58,7 +58,7 @@ export class EditorWriting {
       for (let depth = $head.depth; depth > 0; depth--) if ($head.node(depth).isTextblock) { active = $head.before(depth); break; }
       const decorations: Decoration[] = [];
       state.doc.descendants((node, pos) => {
-        if (node.isTextblock || node.isBlock && node.isAtom) { decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: pos === active ? 'moye-current-paragraph' : 'moye-inactive-paragraph' })); return false; }
+        if (node.isTextblock || node.isBlock && node.isAtom) { decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: pos === active ? 'meki-current-paragraph' : 'meki-inactive-paragraph' })); return false; }
       });
       return DecorationSet.create(state.doc, decorations);
     } },
@@ -96,7 +96,7 @@ export class EditorWriting {
       const ranges = [];
       for (const visible of this.view.visibleRanges) {
         for (let number = doc.lineAt(visible.from).number; number <= doc.lineAt(visible.to).number; number++) {
-          const line = doc.line(number); ranges.push(CodeDecoration.line({ class: number >= from && number <= to ? 'moye-current-paragraph' : 'moye-inactive-paragraph' }).range(line.from));
+          const line = doc.line(number); ranges.push(CodeDecoration.line({ class: number >= from && number <= to ? 'meki-current-paragraph' : 'meki-inactive-paragraph' }).range(line.from));
         }
       }
       this.decorations = CodeDecoration.set(ranges, true);

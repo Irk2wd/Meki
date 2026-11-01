@@ -1,7 +1,7 @@
 {
   "name": "meki",
   "productName": "Meki",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A quiet, local-first Markdown writing app for Windows and macOS.",
   "private": true,
   "type": "module",

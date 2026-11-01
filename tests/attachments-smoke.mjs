@@ -18,13 +18,13 @@ await fs.writeFile(picture, png); await fs.writeFile(doc, original); await fs.wr
 // Keep the initial unsaved fixture stable while testing preview/cancel. Auto-save
 // remains enabled so the later attachment pause is still checked explicitly.
 await fs.writeFile(path.join(profile, 'state.json'), JSON.stringify({ workspaceRoot: folder, settings: { autoSave: true, autoSaveInterval: 600, autoSaveOnBlur: false } }));
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: profile, MOYE_TEST_DISCARD: 'cancel', MOYE_TEST_CONFLICT: 'cancel' }; delete env.ELECTRON_RUN_AS_NODE;
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: profile, MEKI_TEST_DISCARD: 'cancel', MEKI_TEST_CONFLICT: 'cancel' }; delete env.ELECTRON_RUN_AS_NODE;
 const modifier = process.platform === 'darwin' ? 'Meta' : 'Control', end = process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End', redo = process.platform === 'darwin' ? 'Meta+Shift+z' : 'Control+y';
 const results = [], errors = []; let app, page;
 function pass(message) { results.push(message); console.log(`PASS ${message}`); }
 async function idle() { await page.waitForFunction(() => !document.body.classList.contains('is-busy')); }
 async function action(name) { await page.evaluate(name => document.querySelector(`[data-action="${name}"]`).click(), name); await idle(); }
-async function open(file) { await app.evaluate((_electron, file) => { process.env.MOYE_TEST_OPEN_PATH = file; }, file); await action('open'); }
+async function open(file) { await app.evaluate((_electron, file) => { process.env.MEKI_TEST_OPEN_PATH = file; }, file); await action('open'); }
 async function tab(file) { await page.locator('.document-tab [role="tab"]').evaluateAll((nodes, file) => nodes.find(node => node.title === file).click(), file); await idle(); }
 async function source() { await page.locator('[data-mode="source"]').click(); return page.locator('#source-editor .cm-content'); }
 async function poll(check, timeout = 12000) { const deadline = Date.now() + timeout; while (Date.now() < deadline) { const value = await check(); if (value) return value; await new Promise(resolve => setTimeout(resolve, 80)); } throw Error('Timed out waiting for attachment state'); }
@@ -38,7 +38,7 @@ async function organizer(native = false) {
 async function cancel() { await page.locator('#attachment-dialog .dialog-actions [value="cancel"]').click(); await idle(); }
 async function confirm() { await page.locator('#attachment-confirm').click(); await idle(); }
 async function launch(args = []) {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? args : [root, ...args], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? args : [root, ...args], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].show()); await page.waitForSelector('#shell[data-ready="true"]');
 }
@@ -50,7 +50,7 @@ try {
   const before = await content(doc, text => text.includes('尚未保存的正文'));
   await organizer(); assert.match(await page.locator('#attachment-summary').innerText(), /复制 2 张/); assert.match(await page.locator('#attachment-details').innerText(), /1 个网络地址跳过/);
   assert.equal(await page.locator('#attachment-target').innerText(), target); assert.equal(await page.locator('#document-scroll').evaluate(node => Boolean(node.closest('[inert]'))), true);
-  const tabs = await page.locator('.document-tab').count(); await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('moye:command', 'new')); assert.equal(await page.locator('.document-tab').count(), tabs);
+  const tabs = await page.locator('.document-tab').count(); await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('meki:command', 'new')); assert.equal(await page.locator('.document-tab').count(), tabs);
   await page.screenshot({ path: path.join(run, 'preview.png'), animations: 'disabled' }); await cancel();
   await assert.rejects(fs.stat(target), { code: 'ENOENT' }); assert.equal(await fs.readFile(doc, 'utf8'), original); assert.equal(await content(doc, text => text === before), before);
   pass('preview uses unsaved content, deduplicates images, shows destination and cancels without mutation; modal blocks document switches');
@@ -66,7 +66,7 @@ try {
   assert.ok(organized.includes('![A **alt**](<')); assert.ok(organized.includes('?size=1#crop> "Title")')); assert.ok(organized.includes('[普通链接][shared]')); assert.ok(organized.includes('[shared]: <images/原 图.png> "Shared title"'));
   assert.ok(organized.includes('width="240" height="160" alt="尺寸" title="Keep"')); assert.ok(organized.includes('![code](missing.png)')); assert.ok(organized.includes('![网络](https://example.invalid/remote.png)')); assert.ok(organized.includes('尚未保存的正文'));
   assert.match(await page.locator('#document-state').innerText(), /图片引用已整理/); assert.equal((await savedSession()).documents.find(item => item.path === doc).paused, 'attachments');
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('moye:command', 'autosave')); await idle(); assert.equal(await fs.readFile(doc, 'utf8'), original);
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('meki:command', 'autosave')); await idle(); assert.equal(await fs.readFile(doc, 'utf8'), original);
   pass('confirmation copies unique images and changes only image tokens, retaining alt/title/dimensions/code/links; autosave stays paused');
 
   await sourceEditor.click(); await page.keyboard.press(`${modifier}+z`); assert.equal(await content(doc, text => text === before), before); assert.equal((await fs.readdir(target)).length, 2);
@@ -88,7 +88,7 @@ try {
   pass('visual editing and rich undo preserve sized image dimensions and descriptions without deleting copied files');
 
   await action('new'); await page.evaluate(() => document.querySelector('[data-action="organize-attachments"]').click()); await idle(); assert.match(await page.locator('#toast').innerText(), /先保存/);
-  const denied = await page.evaluate(async () => { const checks = []; for (const input of [{ documentPath: '/unauthorized.md', revision: 'a'.repeat(64), sources: [] }, { documentPath: null, revision: null, sources: [] }]) { try { await window.moye.prepareAttachments(input); checks.push(false); } catch { checks.push(true); } } try { await window.moye.commitAttachments('not-a-plan'); checks.push(false); } catch { checks.push(true); } return checks; });
+  const denied = await page.evaluate(async () => { const checks = []; for (const input of [{ documentPath: '/unauthorized.md', revision: 'a'.repeat(64), sources: [] }, { documentPath: null, revision: null, sources: [] }]) { try { await window.meki.prepareAttachments(input); checks.push(false); } catch { checks.push(true); } } try { await window.meki.commitAttachments('not-a-plan'); checks.push(false); } catch { checks.push(true); } return checks; });
   assert.deepEqual(denied, [true, true, true]); assert.deepEqual(errors, []); pass('unsaved documents and invalid IPC capabilities are rejected; no renderer exceptions');
 } finally {
   if (page) { await page.screenshot({ path: path.join(run, 'last-state.png'), animations: 'disabled', timeout: 5000 }).catch(() => {}); await fs.writeFile(path.join(run, 'last-dom.html'), await page.content().catch(() => '')); }

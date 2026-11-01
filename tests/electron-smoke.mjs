@@ -17,13 +17,13 @@ const pdfPath = path.join(run, 'export.pdf');
 const original = '\uFEFF---\r\ntitle: 私人文稿\r\n---\r\n\r\n# 测试文稿\r\n\r\n中文与 Unicode：αβγ。\r\n\r\nInline $E=mc^2$ and $$x+1$$ formula.\r\n\r\n$$\r\n\\int_0^1 x^2\\,dx = \\frac{1}{3}\r\n$$\r\n\r\n- [ ] 待办\r\n\r\n| A | B |\r\n|---|---|\r\n| 1 | 2 |\r\n';
 await fs.writeFile(documentPath, original);
 await fs.copyFile(path.join(root, 'assets', 'icon.png'), path.join(run, 'test-image.png'));
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: path.join(run, 'profile'), MOYE_TEST_OPEN_PATH: documentPath, MOYE_TEST_SAVE_PATH: savePath, MOYE_TEST_FOLDER_PATH: run, MOYE_TEST_EXPORT_HTML_PATH: htmlPath, MOYE_TEST_EXPORT_PDF_PATH: pdfPath, MOYE_TEST_CONFLICT: 'cancel', MOYE_TEST_DISCARD: 'discard' };
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: path.join(run, 'profile'), MEKI_TEST_OPEN_PATH: documentPath, MEKI_TEST_SAVE_PATH: savePath, MEKI_TEST_FOLDER_PATH: run, MEKI_TEST_EXPORT_HTML_PATH: htmlPath, MEKI_TEST_EXPORT_PDF_PATH: pdfPath, MEKI_TEST_CONFLICT: 'cancel', MEKI_TEST_DISCARD: 'discard' };
 delete env.ELECTRON_RUN_AS_NODE;
 let app;
 const results = [], errors = [];
 const record = (name) => { results.push(name); console.log(`PASS ${name}`); };
 async function launch(args = []) {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? args : [root, ...args], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? args : [root, ...args], env, timeout: 30000 });
   const page = await app.firstWindow();
   // A real compositor frame is needed for requestAnimationFrame and lazy formula views.
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); });
@@ -47,8 +47,8 @@ async function exit() { if (app) { await app.evaluate(({ app }) => app.exit(0)).
 try {
   let page = await launch();
   await page.locator('.ProseMirror h1').waitFor();
-  await page.waitForFunction(() => document.querySelectorAll('.ProseMirror .moye-math mjx-container[jax="SVG"]').length >= 1);
-  assert.equal(await page.locator('.ProseMirror .moye-math-error').count(), 0);
+  await page.waitForFunction(() => document.querySelectorAll('.ProseMirror .meki-math mjx-container[jax="SVG"]').length >= 1);
+  assert.equal(await page.locator('.ProseMirror .meki-math-error').count(), 0);
   await page.screenshot({ path: path.join(run, 'paper.png'), animations: 'disabled' });
   record('welcome, rich editor and formulas render');
   await click(page, 'style');
@@ -66,16 +66,16 @@ try {
   record('themes and typography controls');
   await click(page, 'open');
   assert.equal(await page.locator('#document-name').textContent(), path.basename(documentPath));
-  await page.waitForFunction(() => document.querySelectorAll('.ProseMirror .moye-math mjx-container[jax="SVG"]').length >= 3);
-  assert.equal(await page.locator('.ProseMirror .moye-math-error').count(), 0);
-  const formulaBlock = page.locator('.milkdown-code-block').filter({ has: page.locator('.moye-math mjx-container[jax="SVG"]') }).first();
+  await page.waitForFunction(() => document.querySelectorAll('.ProseMirror .meki-math mjx-container[jax="SVG"]').length >= 3);
+  assert.equal(await page.locator('.ProseMirror .meki-math-error').count(), 0);
+  const formulaBlock = page.locator('.milkdown-code-block').filter({ has: page.locator('.meki-math mjx-container[jax="SVG"]') }).first();
   assert.equal(await formulaBlock.locator('.codemirror-host').isVisible(), false);
   await formulaBlock.locator('.preview').click();
   assert.equal(await formulaBlock.locator('.codemirror-host').isVisible(), true);
   await page.emulateMedia({ media: 'print' });
   assert.equal(await formulaBlock.locator('.codemirror-host').isVisible(), false);
   assert.equal(await formulaBlock.locator('.preview-label').isVisible(), false);
-  assert.equal(await formulaBlock.locator('.moye-math mjx-container[jax="SVG"] svg').isVisible(), true);
+  assert.equal(await formulaBlock.locator('.meki-math mjx-container[jax="SVG"] svg').isVisible(), true);
   await page.emulateMedia({ media: 'screen' });
   assert.equal(await formulaBlock.locator('.codemirror-host').isVisible(), true);
   await formulaBlock.locator('.preview-toggle-button').click();
@@ -110,8 +110,8 @@ try {
   record('rich edit immediately saved, metadata retained');
   await click(page, 'math');
   await page.locator('#math-input').fill('\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}');
-  await page.locator('#math-preview .moye-math mjx-container[jax="SVG"] svg').waitFor();
-  assert.equal(await page.locator('#math-preview .moye-math-error').count(), 0);
+  await page.locator('#math-preview .meki-math mjx-container[jax="SVG"] svg').waitFor();
+  assert.equal(await page.locator('#math-preview .meki-math-error').count(), 0);
   await click(page, 'insert-math'); await click(page, 'save');
   await pollFile(documentPath, b => b.toString().includes('\\sum_{i=1}^{n}'));
   record('formula dialog inserts editable TeX');
@@ -119,11 +119,11 @@ try {
   const html = (await pollFile(htmlPath, b => b.length > 1000)).toString();
   const exportedMath = await page.evaluate(html => {
     const exported = new DOMParser().parseFromString(html, 'text/html');
-    const equations = [...exported.querySelectorAll('.moye-math mjx-container[jax="SVG"]')];
+    const equations = [...exported.querySelectorAll('.meki-math mjx-container[jax="SVG"]')];
     return {
       count: equations.length,
       embeddedGlyphs: equations.every(equation => Boolean(equation.querySelector('svg path[d]'))),
-      errors: exported.querySelectorAll('.moye-math-error').length,
+      errors: exported.querySelectorAll('.meki-math-error').length,
     };
   }, html);
   assert.ok(exportedMath.count >= 3);
@@ -152,7 +152,7 @@ try {
   record('empty YAML survives visual editing');
   await rich.locator(':scope > p').last().click(); await page.keyboard.press(documentEndKey); await page.keyboard.insertText('未保存恢复内容');
   await page.waitForFunction(() => document.querySelector('.ProseMirror')?.textContent.includes('未保存恢复内容'));
-  await pollFile(path.join(env.MOYE_USER_DATA, 'windows-v1.json'), bytes => JSON.parse(bytes.toString('utf8')).windows.some(window => window.session.documents.some(document => document.dirty && document.content.includes('未保存恢复内容'))));
+  await pollFile(path.join(env.MEKI_USER_DATA, 'windows-v1.json'), bytes => JSON.parse(bytes.toString('utf8')).windows.some(window => window.session.documents.some(document => document.dirty && document.content.includes('未保存恢复内容'))));
   await exit();
   page = await launch();
   assert.equal(await page.locator('#recovery-banner').isVisible(), true);

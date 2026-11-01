@@ -10,11 +10,11 @@ const run = path.join(root, 'test-results', `code-clipboard-${Date.now()}`); awa
 const documentPath = path.join(run, '代码文稿.md'), htmlPath = path.join(run, 'code.html');
 const original = '\uFEFF---\r\ntitle: 保留 YAML\r\n---\r\n\r\n# Code\r\n\r\n```\r\n\tfirst code line\r\n```\r\n\r\n' + 'Paragraph for scrolling.\r\n\r\n'.repeat(65) + '```javascript\r\nconst longLine = "' + '中文 '.repeat(80) + '";\r\n```\r\n';
 await fs.writeFile(documentPath, original);
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: path.join(run, 'profile'), MOYE_TEST_OPEN_PATH: documentPath, MOYE_TEST_EXPORT_HTML_PATH: htmlPath, MOYE_TEST_DISCARD: 'discard', MOYE_TEST_CLIPBOARD_DELAY: '500' }; delete env.ELECTRON_RUN_AS_NODE;
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: path.join(run, 'profile'), MEKI_TEST_OPEN_PATH: documentPath, MEKI_TEST_EXPORT_HTML_PATH: htmlPath, MEKI_TEST_DISCARD: 'discard', MEKI_TEST_CLIPBOARD_DELAY: '500' }; delete env.ELECTRON_RUN_AS_NODE;
 let app, page; const results = [], errors = [];
 const record = name => { results.push(name); console.log(`PASS ${name}`); };
 async function launch() {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? ['--open', documentPath] : [root, '--open', documentPath], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', documentPath] : [root, '--open', documentPath], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.stack || error.message));
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); });
   await page.waitForSelector('#shell[data-ready="true"]', { timeout: 30000 });
@@ -90,7 +90,7 @@ try {
   assert.equal(await saveText(), original);
   await options({ wrap: true, 'indent-size': 4, 'tab-size': 6, 'auto-indent': false, 'language-mode': 'default', 'default-language': 'python' });
   await options({ 'indent-size': 3.5, 'indent-kind': 'tabs' });
-  await page.waitForFunction(async () => (await window.moye.boot()).settings.codeIndentSize === 4);
+  await page.waitForFunction(async () => (await window.meki.boot()).settings.codeIndentSize === 4);
   await options({ 'indent-kind': 'spaces' });
   assert.equal(await saveText(), original);
   assert.equal(await page.locator('.milkdown-code-block .language-button').first().innerText(), 'Text');
@@ -107,7 +107,7 @@ try {
   async function codeContrast() {
     return page.locator('.milkdown-code-block').last().evaluate(block => {
       const luminance = color => { const rgb = color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => value / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4); return .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2]; };
-      return [...block.querySelectorAll('[class*="moye-code-"]')].map(span => {
+      return [...block.querySelectorAll('[class*="meki-code-"]')].map(span => {
         const lineBackground = getComputedStyle(span.closest('.cm-line')).backgroundColor;
         const background = lineBackground === 'rgba(0, 0, 0, 0)' ? getComputedStyle(block.querySelector('.cm-editor')).backgroundColor : lineBackground;
         const light = luminance(getComputedStyle(span).color), dark = luminance(background); return (Math.max(light, dark) + .05) / (Math.min(light, dark) + .05);
@@ -116,7 +116,7 @@ try {
   }
   for (const theme of ['paper', 'linen', 'night']) {
     await action('style'); await page.locator(`button[data-theme="${theme}"]`).click(); await action('style');
-    await lastCode.locator('.moye-code-string').waitFor();
+    await lastCode.locator('.meki-code-string').waitFor();
     const contrasts = await codeContrast(); assert.ok(contrasts.length >= 2 && contrasts.every(value => value >= 4.5), `${theme}: ${contrasts}`);
     if (theme === 'night') await page.screenshot({ path: path.join(run, 'night-code.png') });
   }
@@ -140,7 +140,7 @@ try {
   await page.waitForFunction(() => document.querySelector('.milkdown-code-block .language-button')?.textContent.includes('python'));
   await page.locator('.milkdown-code-block .language-button').click(); await page.locator('.milkdown-code-block .search-input').fill('rust');
   await page.locator('.milkdown-code-block [data-language="Rust"]').click();
-  await page.waitForFunction(async () => (await window.moye.boot()).settings.codeLastLanguage.toLowerCase() === 'rust');
+  await page.waitForFunction(async () => (await window.meki.boot()).settings.codeLastLanguage.toLowerCase() === 'rust');
   await options({ 'language-mode': 'last' });
   await visual('Another code block\n'); await page.locator('.ProseMirror p').click(); await page.locator('[data-format="code"]').click();
   await page.waitForFunction(() => document.querySelector('.milkdown-code-block .language-button')?.textContent.includes('Rust'));
@@ -227,7 +227,7 @@ try {
   await visual('```javascript\n\tconst text = "' + 'veryLongIdentifier'.repeat(40) + '";\n```\n'); await action('export-html');
   for (let attempt = 0; attempt < 100 && !(await fs.stat(htmlPath).catch(() => null))?.size; attempt++) await page.waitForTimeout(50);
   const exportWindow = app.waitForEvent('window');
-  await app.evaluate(async ({ BrowserWindow }, file) => { const window = new BrowserWindow({ show: false, webPreferences: { partition: 'moye-test-code-export', nodeIntegration: false, contextIsolation: true, sandbox: true } }); await window.loadFile(file); }, htmlPath);
+  await app.evaluate(async ({ BrowserWindow }, file) => { const window = new BrowserWindow({ show: false, webPreferences: { partition: 'meki-test-code-export', nodeIntegration: false, contextIsolation: true, sandbox: true } }); await window.loadFile(file); }, htmlPath);
   const exported = await exportWindow;
   assert.equal(await exported.locator('pre code').evaluate(node => getComputedStyle(node).whiteSpace), 'pre');
   assert.equal(await exported.locator('pre code').evaluate(node => getComputedStyle(node).tabSize), '6');

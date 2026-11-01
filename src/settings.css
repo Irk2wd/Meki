@@ -17,4 +17,4 @@ html[lang="en"] .sidebar-bottom .icon-button { grid-column:3; }
 #custom-css { width:100%; min-height:180px; max-height:48vh; resize:vertical; border:1px solid var(--border); border-radius:6px; padding:13px; font:12px/1.7 var(--mono); background:var(--bg); color:var(--text); tab-size:2; }
 #theme-feedback { font-size:11px; line-height:1.7; color:var(--soft); min-height:18px; margin:10px 0 16px; overflow-wrap:anywhere; }
 .secondary-button { border:1px solid var(--border); border-radius:5px; padding:8px 12px; font-size:11px; margin-right:12px; }
-.math-preview .moye-math { max-width:100%; }
+.math-preview .meki-math { max-width:100%; }

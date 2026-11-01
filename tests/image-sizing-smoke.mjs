@@ -13,11 +13,11 @@ await sharp({ create: { width: 400, height: 300, channels: 3, background: '#c751
 await sharp({ create: { width: 100, height: 60, channels: 3, background: '#386cb0' } }).png().toFile(path.join(run, 'normal.png'));
 const original = '\uFEFF' + ['---', 'title: Original metadata', '---', '', '# 图片尺寸', '', '![说明 & words](photo.png "Original title")', '', '![普通图片](normal.png "Keep title")', '', '<img src="photo.png" alt="限定图片" title="Explicit" width="180" height="90">', '', '<img src="normal.png" width="40" onerror="window.__imageExecuted=true">', '', 'After images.', ''].join('\r\n');
 await fs.writeFile(documentPath, original);
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: path.join(run, 'profile'), MOYE_TEST_OPEN_PATH: documentPath, MOYE_TEST_EXPORT_HTML_PATH: htmlPath, MOYE_TEST_EXPORT_PDF_PATH: pdfPath, MOYE_TEST_DISCARD: 'discard' }; delete env.ELECTRON_RUN_AS_NODE;
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: path.join(run, 'profile'), MEKI_TEST_OPEN_PATH: documentPath, MEKI_TEST_EXPORT_HTML_PATH: htmlPath, MEKI_TEST_EXPORT_PDF_PATH: pdfPath, MEKI_TEST_DISCARD: 'discard' }; delete env.ELECTRON_RUN_AS_NODE;
 const results = [], errors = []; let app, page;
 const pass = name => { results.push(name); console.log(`PASS ${name}`); };
 async function launch() {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? ['--open', documentPath] : [root, '--open', documentPath], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', documentPath] : [root, '--open', documentPath], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.stack || error.message));
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); });
   await page.waitForSelector('#shell[data-ready="true"]', { timeout: 30000 });
@@ -36,7 +36,7 @@ try {
   assert.equal(await images().nth(2).getAttribute('width'), '180');
   assert.ok(Math.abs((await images().nth(2).boundingBox()).width - 180) < 1);
   assert.ok(Math.abs((await images().nth(2).boundingBox()).height - 90) < 1);
-  assert.equal(await page.locator('.moye-raw-html').count(), 1); assert.equal(await page.evaluate(() => window.__imageExecuted), undefined);
+  assert.equal(await page.locator('.meki-raw-html').count(), 1); assert.equal(await page.evaluate(() => window.__imageExecuted), undefined);
   assert.equal(await save(), original);
   pass('safe standalone image dimensions render while unsupported HTML stays inert and untouched bytes are preserved');
 
@@ -52,7 +52,7 @@ try {
 
   await command('undo'); assert.equal(await images().first().getAttribute('width'), null); assert.ok((await save()).includes('![说明 & words](photo.png "Original title")'));
   await command('redo'); await sized(width); await save();
-  await images().first().locator('..').hover(); await page.locator('.moye-image-reset').first().click(); assert.equal(await images().first().getAttribute('width'), null);
+  await images().first().locator('..').hover(); await page.locator('.meki-image-reset').first().click(); assert.equal(await images().first().getAttribute('width'), null);
   assert.ok((await save()).includes('![说明 & words](photo.png "Original title")'));
   await command('undo'); await sized(width); await save();
   pass('resizing and restoring original dimensions are individual undo steps and reset returns to standard Markdown syntax');

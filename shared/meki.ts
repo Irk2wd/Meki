@@ -1,5 +1,5 @@
 import type { ExportRequest, ExportTools, ImportedDocument, DiagramSaveRequest } from './export';
-import type { UpdateState, UpdateCredentials } from './updates';
+import type { UpdateState } from './updates';
 export interface DocumentFile {
   path: string | null;
   name: string;
@@ -91,12 +91,11 @@ export interface BootState {
   workspace: Workspace | null;
   session?: RestoredSession | null;
 }
-export interface MoyeAPI {
+export interface MekiAPI {
   updateState(): Promise<UpdateState>;
   checkUpdate(): Promise<UpdateState>;
   downloadUpdate(): Promise<UpdateState>;
   cancelUpdate(): Promise<UpdateState>;
-  updateCredentials(input: UpdateCredentials): Promise<UpdateState>;
   applyUpdate(): Promise<void>;
   onUpdate(callback: (state: UpdateState) => void): () => void;
   boot(): Promise<BootState>;
@@ -164,4 +163,4 @@ export interface MoyeAPI {
   openExternal(url: string): Promise<void>;
   onCommand(callback: (command: string, payload?: unknown) => void): () => void;
 }
-declare global { interface Window { moye: MoyeAPI } }
+declare global { interface Window { meki: MekiAPI } }

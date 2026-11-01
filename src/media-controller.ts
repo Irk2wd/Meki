@@ -1,5 +1,5 @@
 import { t } from '../electron/i18n.mjs';
-import type { DocumentFile, ImageInput } from '../shared/moye';
+import type { DocumentFile, ImageInput } from '../shared/meki';
 import type { WritingEditor } from './editor';
 const extensions = /\.(png|jpe?g|gif|webp|avif|bmp|ico|svg)$/i;
 const mimeExtension: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/avif': 'avif', 'image/bmp': 'bmp', 'image/x-icon': 'ico', 'image/svg+xml': 'svg' };
@@ -37,7 +37,7 @@ export class MediaController {
     const observer = new MutationObserver(() => editor.actions.syncImageAlt()); observer.observe(visual, { childList: true, subtree: true });
     return () => observer.disconnect();
   }
-  choose() { return this.add(() => window.moye.chooseImages()); }
+  choose() { return this.add(() => window.meki.chooseImages()); }
   private async add(load: () => Promise<ImageInput[] | null>, coordinates?: { x: number; y: number }) {
     if (this.host.blocked()) return;
     const point = this.editor.actions.captureImages(coordinates), id = this.host.documentId();
@@ -59,7 +59,7 @@ export class MediaController {
         return;
       }
       if (id !== this.host.documentId() || !this.editor.actions.isCurrent(point)) throw new Error(t("文稿已改变，请重新添加图片。"));
-      const paths = await window.moye.saveAttachments({ documentPath: this.host.current().path!, images });
+      const paths = await window.meki.saveAttachments({ documentPath: this.host.current().path!, images });
       if (id !== this.host.documentId() || !this.editor.actions.isCurrent(point)) throw new Error(t("文稿已改变，图片已保存在附件目录。"));
       this.editor.actions.images(paths.map((src, index) => ({ src, alt: images[index].name.replace(/\.[^.]+$/, '') })), point);
       this.host.notify(uploadError ? t("{0} 已改为本地附件，添加 {1} 张图片。", uploadError, paths.length) : t("已添加 {0} 张图片", paths.length), Boolean(uploadError));
@@ -79,7 +79,7 @@ export class MediaController {
       }
       if (!this.host.current().path && !(await this.host.save())) return;
       if (id !== this.host.documentId() || !this.editor.actions.isCurrent(point)) return;
-      const [src] = await window.moye.saveAttachments({ documentPath: this.host.current().path!, images });
+      const [src] = await window.meki.saveAttachments({ documentPath: this.host.current().path!, images });
       if (id === this.host.documentId() && this.editor.actions.isCurrent(point)) result = src;
     });
     return result;

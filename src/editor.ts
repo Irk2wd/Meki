@@ -34,7 +34,7 @@ import { sizedImageBlockView } from './editor-images';
 import { imageDimension, imageTag, parseImageTag, safeImageSource } from './image-syntax';
 import { applyMarkdownEdits, type MarkdownEdit } from './attachment-markdown';
 import { FrameBlockService, blockHandlePosition, blockInsertMenu } from './editor-block-handle';
-import type { Settings } from '../shared/moye';
+import type { Settings } from '../shared/meki';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/classic.css';
 import 'katex/dist/katex.min.css';
@@ -92,7 +92,7 @@ export class WritingEditor {
         [Crepe.Feature.Placeholder]: { text: t("写下这一页的第一句话…") },
         [Crepe.Feature.CodeMirror]: { languages, theme: this.code.theme, extensions: [this.code.extension, this.search.codeExtension], previewOnlyByDefault: true, previewLabel: t("预览"), previewLoading: t("渲染中…"), previewToggleText: preview => preview ? t("编辑源码") : t("收起源码"), copyText: t("复制"), searchPlaceholder: t("搜索语言"), noResultText: t("没有匹配的语言") },
         [Crepe.Feature.ImageBlock]: { onUpload: upload, inlineOnUpload: upload, blockOnUpload: upload,
-          proxyDomURL: (url) => window.moye.assetUrl(url, getPath()),
+          proxyDomURL: (url) => window.meki.assetUrl(url, getPath()),
           inlineUploadPlaceholderText: t("图片地址"), blockUploadPlaceholderText: t("图片地址或上传本地图片"), blockCaptionPlaceholderText: t("添加图片说明") },
         [Crepe.Feature.LinkTooltip]: { inputPlaceholder: t("粘贴链接地址") },
         [Crepe.Feature.BlockEdit]: {
@@ -117,13 +117,13 @@ export class WritingEditor {
           return { src, alt: dom.getAttribute('alt') || '', caption: dom.getAttribute('title') || dom.getAttribute('caption') || '', ratio: 1, width: imageDimension(Number(dom.getAttribute('width'))), height: imageDimension(Number(dom.getAttribute('height'))) };
         } }],
         toDOM: node => ['img', { 'data-type': 'image-block', src: node.attrs.src, alt: node.attrs.alt, title: node.attrs.caption || null, width: imageDimension(node.attrs.width), height: imageDimension(node.attrs.height) }],
-        parseMarkdown: { match: node => node.type === 'image-block' || node.type === 'moyeImage', runner: (state, node, type) => {
-          const image = node.type === 'moyeImage' ? parseImageTag(String(node.value))! : null;
+        parseMarkdown: { match: node => node.type === 'image-block' || node.type === 'mekiImage', runner: (state, node, type) => {
+          const image = node.type === 'mekiImage' ? parseImageTag(String(node.value))! : null;
           state.addNode(type, { src: image?.src ?? node.url, caption: image?.title ?? node.title ?? '', alt: image?.alt ?? node.alt ?? '', ratio: 1, width: image?.width ?? null, height: image?.height ?? null });
         } },
         toMarkdown: { match: node => node.type.name === 'image-block', runner: (state, node) => {
           const image = { src: node.attrs.src, alt: node.attrs.alt, title: node.attrs.caption || null, width: imageDimension(node.attrs.width), height: imageDimension(node.attrs.height) };
-          if (image.width || image.height) state.addNode('moyeImage', undefined, imageTag(image));
+          if (image.width || image.height) state.addNode('mekiImage', undefined, imageTag(image));
           else state.openNode('paragraph').addNode('image', undefined, undefined, { title: image.title, url: image.src, alt: image.alt }).closeNode();
         } },
       }));

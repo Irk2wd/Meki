@@ -15,7 +15,7 @@ const profile = path.join(run, 'profile'), temporary = path.join(run, 'temp'), d
 const indexPath = path.join(profile, 'export-presets-v1', 'index.json');
 const fixture = '# First chapter\n\nFirst chapter body remains in the export.\n\n# Second chapter\n\nSecond chapter body remains in the export.\n';
 await fs.mkdir(temporary); await fs.writeFile(documentPath, fixture);
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: profile, MOYE_TEST_OPEN_PATH: documentPath, MOYE_TEST_DISCARD: 'discard', TEMP: temporary, TMP: temporary };
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: profile, MEKI_TEST_OPEN_PATH: documentPath, MEKI_TEST_DISCARD: 'discard', TEMP: temporary, TMP: temporary };
 delete env.ELECTRON_RUN_AS_NODE;
 const results = [], errors = [], skipped = [], tracked = new Set(); let app, page;
 function pass(message) { results.push(message); console.log(`PASS ${message}`); }
@@ -30,7 +30,7 @@ async function ready(target) {
   await target.waitForSelector('#shell[data-ready="true"]'); return target;
 }
 async function launch() {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? [] : [root], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? [] : [root], env, timeout: 30000 });
   page = await ready(await app.firstWindow());
   await (await app.browserWindow(page)).evaluate(win => { win.show(); win.focus(); });
   if (!(await page.locator('.ProseMirror').innerText()).includes('First chapter body')) {
@@ -47,7 +47,7 @@ async function action(target, name) {
   await target.waitForFunction(() => !document.body.classList.contains('is-busy'));
   await target.locator(`[data-action="${name}"]`).first().evaluate(node => node.click());
 }
-async function catalog(target = page) { return target.evaluate(() => window.moye.listExportPresets()); }
+async function catalog(target = page) { return target.evaluate(() => window.meki.listExportPresets()); }
 async function diskCatalog() { return JSON.parse(await fs.readFile(indexPath, 'utf8')); }
 async function openDialog(target = page, broken = false) {
   await action(target, 'export-options'); await target.locator('#export-dialog').waitFor({ state: 'visible' });
@@ -75,7 +75,7 @@ async function selectPreset(id, target = page) {
   await target.waitForFunction(() => !document.querySelector('#save-export-preset').disabled);
 }
 async function exportFile(kind, name, configure = async () => {}, { alreadyOpen = false } = {}) {
-  const file = path.join(run, name); await setting(`MOYE_TEST_EXPORT_${kind.replace('-', '_').toUpperCase()}_PATH`, file);
+  const file = path.join(run, name); await setting(`MEKI_TEST_EXPORT_${kind.replace('-', '_').toUpperCase()}_PATH`, file);
   if (!alreadyOpen) await openDialog();
   await page.locator('#export-kind').selectOption(kind); await configure();
   await page.locator('#confirm-export').click(); await page.locator('#export-dialog').waitFor({ state: 'hidden' });
@@ -84,14 +84,14 @@ async function exportFile(kind, name, configure = async () => {}, { alreadyOpen 
   return file;
 }
 async function editorAppearance() {
-  return page.evaluate(async () => ({ theme: document.documentElement.dataset.theme, size: getComputedStyle(document.querySelector('.ProseMirror')).fontSize, paragraph: getComputedStyle(document.querySelector('.ProseMirror p')).fontSize, settings: (await window.moye.boot()).settings }));
+  return page.evaluate(async () => ({ theme: document.documentElement.dataset.theme, size: getComputedStyle(document.querySelector('.ProseMirror')).fontSize, paragraph: getComputedStyle(document.querySelector('.ProseMirror p')).fontSize, settings: (await window.meki.boot()).settings }));
 }
 async function renderedHtml(file) {
   return app.evaluate(async ({ BrowserWindow }, file) => {
-    const viewer = new BrowserWindow({ show: false, webPreferences: { partition: `moye-test-export-${Date.now()}`, nodeIntegration: false, contextIsolation: true, sandbox: true } });
+    const viewer = new BrowserWindow({ show: false, webPreferences: { partition: `meki-test-export-${Date.now()}`, nodeIntegration: false, contextIsolation: true, sandbox: true } });
     try {
       await viewer.loadFile(file);
-      return await viewer.webContents.executeJavaScript(`({ body: getComputedStyle(document.body).backgroundColor, article: getComputedStyle(document.querySelector('.moye-document')).fontSize, paragraph: getComputedStyle(document.querySelector('.moye-document p')).fontSize, text: document.body.textContent })`);
+      return await viewer.webContents.executeJavaScript(`({ body: getComputedStyle(document.body).backgroundColor, article: getComputedStyle(document.querySelector('.meki-document')).fontSize, paragraph: getComputedStyle(document.querySelector('.meki-document p')).fontSize, text: document.body.textContent })`);
     } finally { viewer.destroy(); }
   }, file);
 }
@@ -114,7 +114,7 @@ async function makeReference(executable, output) {
     child.stdin.end('# TEMPLATE BODY MUST NOT APPEAR\n\nPrivate sample template text.\n');
   });
   const entries = zipEntries(await fs.readFile(output));
-  entries.set('word/styles.xml', Buffer.from(entries.get('word/styles.xml').toString().replace('</w:styles>', '<w:style w:type="paragraph" w:styleId="MoyeReferenceProof"><w:name w:val="Moye Reference Proof"/><w:rPr><w:color w:val="B24F98"/></w:rPr></w:style></w:styles>')));
+  entries.set('word/styles.xml', Buffer.from(entries.get('word/styles.xml').toString().replace('</w:styles>', '<w:style w:type="paragraph" w:styleId="MekiReferenceProof"><w:name w:val="Meki Reference Proof"/><w:rPr><w:color w:val="B24F98"/></w:rPr></w:style></w:styles>')));
   const archive = new (require('yazl').ZipFile)(), chunks = [];
   const completed = new Promise((resolve, reject) => { archive.outputStream.on('data', chunk => chunks.push(chunk)); archive.outputStream.on('error', reject); archive.outputStream.on('end', () => resolve(Buffer.concat(chunks))); });
   for (const [name, bytes] of entries) archive.addBuffer(bytes, name);
@@ -173,17 +173,17 @@ try {
   assert.deepEqual(await editorAppearance(), appearance);
   pass('two short H1 chapters stay on one PDF page by default and become exactly two nonblank pages when enabled');
 
-  const tools = await page.evaluate(() => window.moye.exportTools());
-  if (process.env.MOYE_REQUIRE_PANDOC === '1' || process.env.CI === 'true') assert.equal(tools.available, true, `Actual Pandoc required: ${tools.message}`);
+  const tools = await page.evaluate(() => window.meki.exportTools());
+  if (process.env.MEKI_REQUIRE_PANDOC === '1' || process.env.CI === 'true') assert.equal(tools.available, true, `Actual Pandoc required: ${tools.message}`);
   if (tools.available) {
     const reference = path.join(run, 'personal-reference.docx'); await makeReference(tools.path, reference); const referenceBytes = await fs.readFile(reference);
-    await setting('MOYE_TEST_REFERENCE_PATH', reference); await openDialog(); await page.locator('#export-kind').selectOption('docx'); await button('choose-word-reference');
+    await setting('MEKI_TEST_REFERENCE_PATH', reference); await openDialog(); await page.locator('#export-kind').selectOption('docx'); await button('choose-word-reference');
     assert.match(await page.locator('#export-feedback').innerText(), /已保存模板副本/);
     const referenceId = await page.locator('#word-reference').inputValue(), savedReference = (await catalog()).templates.find(item => item.id === referenceId);
     assert.equal(savedReference?.name, 'personal-reference.docx');
     const copy = path.join(profile, 'export-presets-v1', 'templates', `${referenceId}.docx`);
     assert.deepEqual(await fs.readFile(copy), referenceBytes); assert.deepEqual(await fs.readFile(reference), referenceBytes);
-    await setting('MOYE_TEST_REFERENCE_PATH', ''); await button('choose-word-reference');
+    await setting('MEKI_TEST_REFERENCE_PATH', ''); await button('choose-word-reference');
     assert.equal(await page.locator('#word-reference').inputValue(), referenceId); assert.equal((await catalog()).templates.length, 1);
     pass('the native Word template picker stores a controlled copy; cancel preserves the selected template');
 
@@ -199,7 +199,7 @@ try {
     const word = await exportFile('docx', 'template-export.docx', async () => {}, { alreadyOpen: true });
     const contents = zipEntries(await fs.readFile(word)), body = contents.get('word/document.xml').toString(), styles = contents.get('word/styles.xml').toString();
     assert.match(body, /First chapter body/); assert.match(body, /Second chapter body/); assert.doesNotMatch(body, /TEMPLATE BODY MUST NOT APPEAR|Private sample template text/);
-    assert.match(styles, /MoyeReferenceProof/); assert.match(styles, /B24F98/); assert.deepEqual(await fs.readFile(copy), referenceBytes);
+    assert.match(styles, /MekiReferenceProof/); assert.match(styles, /B24F98/); assert.deepEqual(await fs.readFile(copy), referenceBytes);
     pass('after source deletion and restart, the template copy supplies Word styles without inserting its sample body');
 
     await openDialog(); await selectPreset(wordPreset.id); await button('delete-export-preset'); await page.locator('#word-reference').selectOption(referenceId); await button('delete-word-reference');
@@ -210,7 +210,7 @@ try {
 
   await stop(); const damaged = '{damaged-export-presets'; await fs.writeFile(indexPath, damaged); await launch();
   await openDialog(page, true); await page.waitForFunction(() => document.querySelector('#export-feedback')?.textContent.includes('原数据已保留'));
-  assert.doesNotMatch(await page.locator('#export-feedback').innerText(), /invoking remote method|moye:list/);
+  assert.doesNotMatch(await page.locator('#export-feedback').innerText(), /invoking remote method|meki:list/);
   assert.match(await page.locator('.ProseMirror').innerText(), /First chapter body/);
   const basic = await exportFile('html', 'without-presets.html', async () => { await page.locator('#export-theme').selectOption('current'); await page.locator('#export-font-size').fill(''); }, { alreadyOpen: true });
   assert.match(await fs.readFile(basic, 'utf8'), /First chapter body/); assert.equal(await fs.readFile(indexPath, 'utf8'), damaged);

@@ -40,7 +40,7 @@ const IMAGE_TYPES = Object.freeze({
   '.webp': 'image/webp', '.avif': 'image/avif', '.bmp': 'image/bmp', '.ico': 'image/x-icon',
   '.svg': 'image/svg+xml',
 });
-const SKIP_DIRECTORIES = new Set(['.git', '.hg', '.svn', 'node_modules', '.moye', '.next', '.cache', '$RECYCLE.BIN', 'System Volume Information']);
+const SKIP_DIRECTORIES = new Set(['.git', '.hg', '.svn', 'node_modules', '.meki', '.next', '.cache', '$RECYCLE.BIN', 'System Volume Information']);
 
 class RevisionConflictError extends Error {
   constructor(filePath) {
@@ -200,7 +200,7 @@ async function readBytes(filePath, maxBytes = MAX_DOCUMENT_BYTES) {
 
 async function atomicWrite(filePath, bytes, options = {}) {
   filePath = validateAbsolutePath(filePath);
-  const temporary = path.join(path.dirname(filePath), `.moye-${process.pid}-${crypto.randomBytes(10).toString('hex')}.tmp`);
+  const temporary = path.join(path.dirname(filePath), `.meki-${process.pid}-${crypto.randomBytes(10).toString('hex')}.tmp`);
   let handle;
   try {
     handle = await fs.open(temporary, 'wx', options.mode ?? 0o600);

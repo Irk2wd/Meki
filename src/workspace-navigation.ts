@@ -1,4 +1,4 @@
-import type { WorkspaceEntry } from '../shared/moye';
+import type { WorkspaceEntry } from '../shared/meki';
 
 export interface NavigationRow { entry: WorkspaceEntry; level: number; position: number; size: number }
 export function navigationRows(entries: WorkspaceEntry[], root: string, collapsed: Set<string>, sort: string, filter = ''): NavigationRow[] {

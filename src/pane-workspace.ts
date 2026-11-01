@@ -1,7 +1,7 @@
 import { t, ht } from '../electron/i18n.mjs';
 import { WritingEditor } from './editor';
 import type { DocumentTab } from './document-tabs';
-import type { Settings } from '../shared/moye';
+import type { Settings } from '../shared/meki';
 import { groups, reconcileLayout, dockTab, mergeGroup, type PaneLayout, type PaneSplit, type PaneEdge } from '../electron/pane-layout.mjs';
 import './pane-workspace.css';
 
@@ -56,7 +56,7 @@ export class PaneWorkspace {
     const editor = new WritingEditor(visual, source, content => this.hooks.changed(tab, content), () => tab.document.path, message => this.hooks.notify(message, true));
     try { await editor.create(); editor.updateSettings(this.hooks.settings()); }
     catch (error) { await editor.destroy(); scroll.remove(); throw error; }
-    visual.querySelector('.ProseMirror')!.classList.add('moye-document');
+    visual.querySelector('.ProseMirror')!.classList.add('meki-document');
     this.views.set(tab.id, { tab, scroll, visual, source, editor, loaded: false, cleanup: this.hooks.created(editor, visual) });
   }
   restoreView(tab: DocumentTab) {

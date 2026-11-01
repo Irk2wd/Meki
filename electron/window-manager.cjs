@@ -20,7 +20,7 @@ class WindowManager {
     this.handlers.get(id).set(method, action);
     if (this.methods.has(method)) return;
     this.methods.add(method);
-    ipcMain.handle(`moye:${method}`, (event, ...args) => {
+    ipcMain.handle(`meki:${method}`, (event, ...args) => {
       const owner = [...this.controllers.values()].find(item => item.isTrustedRenderer(event));
       const handler = owner && this.handlers.get(owner.id)?.get(method);
       if (!handler) throw new Error('This request did not come from the Meki editor.');
@@ -38,7 +38,7 @@ class WindowManager {
     });
     ready.catch(() => {});
     try {
-      if (process.env.MOYE_TEST === '1' && process.env.MOYE_TEST_WINDOW_FAILURE === '1' && options.transferred) throw new Error(t("模拟新窗口启动失败，文稿仍在原窗口。"));
+      if (process.env.MEKI_TEST === '1' && process.env.MEKI_TEST_WINDOW_FAILURE === '1' && options.transferred) throw new Error(t("模拟新窗口启动失败，文稿仍在原窗口。"));
       const controller = await createEditorWindow({ store: this.store, lifecycle: this.sessions.facade(id), snapshots: this.snapshots, updates: this.updates, coordinator: this, id, ...options });
       await ready; this.refreshMenus(); return controller;
     } finally { clearTimeout(timer); this.readyWaiters.delete(id); }

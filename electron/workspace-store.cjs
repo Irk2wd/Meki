@@ -7,7 +7,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { validateAbsolutePath, isWithin, pathKey, isDocumentPath, MAX_DOCUMENT_BYTES } = require('./file-store.cjs');
 
-const EXCLUDED = new Set(['.git', '.hg', '.svn', 'node_modules', '.moye', '.next', '.cache', '$RECYCLE.BIN', 'System Volume Information']);
+const EXCLUDED = new Set(['.git', '.hg', '.svn', 'node_modules', '.meki', '.next', '.cache', '$RECYCLE.BIN', 'System Volume Information']);
 const MAX_TREE_FILES = 500;
 const MAX_TREE_NODES = 2000;
 const MAX_OPERATION_NODES = 5000;

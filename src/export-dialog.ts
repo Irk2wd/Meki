@@ -26,24 +26,24 @@ export class ExportDialog {
       this.field('export-preset-name').value = preset?.name || '';
       if (preset) this.apply(preset.options); void this.update();
     });
-    this.on('choose-pandoc', async () => { const status = await window.moye.choosePandoc(); this.field('#pandoc-status').textContent = status.message; });
+    this.on('choose-pandoc', async () => { const status = await window.meki.choosePandoc(); this.field('#pandoc-status').textContent = status.message; });
     this.on('save-export-preset', () => this.savePreset(false));
     this.on('save-as-export-preset', () => this.savePreset(true));
     this.on('delete-export-preset', async () => {
       const id = this.field('export-preset').value; if (!id) throw new Error(t("请先选择要删除的预设。"));
-      await window.moye.deleteExportPreset(id); await this.refresh(); this.field('export-preset-name').value = ''; this.feedback(t("已删除预设，当前导出设置保留。"));
+      await window.meki.deleteExportPreset(id); await this.refresh(); this.field('export-preset-name').value = ''; this.feedback(t("已删除预设，当前导出设置保留。"));
     });
     this.on('choose-word-reference', async () => {
-      const template = await window.moye.chooseExportReference(); if (!template) return;
+      const template = await window.meki.chooseExportReference(); if (!template) return;
       await this.refresh(); this.field('word-reference').value = template.id; this.feedback(t("已保存模板副本。"));
     });
     this.on('delete-word-reference', async () => {
       const id = this.field('word-reference').value; if (!id) throw new Error(t("请先选择要删除的模板。"));
-      await window.moye.deleteExportReference(id); await this.refresh(); this.feedback(t("已删除应用内模板副本，原文件保持不变。"));
+      await window.meki.deleteExportReference(id); await this.refresh(); this.feedback(t("已删除应用内模板副本，原文件保持不变。"));
     });
     this.on('confirm-export', async () => {
       const options = this.options();
-      if (options.kind === 'docx' || options.kind === 'epub') { const status = await window.moye.exportTools(); if (!status.available) throw new Error(status.message); }
+      if (options.kind === 'docx' || options.kind === 'epub') { const status = await window.meki.exportTools(); if (!status.available) throw new Error(status.message); }
       if (!this.dialog.open) return;
       this.dialog.close(); await this.submit(options);
     });
@@ -82,11 +82,11 @@ export class ExportDialog {
   }
   private async savePreset(asNew: boolean) {
     const id = asNew ? undefined : this.field('export-preset').value || undefined;
-    const preset = await window.moye.saveExportPreset({ id, name: this.field('export-preset-name').value, options: this.options() });
+    const preset = await window.meki.saveExportPreset({ id, name: this.field('export-preset-name').value, options: this.options() });
     await this.refresh(); this.field('export-preset').value = preset.id; this.feedback(t("已保存导出预设。"));
   }
   private async refresh() {
-    this.catalog = await window.moye.listExportPresets();
+    this.catalog = await window.meki.listExportPresets();
     for (const [id, empty, items] of [['export-preset', t("当前设置"), this.catalog.presets], ['word-reference', t("不使用模板"), this.catalog.templates]] as const) {
       const select = this.field(id) as HTMLSelectElement, previous = select.value;
       select.replaceChildren(new Option(empty, ''));
@@ -100,7 +100,7 @@ export class ExportDialog {
     for (const [id, show] of [['pdf-options', kind === 'pdf'], ['png-options', kind === 'png'], ['export-appearance', ['pdf','png','html'].includes(kind)], ['pandoc-options', kind === 'docx' || kind === 'epub'], ['word-template-options', kind === 'docx'], ['plain-note', kind === 'plain-html']] as const) this.field(id).hidden = !show;
     this.feedback('');
     if (kind === 'docx' || kind === 'epub') {
-      try { const status = await window.moye.exportTools(); if (request === this.request) this.field('pandoc-status').textContent = status.message; }
+      try { const status = await window.meki.exportTools(); if (request === this.request) this.field('pandoc-status').textContent = status.message; }
       catch (error) { if (request === this.request) this.feedback(String(error)); }
     }
   }

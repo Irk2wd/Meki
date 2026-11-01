@@ -11,7 +11,7 @@
 #export-dialog label:has(input[type=checkbox]) { justify-content:flex-start; }
 #export-dialog p,#export-dialog .dialog-actions span { font-size:13px; color:var(--soft); line-height:1.7; }
 #export-dialog #export-feedback { color:#b25540; }
-.moye-diagram { position:relative; }
+.meki-diagram { position:relative; }
 .diagram-actions { position:absolute; right:4px; top:4px; border:1px solid var(--border); border-radius:5px; background:var(--surface); color:var(--text); padding:0 9px; cursor:pointer; font-size:20px; }
 .diagram-save-menu { position:fixed; z-index:100; width:150px; padding:5px; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:8px; box-shadow:0 7px 24px #0002; }
 .diagram-save-menu button { display:block; width:100%; border:0; padding:9px 12px; text-align:left; background:transparent; color:inherit; cursor:pointer; }

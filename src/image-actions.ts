@@ -1,5 +1,5 @@
 import { ht, t } from '../electron/i18n.mjs';
-import type { AttachmentPlan, DocumentFile, Settings } from '../shared/moye';
+import type { AttachmentPlan, DocumentFile, Settings } from '../shared/meki';
 import type { WritingEditor } from './editor';
 import { scanAttachmentImages, attachmentEdits } from './attachment-markdown';
 import './image-actions.css';
@@ -22,14 +22,14 @@ export class ImageActions {
     document.body.append(this.menu, this.dialog);
     document.addEventListener('contextmenu', event => {
       const target = event.target instanceof Element ? event.target : null;
-      const image = target && !target.closest('input,textarea') ? target.closest<HTMLImageElement>('.ProseMirror img') || target.closest('.moye-image-block')?.querySelector('img') : null;
+      const image = target && !target.closest('input,textarea') ? target.closest<HTMLImageElement>('.ProseMirror img') || target.closest('.meki-image-block')?.querySelector('img') : null;
       if (image && this.open(image, event.clientX, event.clientY)) { event.preventDefault(); event.stopPropagation(); }
     }, true);
-    const refresh = () => document.querySelectorAll<HTMLElement>('.moye-image-block .operation').forEach(operation => {
+    const refresh = () => document.querySelectorAll<HTMLElement>('.meki-image-block .operation').forEach(operation => {
       if (operation.querySelector('.image-more-actions')) return;
       const button = document.createElement('button'); button.type = 'button'; button.className = 'image-more-actions'; button.textContent = '⋯'; button.title = t("图片操作"); button.setAttribute('aria-label', t("图片操作"));
       button.addEventListener('pointerdown', event => { event.preventDefault(); event.stopPropagation(); });
-      button.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); const image = operation.closest('.moye-image-block')?.querySelector('img'); if (image) { const box = button.getBoundingClientRect(); this.open(image, box.left, box.bottom); } });
+      button.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); const image = operation.closest('.meki-image-block')?.querySelector('img'); if (image) { const box = button.getBoundingClientRect(); this.open(image, box.left, box.bottom); } });
       operation.append(button);
     });
     new MutationObserver(refresh).observe(document.querySelector('.main-area')!, { childList: true, subtree: true }); refresh();
@@ -69,7 +69,7 @@ export class ImageActions {
   }
   private cancel() {
     this.canceled = true;
-    if (this.running) { this.dialog.querySelector('#image-copy-status')!.textContent = t("正在取消…"); void window.moye.cancelImageDownload(); }
+    if (this.running) { this.dialog.querySelector('#image-copy-status')!.textContent = t("正在取消…"); void window.meki.cancelImageDownload(); }
     else this.dialog.close();
   }
   private async execute() {
@@ -88,15 +88,15 @@ export class ImageActions {
         let plan: AttachmentPlan | null = null, keep = false;
         try {
           this.dialog.querySelector('#image-copy-status')!.textContent = this.dialog.dataset.download === 'true' ? t("正在下载图片…") : t("正在检查图片…");
-          plan = await window.moye.prepareAttachments({ documentPath: snapshot.path, revision: snapshot.revision, sources: [selected.source], destination, ...(name ? { name } : {}), download: this.dialog.dataset.download === 'true' });
+          plan = await window.meki.prepareAttachments({ documentPath: snapshot.path, revision: snapshot.revision, sources: [selected.source], destination, ...(name ? { name } : {}), download: this.dialog.dataset.download === 'true' });
           unchanged(); let mapping;
-          try { mapping = await window.moye.commitAttachments(plan.id); } catch (error) { plan = null; throw error; }
+          try { mapping = await window.meki.commitAttachments(plan.id); } catch (error) { plan = null; throw error; }
           unchanged(); const edits = attachmentEdits(snapshot.content, images, mapping);
           if (edits.length) { editor.replaceMarkdownRanges(snapshot.content, edits); keep = true; this.hooks.pause(); }
-          await window.moye.finishAttachments(plan.id, keep); plan = null;
+          await window.meki.finishAttachments(plan.id, keep); plan = null;
           if (keep) await this.hooks.persist();
           this.dialog.close(); this.hooks.notify(t("已更新 {0} 处图片引用；原图保留，请检查后手动保存。", edits.length));
-        } finally { if (plan) await window.moye.finishAttachments(plan.id, keep); }
+        } finally { if (plan) await window.meki.finishAttachments(plan.id, keep); }
       });
     } catch (error) { this.dialog.querySelector('#image-copy-status')!.textContent = String(error).replace(/^Error: (Error invoking remote method '[^']+': Error: )?/, ''); if (this.canceled) this.dialog.close(); }
     finally { this.running = false; this.dialog.querySelectorAll<HTMLInputElement>('input,select,button[type="submit"]').forEach(control => { control.disabled = false; }); }

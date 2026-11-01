@@ -1,5 +1,5 @@
 import { t, ht } from '../electron/i18n.mjs';
-import type { DocumentFile, AttachmentPlan } from '../shared/moye';
+import type { DocumentFile, AttachmentPlan } from '../shared/meki';
 import type { WritingEditor } from './editor';
 import { scanAttachmentImages, attachmentEdits } from './attachment-markdown';
 import './attachment-organizer.css';
@@ -44,7 +44,7 @@ export class AttachmentOrganizer {
         const images = scanAttachmentImages(snapshot.content);
         if (!images.length) { this.hooks.notify(t("当前文稿中没有可整理的图片引用。")); return; }
         document.querySelector<HTMLElement>('#lifecycle-settings')!.hidden = true;
-        let plan: AttachmentPlan | null = await window.moye.prepareAttachments({ documentPath: snapshot.path, revision: snapshot.revision, sources: [...new Set(images.map(image => image.source))] });
+        let plan: AttachmentPlan | null = await window.meki.prepareAttachments({ documentPath: snapshot.path, revision: snapshot.revision, sources: [...new Set(images.map(image => image.source))] });
         let keep = false;
         const unchanged = () => {
           editor.flush(); const current = this.hooks.document();
@@ -54,19 +54,19 @@ export class AttachmentOrganizer {
           if (!await this.confirm(plan, images.length)) return;
           unchanged();
           let mapping;
-          try { mapping = await window.moye.commitAttachments(plan.id); }
+          try { mapping = await window.meki.commitAttachments(plan.id); }
           catch (error) { plan = null; throw error; } // main already rolled back this failed copy.
           unchanged();
           const edits = attachmentEdits(snapshot.content, images, mapping);
           if (!edits.length) { this.hooks.notify(t("图片已经使用目标附件目录中的相对路径。")); return; }
           editor.replaceMarkdownRanges(snapshot.content, edits);
           keep = true; this.hooks.pause();
-          await window.moye.finishAttachments(plan.id, true); plan = null;
+          await window.meki.finishAttachments(plan.id, true); plan = null;
           await this.hooks.persist();
           this.hooks.notify(t("已更新 {0} 处图片引用；原图片保留，请检查后手动保存。", edits.length));
         } finally {
           if (this.dialog.open) this.dialog.close();
-          if (plan) await window.moye.finishAttachments(plan.id, keep);
+          if (plan) await window.meki.finishAttachments(plan.id, keep);
         }
       });
     } catch (error) { this.hooks.notify(String(error), true); }

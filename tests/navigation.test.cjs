@@ -7,7 +7,7 @@ const path = require('node:path');
 const { FileStore, restoreRecentFolders, MAX_RECENT_FOLDERS, MAX_PINNED_FOLDERS } = require('../electron/file-store.cjs');
 
 async function fixture(t) {
-  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'moye-navigation-')));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'meki-navigation-')));
   t.after(() => fs.rm(root, {recursive:true,force:true}));
   const store = new FileStore(root); await store.init(); return {root,store};
 }

@@ -9,7 +9,7 @@ const { FileStore, DEFAULT_SETTINGS, validateSettings, RevisionConflictError } =
 const { LifecycleStore, validateSession, MAX_TABS, MAX_SESSION_BYTES } = require('../electron/lifecycle-store.cjs');
 
 async function fixture(t, limits) {
-  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'moye-lifecycle-')));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'meki-lifecycle-')));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const store = new FileStore(path.join(root, 'profile')); await store.init();
   const lifecycle = new LifecycleStore(store, limits); await lifecycle.init();

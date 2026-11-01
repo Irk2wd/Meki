@@ -1,5 +1,5 @@
 import { t, ht, getLocale, isLocale } from '../electron/i18n.mjs';
-import type { BootState, DocumentFile, Settings, Workspace, RecentFile, WorkspaceRequest, DocumentStatus } from '../shared/moye';
+import type { BootState, DocumentFile, Settings, Workspace, RecentFile, WorkspaceRequest, DocumentStatus } from '../shared/meki';
 import { WorkspaceUI, type OpenLocation } from './workspace-ui';
 import { WritingEditor } from './editor';
 import { WritingTools } from './writing-tools';
@@ -126,7 +126,7 @@ const snapshotDialog = new SnapshotDialog({ documents, platform: () => platform,
 const attachmentOrganizer = new AttachmentOrganizer({ document: () => current, activeId: () => documents.activeId,
   editor: () => editor, run: action => perform(action, true, true), pause: () => { documents.active.paused = 'attachments'; }, persist: persistDraft, notify });
 const imageHostingDialog = new ImageHostingDialog({ document: () => current, activeId: () => documents.activeId,
-  editor: () => editor, settings: () => settings, saveSettings: async patch => { settings = await window.moye.updateSettings(patch); applySettings(); },
+  editor: () => editor, settings: () => settings, saveSettings: async patch => { settings = await window.meki.updateSettings(patch); applySettings(); },
   run: action => perform(action, true, true), pause: () => { documents.active.paused = 'attachments'; }, persist: persistDraft, notify });
 new ImageActions({ editor: () => editor, document: () => current, activeId: () => documents.activeId, settings: () => settings,
   run: action => perform(action, true, true), pause: () => { documents.active.paused = 'attachments'; }, persist: persistDraft,
@@ -165,7 +165,7 @@ function updateStatus() {
   const words = (current.content.replace(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu, ' ').match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || []).length;
   el('#word-count').textContent = t("{0} 字", (cjk + words).toLocaleString(getLocale()));
   el('#reading-time').textContent = t("{0} 分钟阅读", Math.max(1, Math.ceil((cjk + words) / 400)));
-  void window.moye.setDocumentState({ name: current.name, path: current.path, dirty: dirty() }).catch(() => {});
+  void window.meki.setDocumentState({ name: current.name, path: current.path, dirty: dirty() }).catch(() => {});
 }
 async function persistDraft() {
   clearTimeout(draftTimer);
@@ -192,7 +192,7 @@ async function synchronizeWorkspace() {
   syncingWorkspace = true;
   const selected = documents.active, documentPath = current.path, revision = current.revision, root = workspace?.root;
   try {
-    const [tree, status] = await Promise.allSettled([root ? window.moye.refreshWorkspace() : Promise.resolve(null), documentPath ? window.moye.checkDocument(documentPath,revision) : Promise.resolve(null)]);
+    const [tree, status] = await Promise.allSettled([root ? window.meki.refreshWorkspace() : Promise.resolve(null), documentPath ? window.meki.checkDocument(documentPath,revision) : Promise.resolve(null)]);
     if (busy) return;
     if (tree.status === 'fulfilled' && root === workspace?.root && tree.value && JSON.stringify(tree.value) !== JSON.stringify(workspace)) { workspace = tree.value; renderFiles(); }
     if (status.status === 'fulfilled' && selected === documents.active && documentPath === current.path && revision === current.revision) {
@@ -225,7 +225,7 @@ function remapDocumentPath(filePath: string, from: string, to: string | null): s
 
 async function openLocation(location: OpenLocation) {
   if (location.path !== current.path) {
-    const doc = await window.moye.openDocument(location.path); if (!doc) return;
+    const doc = await window.meki.openDocument(location.path); if (!doc) return;
     await loadDocument(doc);
   }
   if (location.line) { switchMode('source'); editor.goToLine(location.line, location.column || 1); }
@@ -237,11 +237,11 @@ async function openLocation(location: OpenLocation) {
   } else editor.focus();
 }
 async function openRecentFolder(path: string) {
-  workspace = await window.moye.openRecentFolder(path); setSidebarTab('files'); renderFiles();
+  workspace = await window.meki.openRecentFolder(path); setSidebarTab('files'); renderFiles();
 }
 
 async function workspaceOperation(request: WorkspaceRequest) {
-  const result = await window.moye.workspaceOperation(request); if (!result) return;
+  const result = await window.meki.workspaceOperation(request); if (!result) return;
   workspace = result.workspace;
   if (result.previousPath && ['move','rename','trash'].includes(result.action)) {
     recentFiles = recentFiles.flatMap(file => { const path = remapDocumentPath(file.path,result.previousPath!,result.path); return path === null ? [] : [{...file,path:path || file.path,name:path ? path.split(/[\\/]/).pop()! : file.name}]; });
@@ -250,7 +250,7 @@ async function workspaceOperation(request: WorkspaceRequest) {
     await persistDraft(); updateStatus();
   }
   renderFiles();
-  if (result.action === 'create-file' && result.path) { const doc = await window.moye.openDocument(result.path); if (doc) await loadDocument(doc); }
+  if (result.action === 'create-file' && result.path) { const doc = await window.meki.openDocument(result.path); if (doc) await loadDocument(doc); }
   notify(result.warning || (result.action === 'trash' ? t("已移入系统回收站，当前文稿内容仍保留") : t("文件操作已完成")), Boolean(result.warning));
 }
 function applySettings() {
@@ -281,7 +281,7 @@ function applySettings() {
 }
 function changeSettings(patch: Partial<Settings>) {
   settings = { ...settings, ...patch }; applySettings();
-  void window.moye.updateSettings(patch).catch(error => notify(String(error), true));
+  void window.meki.updateSettings(patch).catch(error => notify(String(error), true));
 }
 function closePopovers() { el('#style-panel').hidden = true; el('#export-panel').hidden = true; }
 function switchMode(mode: 'visual' | 'source') {
@@ -298,12 +298,12 @@ async function loadDocument(doc: DocumentFile, recovered = false) {
 async function save(saveAs = false) {
   if (!await documents.save(documents.active, saveAs)) return false;
   if (current.path) recentFiles = [{ path: current.path, name: current.name }, ...recentFiles.filter(f => f.path !== current.path)].slice(0, 15);
-  if (workspace) workspace = await window.moye.refreshWorkspace().catch(() => workspace);
+  if (workspace) workspace = await window.meki.refreshWorkspace().catch(() => workspace);
   renderFiles(); updateStatus(); notify(documents.recoveryError || t("已保存 · {0}", current.name), Boolean(documents.recoveryError)); return true;
 }
 async function mayReplace() {
   editor.flush(); if (!dirty()) return true;
-  const answer = await window.moye.confirmDiscard(current.name);
+  const answer = await window.meki.confirmDiscard(current.name);
   if (answer === 'cancel') return false;
   if (answer === 'save') return (await save()) && !dirty();
   return true;
@@ -325,8 +325,8 @@ async function runExport(options: ExportOptions) {
     if (options.fontSize) appearance.fontSize = options.fontSize;
     if (['docx', 'epub', 'plain-html'].includes(options.kind)) { appearance.theme = 'paper'; appearance.customCss = ''; }
     let html = await prepareExportAssets(await exportHTML(snapshot.content, snapshot.name, snapshot.path, appearance, options.kind === 'docx'), options.kind);
-    if (options.kind === 'pdf' && options.pdf?.pageBreakBeforeH1) html = html.replace('</head>', '<style>@media print { .moye-document > h1 ~ h1 { break-before:page; page-break-before:always; } }</style></head>');
-    const output = await window.moye.exportFile({ ...options, html, suggestedName: snapshot.name.replace(/\.(md|markdown|mdown|txt)$/i, '') });
+    if (options.kind === 'pdf' && options.pdf?.pageBreakBeforeH1) html = html.replace('</head>', '<style>@media print { .meki-document > h1 ~ h1 { break-before:page; page-break-before:always; } }</style></head>');
+    const output = await window.meki.exportFile({ ...options, html, suggestedName: snapshot.name.replace(/\.(md|markdown|mdown|txt)$/i, '') });
     if (output) notify(t("已导出 {0} · {1}{2}", options.kind.toUpperCase(), output.path.split(/[\\/]/).pop(), output.math ? t("；{0} 个可编辑公式，{1} 个公式保留为图片", output.math.editable, output.math.fallback) : ''));
   });
 }
@@ -344,7 +344,7 @@ async function dispatch(action: string, payload?: unknown) {
     lifecycleSettingsPending++;
     lifecycleSettingsQueue = lifecycleSettingsQueue.then(async () => {
       const patch = action === 'toggle-autosave' ? { autoSave: !settings.autoSave } : payload as Partial<Settings>;
-      await window.moye.updateSettings(patch);
+      await window.meki.updateSettings(patch);
       settings = { ...settings, ...patch }; applySettings(); updateStatus();
     }).catch(error => { documents.refreshSettings(); notify(String(error), true); }).finally(() => { lifecycleSettingsPending--; });
     await lifecycleSettingsQueue; return;
@@ -408,11 +408,11 @@ async function dispatch(action: string, payload?: unknown) {
   if (action === 'find-close') { writingTools?.close(); editor.focus(); return; }
   if (action === 'find-next' || action === 'find-prev') { editor.search.navigate(action === 'find-next' ? 1 : -1); return; }
   await perform(async () => {
-    if (action === 'new-window') { clearTimeout(draftTimer); editor.flush(); await persistDraft(); await window.moye.newWindow(); }
+    if (action === 'new-window') { clearTimeout(draftTimer); editor.flush(); await persistDraft(); await window.meki.newWindow(); }
     if (action === 'detach-document') { clearTimeout(draftTimer); await documents.detach(typeof payload === 'string' ? payload : undefined); }
     if (action === 'dock-tab') { clearTimeout(draftTimer); await documents.dock(payload as DockRequest); }
     if (action === 'pane-layout') { clearTimeout(draftTimer); await documents.layout(payload as Parameters<DocumentTabs['layout']>[0]); }
-    if (action === 'tile-windows') await window.moye.tileWindows();
+    if (action === 'tile-windows') await window.meki.tileWindows();
     if (action === 'activate-tab') { documents.activate(String(payload)); await persistDraft(); }
     if (action === 'close-tab') { clearTimeout(draftTimer); await documents.close(typeof payload === 'string' ? payload : documents.activeId); }
     if (action === 'close-all') { clearTimeout(draftTimer); await documents.closeAll(); }
@@ -430,12 +430,12 @@ async function dispatch(action: string, payload?: unknown) {
     if (action === 'open-folder') { if (typeof payload !== 'string') throw new Error(t("无效的最近文件夹路径。")); await openRecentFolder(payload); }
     if (action === 'document-link') {
       if (!current.path) throw new Error(t("请先保存文稿，再打开相对文件链接。"));
-      const location = await window.moye.resolveDocumentLink(String(payload),current.path);
+      const location = await window.meki.resolveDocumentLink(String(payload),current.path);
       await openLocation(location);
     }
-    if (action === 'reload-document' && current.path && await mayReplace()) { const doc = await window.moye.openDocument(current.path); if (doc) await documents.reload(doc); }
+    if (action === 'reload-document' && current.path && await mayReplace()) { const doc = await window.meki.openDocument(current.path); if (doc) await documents.reload(doc); }
     if (action === 'import-document') {
-      const imported = await window.moye.importDocument();
+      const imported = await window.meki.importDocument();
       if (imported) {
         await loadDocument({ path: null, name: imported.name, content: imported.content, revision: null });
         documents.active.savedContent = '\u0000'; await persistDraft(); updateStatus();
@@ -443,7 +443,7 @@ async function dispatch(action: string, payload?: unknown) {
       }
     }
     if (action === 'import-theme') {
-      const theme = await window.moye.importTheme();
+      const theme = await window.meki.importTheme();
       if (theme) {
         normalizeCustomCss(theme.css);
         el<HTMLTextAreaElement>('#custom-css').value = theme.css;
@@ -452,24 +452,24 @@ async function dispatch(action: string, payload?: unknown) {
     }
     if (action === 'new') { await loadDocument({ path: null, name: t("未命名.md"), content: '', revision: null }); editor.focus(); }
     if (action === 'open' || action === 'open-path') {
-      const doc = await window.moye.openDocument(typeof payload === 'string' ? payload : undefined);
+      const doc = await window.meki.openDocument(typeof payload === 'string' ? payload : undefined);
       if (doc) {
         try { await loadDocument(doc); editor.focus(); }
-        catch (error) { if (doc.path) await window.moye.releaseDocument(doc.path); throw error; }
+        catch (error) { if (doc.path) await window.meki.releaseDocument(doc.path); throw error; }
       }
     }
     if (action === 'save' || action === 'saveAs') await save(action === 'saveAs');
     if (action === 'folder' || action === 'refresh') {
-      const result = action === 'folder' ? await window.moye.chooseFolder() : await window.moye.refreshWorkspace();
+      const result = action === 'folder' ? await window.meki.chooseFolder() : await window.meki.refreshWorkspace();
       if (result) { workspace = result; setSidebarTab('files'); renderFiles(); }
     }
     if (action === 'close-request') {
       clearTimeout(draftTimer);
       try {
         await persistDraft();
-        if (await documents.closeAll(true)) { if (!await window.moye.allowClose()) await persistDraft(); }
-        else await window.moye.cancelClose();
-      } catch (error) { await window.moye.cancelClose(); throw error; }
+        if (await documents.closeAll(true)) { if (!await window.meki.allowClose()) await persistDraft(); }
+        else await window.meki.cancelClose();
+      } catch (error) { await window.meki.cancelClose(); throw error; }
     }
   }, ['dock-tab', 'new', 'new-window', 'detach-document', 'open', 'open-path', 'close-request', 'close-tab', 'close-all', 'reopen-closed', 'activate-tab', 'restore-version', 'import-document', 'workspace-open', 'workspace-operation', 'document-link', 'reload-document'].includes(action));
   if (['dock-tab', 'activate-tab', 'close-tab', 'reopen-closed'].includes(action) || (action === 'pane-layout' && document.activeElement === document.body)) editor.focus();
@@ -502,7 +502,7 @@ document.addEventListener('click', event => {
     if (href.startsWith('#')) {
       try { [...el('#visual-editor').querySelectorAll<HTMLElement>('[id]')].find(node => node.id === href.slice(1) || node.id === decodeURIComponent(href.slice(1)))?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* Ignore a malformed anchor. */ }
     } else if (event.ctrlKey || event.metaKey) {
-      if (/^(https?:|mailto:)/i.test(href)) void window.moye.openExternal(href).catch(error => notify(String(error), true));
+      if (/^(https?:|mailto:)/i.test(href)) void window.meki.openExternal(href).catch(error => notify(String(error), true));
       else void dispatch('document-link',href);
     }
     return;
@@ -514,7 +514,7 @@ el<HTMLSelectElement>('#ui-language').addEventListener('change', async event => 
   const select = event.target as HTMLSelectElement, locale = select.value;
   if (!isLocale(locale)) return;
   select.disabled = true;
-  try { settings = await window.moye.updateSettings({ locale }); }
+  try { settings = await window.meki.updateSettings({ locale }); }
   catch (error) { notify(String(error), true); }
   finally { select.disabled = false; applySettings(); }
 });
@@ -536,11 +536,11 @@ document.addEventListener('keydown', event => {
 }, true);
 
 async function start() {
-  if (!window.moye) throw new Error(t("请通过 Meki 桌面应用打开编辑器（npm start）。"));
-  const boot: BootState = await window.moye.boot();
+  if (!window.meki) throw new Error(t("请通过 Meki 桌面应用打开编辑器（npm start）。"));
+  const boot: BootState = await window.meki.boot();
   updateDialog = new UpdateDialog(async () => {
     await perform(async () => {
-      try { if (await documents.closeAll(true)) await window.moye.applyUpdate(); }
+      try { if (await documents.closeAll(true)) await window.meki.applyUpdate(); }
       finally { await persistDraft(); }
     }, true, true);
   });
@@ -574,10 +574,10 @@ async function start() {
   formatMenu = new FormatMenu(() => editor, { blocked: () => busy || !ready, notify, settings: () => settings, changeSettings });
   formatMenu.apply(settings);
   shortcuts = new Shortcuts({ settings: () => settings, platform: () => platform, blocked: () => busy || !ready,
-    dispatch: command => { void dispatch(command); }, save: async input => { settings = await window.moye.updateShortcut(input); applySettings(); } });
+    dispatch: command => { void dispatch(command); }, save: async input => { settings = await window.meki.updateShortcut(input); applySettings(); } });
   for (const view of panes.views.values()) view.cleanup = connectEditor(view.editor, view.visual);
   applySettings(); updateStatus(); renderOutline(); renderFiles();
-  window.moye.onCommand((command, payload) => { if (shortcuts?.allowsNative(command)) void dispatch(command, payload); });
+  window.meki.onCommand((command, payload) => { if (shortcuts?.allowsNative(command)) void dispatch(command, payload); });
   el('#shell').dataset.ready = 'true';
   setInterval(() => { void synchronizeWorkspace().catch(() => {}); }, 2500);
   setInterval(() => {

@@ -21,7 +21,7 @@ export class EditorClipboard {
     if (command.startsWith('copy-')) {
       const text = this.selected(command === 'copy-markdown');
       if (!text) return t("请先选中要复制的内容。");
-      await window.moye.writeClipboardText(text);
+      await window.meki.writeClipboardText(text);
       return command === 'copy-text' ? t("已复制为纯文本") : t("已复制为 Markdown");
     }
     const point = this.actions.capture();
@@ -29,7 +29,7 @@ export class EditorClipboard {
     this.pending = true;
     try {
       // Explicit paste reads only text/plain. HTML and VS Code metadata never enter Milkdown's paste plugin.
-      const text = await window.moye.readClipboardText();
+      const text = await window.meki.readClipboardText();
       if (!this.actions.isCurrent(point)) throw new Error(t("读取剪贴板期间文稿已改变，请重新粘贴。"));
       if (!text) return t("剪贴板中没有文本。");
       if (point.mode === 'source') {
@@ -52,7 +52,7 @@ export class EditorClipboard {
           }
           transaction = transaction.replaceSelection(slice);
         }
-        view.dispatch(closeHistory(transaction.setMeta('moye-preserve-code-language', true)).scrollIntoView());
+        view.dispatch(closeHistory(transaction.setMeta('meki-preserve-code-language', true)).scrollIntoView());
         view.dispatch(closeHistory(view.state.tr));
       }
       this.done();
@@ -65,12 +65,12 @@ export class EditorClipboard {
     const value = field.value;
     if (command.startsWith('copy-')) {
       if (from === to) return t("请先选中要复制的内容。");
-      await window.moye.writeClipboardText(value.slice(from, to)); return t("已复制文本");
+      await window.meki.writeClipboardText(value.slice(from, to)); return t("已复制文本");
     }
     if (field.readOnly) return '';
     this.pending = true;
     try {
-      const text = await window.moye.readClipboardText();
+      const text = await window.meki.readClipboardText();
       if (!field.isConnected || field !== document.activeElement || value !== field.value) throw new Error(t("读取剪贴板期间输入框已改变，请重新粘贴。"));
       if (!text) return t("剪贴板中没有文本。");
       field.setRangeText(text, from, to, 'end');

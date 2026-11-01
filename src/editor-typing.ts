@@ -7,7 +7,7 @@ import type { EditorView as CodeView } from '@codemirror/view';
 import { typingAction, pairedBackspace, typingDefaults, type PairToken, type TypingContext, type TypingSettings, type TypingAction } from './typing-rules.ts';
 
 type TrackedPair = PairToken & { pos: number };
-const pairKey = new PluginKey<TrackedPair[]>('moye-typing-pairs');
+const pairKey = new PluginKey<TrackedPair[]>('meki-typing-pairs');
 function context(state: ProseState, from: number, to: number, input: string, composing: boolean): { value: TypingContext; offset: number } | null {
   if (!(state.selection instanceof TextSelection)) return null;
   const start = state.doc.resolve(from), end = state.doc.resolve(to);
@@ -35,7 +35,7 @@ function apply(view: ProseView, action: TypingAction, offset: number) {
   }
   if (action.kind === 'mark') {
     const mark = state.schema.marks[action.mark]; if (!mark) return false;
-    const repeated = action.mark === 'emphasis' ? state.schema.marks.strong : action.mark === 'moye_sub' ? state.schema.marks.strike_through : null;
+    const repeated = action.mark === 'emphasis' ? state.schema.marks.strong : action.mark === 'meki_sub' ? state.schema.marks.strike_through : null;
     if (repeated && state.doc.rangeHasMark(from, to, mark)) tr.removeMark(from, to, mark).addMark(from, to, repeated.create());
     else tr.addMark(from, to, mark.create());
   }
@@ -44,7 +44,7 @@ function apply(view: ProseView, action: TypingAction, offset: number) {
     tr.replaceWith(from, to, math.create({ value: action.tex }));
     tr.setSelection(TextSelection.create(tr.doc, from + 1));
   }
-  view.dispatch(closeHistory(tr).setMeta('moye-typing', true).scrollIntoView());
+  view.dispatch(closeHistory(tr).setMeta('meki-typing', true).scrollIntoView());
   return true;
 }
 export function typingPlugin(settings: () => TypingSettings) {
@@ -64,7 +64,7 @@ export function typingPlugin(settings: () => TypingSettings) {
     },
     // The edit is one document transaction; a non-document history boundary keeps
     // subsequent typing out of that undo step, like existing editor actions.
-    appendTransaction: (transactions, _previous, next) => transactions.some(tr => tr.getMeta('moye-typing')) ? closeHistory(next.tr) : null,
+    appendTransaction: (transactions, _previous, next) => transactions.some(tr => tr.getMeta('meki-typing')) ? closeHistory(next.tr) : null,
     props: {
       handleDOMEvents: {
         compositionstart: () => { compositionUntil = Infinity; return false; },

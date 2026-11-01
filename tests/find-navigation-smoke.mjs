@@ -13,7 +13,7 @@ const fixture = '\uFEFF# 查找定位\r\n\r\n' + Array.from({ length: 90 }, (_, 
   `第 ${index} 段：${[0, 45, 89].includes(index) ? '跨**格式**词和 A+B。' : '普通正文，用来检查跨越多屏时的查找定位。'}`).join('\r\n\r\n')
   + '\r\n\r\n```javascript\r\n' + Array.from({ length: 120 }, (_, index) => [0, 60, 119].includes(index) ? '// CodeNeedle' : `const value_${index} = ${index};`).join('\r\n') + '\r\n```\r\n';
 for (const file of files) await fs.writeFile(file, fixture);
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: path.join(run, 'profile'), MOYE_TEST_DISCARD: 'discard' }; delete env.ELECTRON_RUN_AS_NODE;
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: path.join(run, 'profile'), MEKI_TEST_DISCARD: 'discard' }; delete env.ELECTRON_RUN_AS_NODE;
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control', home = process.platform === 'darwin' ? 'Meta+ArrowUp' : 'Control+Home';
 const results = [], errors = []; let app, page;
 const pass = message => { results.push(message); console.log(`PASS ${message}`); };
@@ -43,12 +43,12 @@ async function openFind(expected) {
 function location(mode) {
   const pane = document.querySelector('#document-scroll');
   const scroll = mode === 'source' ? pane.querySelector('.cm-scroller') : pane;
-  const hit = pane.querySelector('.moye-search-current'), bounds = scroll.getBoundingClientRect(), rect = hit?.getBoundingClientRect();
+  const hit = pane.querySelector('.meki-search-current'), bounds = scroll.getBoundingClientRect(), rect = hit?.getBoundingClientRect();
   return { top: scroll.scrollTop, visible: !!rect && rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1, shellTop: document.querySelector('#shell').getBoundingClientRect().top };
 }
 async function visible(mode) { await page.waitForFunction(mode => {
   const pane = document.querySelector('#document-scroll'), scroll = mode === 'source' ? pane.querySelector('.cm-scroller') : pane;
-  const hit = pane.querySelector('.moye-search-current'); if (!hit) return false;
+  const hit = pane.querySelector('.meki-search-current'); if (!hit) return false;
   const rect = hit.getBoundingClientRect(), bounds = scroll.getBoundingClientRect(); return rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1;
 }, mode); return page.evaluate(location, mode); }
 async function navigate(mode, direction, index, keyboard = true) {
@@ -61,12 +61,12 @@ async function navigate(mode, direction, index, keyboard = true) {
   if (keyboard) assert.equal(await page.evaluate(() => document.activeElement?.id), 'find-query');
 }
 try {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? ['--open', files[0]] : [root, '--open', files[0]], env });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', files[0]] : [root, '--open', files[0]], env });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
   await page.waitForSelector('#shell[data-ready="true"]'); await (await app.browserWindow(page)).evaluate(win => { win.show(); win.focus(); }); await page.waitForFunction(() => document.hasFocus());
 
   await selectedText(page.locator('#visual-editor .ProseMirror > p').first(), '跨格式词'); await openFind('跨格式词'); await found(1); await visible('visual');
-  assert.ok(await page.locator('#visual-editor .moye-search-current').count() > 1, 'selection can cross inline formatting');
+  assert.ok(await page.locator('#visual-editor .meki-search-current').count() > 1, 'selection can cross inline formatting');
   pass('Ctrl/Cmd F searches the selected rendered text across inline formatting and selects the query input');
   await navigate('visual', 1, 2); await navigate('visual', 1, 3, false); await navigate('visual', 1, 1); await navigate('visual', -1, 3); await navigate('visual', -1, 2, false);
   await page.screenshot({ path: path.join(run, 'visual-match.png') });
@@ -85,7 +85,7 @@ try {
     const scroll = document.querySelector('#document-scroll'), target = [...scroll.querySelectorAll('.ProseMirror > p')].find(node => node.textContent.startsWith('第 89 段'));
     const bounds = scroll.getBoundingClientRect(), rect = target.getBoundingClientRect(); return rect.top >= bounds.top && rect.bottom <= bounds.bottom;
   });
-  assert.equal(await page.locator('#visual-editor .moye-search-current').count(), 0);
+  assert.equal(await page.locator('#visual-editor .meki-search-current').count(), 0);
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'find-query');
   pass('zero-width regex results reveal their model position even without a highlighted text span');
 
@@ -102,13 +102,13 @@ try {
   pass('no-result navigation does not move the document or reuse a stale match');
 
   await action('find-close'); await page.locator('[data-mode="visual"]').click(); await action('find'); await page.locator('#find-query').fill('CodeNeedle'); await found(1); await visible('visual');
-  assert.ok(await page.locator('#visual-editor .milkdown-code-block .moye-search-current').count() > 0);
+  assert.ok(await page.locator('#visual-editor .milkdown-code-block .meki-search-current').count() > 0);
   await navigate('visual', 1, 2); await navigate('visual', 1, 3, false); await navigate('visual', -1, 2); await navigate('visual', -1, 1, false);
   await page.screenshot({ path: path.join(run, 'code-match.png') }); await action('find-close');
-  assert.equal(await page.locator('#visual-editor .milkdown-code-block .moye-search-hit').count(), 0);
+  assert.equal(await page.locator('#visual-editor .milkdown-code-block .meki-search-hit').count(), 0);
   pass('lazy code blocks highlight results and reveal the exact matching line without taking focus from the find controls');
 
-  await page.locator('[data-mode="source"]').click(); await app.evaluate((_electron, file) => { process.env.MOYE_TEST_OPEN_PATH = file; }, files[1]); await action('open');
+  await page.locator('[data-mode="source"]').click(); await app.evaluate((_electron, file) => { process.env.MEKI_TEST_OPEN_PATH = file; }, files[1]); await action('open');
   await page.waitForFunction(() => document.querySelector('#document-name').textContent === '另一分栏.md'); await idle();
   const tab = await page.locator('.document-tab.active [role="tab"]').boundingBox(), body = await page.locator('.pane-body').boundingBox();
   await page.mouse.move(tab.x + tab.width / 2, tab.y + tab.height / 2); await page.mouse.down(); await page.mouse.move(tab.x + tab.width / 2, tab.y + tab.height / 2 + 12, { steps: 3 });

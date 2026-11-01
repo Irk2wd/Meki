@@ -23,13 +23,13 @@ const original = '\uFEFF' + [
 const selectionFixture = '\uFEFF# 拖选检查\r\n\r\n' + '拖选检查：' + '这一段用于验证跨行选择时文字位置保持稳定。'.repeat(12)
   + '\r\n\r\n' + Array.from({ length: 40 }, (_, i) => `后续段落 ${i + 1}，只选择目标段落。\r\n`).join('\r\n');
 await fs.writeFile(documentPath, selectionFixture);
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: path.join(run, 'profile'), MOYE_TEST_OPEN_PATH: documentPath, MOYE_TEST_EXPORT_HTML_PATH: htmlPath, MOYE_TEST_DISCARD: 'discard' };
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: path.join(run, 'profile'), MEKI_TEST_OPEN_PATH: documentPath, MEKI_TEST_EXPORT_HTML_PATH: htmlPath, MEKI_TEST_DISCARD: 'discard' };
 delete env.ELECTRON_RUN_AS_NODE;
 let app, page;
 const results = [], errors = [], selections = [];
 const record = name => { results.push(name); console.log(`PASS ${name}`); };
 async function launch() {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? ['--open', documentPath] : [root, '--open', documentPath], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', documentPath] : [root, '--open', documentPath], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000);
   page.on('pageerror', error => errors.push(error.message));
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); });
@@ -133,7 +133,7 @@ try {
   await page.locator('.ProseMirror').click(); await page.keyboard.press(`${mod}+f`);
   await page.waitForFunction(() => document.activeElement?.id === 'find-query');
   await search('Bold joined text', { total: 1 });
-  assert.equal(await page.locator('.moye-search-current').count() >= 2, true);
+  assert.equal(await page.locator('.meki-search-current').count() >= 2, true);
   assert.equal(await saveText(), original);
   record('visual keyboard find spans inline formatting without changing file bytes');
 
@@ -198,8 +198,8 @@ try {
   const source = page.locator('#source-editor .cm-content');
   await source.click(); await page.keyboard.press(endKey); await page.keyboard.insertText('\nSource typing');
   await page.waitForTimeout(200);
-  assert.ok(await page.locator('#source-editor .moye-current-paragraph').count() > 0);
-  assert.ok(await page.locator('#source-editor .moye-inactive-paragraph').count() > 0);
+  assert.ok(await page.locator('#source-editor .meki-current-paragraph').count() > 0);
+  assert.ok(await page.locator('#source-editor .meki-inactive-paragraph').count() > 0);
   const sourceCenter = await page.locator('#source-editor .cm-cursor').first().evaluate(cursor => {
     const area = document.querySelector('#source-editor .cm-scroller').getBoundingClientRect();
     const bounds = cursor.getBoundingClientRect(); return (bounds.top + bounds.height / 2 - area.top) / area.height;
@@ -209,8 +209,8 @@ try {
   const rich = page.locator('.ProseMirror'); await rich.locator(':scope > p').last().click();
   await page.keyboard.press(endKey); await page.keyboard.insertText(' Visual typing');
   await page.waitForTimeout(200);
-  assert.equal(await rich.locator('.moye-current-paragraph').count(), 1);
-  assert.ok(await rich.locator('.moye-inactive-paragraph').count() > 5);
+  assert.equal(await rich.locator('.meki-current-paragraph').count(), 1);
+  assert.ok(await rich.locator('.meki-inactive-paragraph').count() > 5);
   const centered = await page.evaluate(() => {
     const range = getSelection().getRangeAt(0), cursor = range.getBoundingClientRect(), area = document.querySelector('#document-scroll').getBoundingClientRect();
     return (cursor.top + cursor.height / 2 - area.top) / area.height;
@@ -218,11 +218,11 @@ try {
   assert.ok(centered > .35 && centered < .57, `Visual cursor ratio ${centered}`);
   await page.screenshot({ path: path.join(run, 'writing-focus.png') });
   await page.emulateMedia({ media: 'print' });
-  assert.equal(await rich.locator('.moye-inactive-paragraph').first().evaluate(node => getComputedStyle(node).opacity), '1');
+  assert.equal(await rich.locator('.meki-inactive-paragraph').first().evaluate(node => getComputedStyle(node).opacity), '1');
   assert.equal(await page.locator('#visual-editor').evaluate(node => getComputedStyle(node).paddingTop), '0px');
   await page.emulateMedia({ media: 'screen' });
   await action('export-html');
-  const html = await fs.readFile(htmlPath, 'utf8'); assert.ok(!html.includes('moye-inactive-paragraph')); assert.ok(!html.includes('typewriter-mode'));
+  const html = await fs.readFile(htmlPath, 'utf8'); assert.ok(!html.includes('meki-inactive-paragraph')); assert.ok(!html.includes('typewriter-mode'));
   record('source and visual typewriter center the caret; paragraph focus stays out of HTML/PDF styling');
 
   await setting('spellcheck', true);
@@ -255,7 +255,7 @@ try {
   await page.locator('#source-editor .cm-content').focus(); await page.keyboard.press(endKey);
   await activate(originalTab); await found(0, 0); await action('find-close');
   await activate(freshTab);
-  assert.equal(await page.locator('#source-editor .moye-search-hit').count(), 0);
+  assert.equal(await page.locator('#source-editor .meki-search-hit').count(), 0);
   await action('find'); await search('Fresh document', { total: 1 });
   await page.locator('#source-editor .cm-content').focus(); await page.keyboard.press(endKey);
   await activate(originalTab); await found(0, 0);

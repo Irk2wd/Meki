@@ -6,7 +6,7 @@ import { renderDiagram } from './diagram-engine';
 import { writingAppearance } from './appearance';
 import extensionCSS from './markdown-extensions.css?inline';
 import diagramCSS from './diagrams.css?inline';
-import type { Settings } from '../shared/moye';
+import type { Settings } from '../shared/meki';
 import { codeDefaults } from './code-options';
 import { typingDefaults } from './typing-rules';
 import { highlightExportCode } from './code-highlight';
@@ -19,29 +19,29 @@ export async function exportHTML(markdown: string, name: string, documentPath: s
   // User HTML is visible escaped source; links and remaining generated HTML are sanitized.
   holder.innerHTML = DOMPurify.sanitize(parsed.html);
   await highlightExportCode(holder);
-  const math = renderMathDocument(parsed.expressions, settings, 'moye-export-equation');
+  const math = renderMathDocument(parsed.expressions, settings, 'meki-export-equation');
   // Only the trusted offline engine can populate these slots, after sanitizing the document.
-  for (const slot of holder.querySelectorAll<HTMLElement>('[data-moye-math]')) {
-    const result = math.items[Number(slot.dataset.moyeMath)]; if (result) slot.innerHTML = result.html;
-    const formula = slot.querySelector<HTMLElement>('.moye-math');
-    if (formula?.dataset.mathDisplay === 'false') slot.classList.add('moye-inline-math');
+  for (const slot of holder.querySelectorAll<HTMLElement>('[data-meki-math]')) {
+    const result = math.items[Number(slot.dataset.mekiMath)]; if (result) slot.innerHTML = result.html;
+    const formula = slot.querySelector<HTMLElement>('.meki-math');
+    if (formula?.dataset.mathDisplay === 'false') slot.classList.add('meki-inline-math');
     if (wordMath && formula && result && !result.error) {
-      formula.dataset.moyeWordFormula = '1';
-      if (result.docxMathml) formula.dataset.moyeWordMath = result.docxMathml;
+      formula.dataset.mekiWordFormula = '1';
+      if (result.docxMathml) formula.dataset.mekiWordMath = result.docxMathml;
     }
-    delete slot.dataset.moyeMath;
+    delete slot.dataset.mekiMath;
   }
-  await Promise.all([...holder.querySelectorAll<HTMLElement>('[data-moye-diagram]')].map(async slot => {
-    const index = Number(slot.dataset.moyeDiagram), source = parsed.diagrams[index];
+  await Promise.all([...holder.querySelectorAll<HTMLElement>('[data-meki-diagram]')].map(async slot => {
+    const index = Number(slot.dataset.mekiDiagram), source = parsed.diagrams[index];
     if (source !== undefined) slot.innerHTML = (await renderDiagram(source, { theme: settings.theme, id: `export-${index}` })).html;
-    delete slot.dataset.moyeDiagram;
+    delete slot.dataset.mekiDiagram;
   }));
   await Promise.all([...holder.querySelectorAll('img')].map(async img => {
-    const source = img.getAttribute('src'); if (source) img.src = await window.moye.assetUrl(source, documentPath);
+    const source = img.getAttribute('src'); if (source) img.src = await window.meki.assetUrl(source, documentPath);
   }));
   const title = name.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
-  const appearance = writingAppearance(settings, { scope: '.moye-document', exporting: true });
+  const appearance = writingAppearance(settings, { scope: '.meki-document', exporting: true });
   const background = settings.theme === 'night' ? '#202521' : settings.theme === 'linen' ? '#faf6ee' : '#fff';
   const css = `${appearance}\n${extensionCSS}\n${diagramCSS}\n${math.css}`.replace(/<\/style/gi, '<\\/style');
-  return `<!doctype html><html lang="${getLocale()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http: file:; style-src 'unsafe-inline'; font-src data:;"><title>${title}</title><style>html,body{background:${background};print-color-adjust:exact;-webkit-print-color-adjust:exact}body{margin:0;padding:48px 24px}.moye-document{margin:auto;max-width:${settings.lineWidth || 780}px}.moye-document img{max-width:100%}@page{background:${background}}@media print{body{padding:0}}\n${css}</style></head><body><article class="moye-document">${holder.innerHTML}</article></body></html>`;
+  return `<!doctype html><html lang="${getLocale()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http: file:; style-src 'unsafe-inline'; font-src data:;"><title>${title}</title><style>html,body{background:${background};print-color-adjust:exact;-webkit-print-color-adjust:exact}body{margin:0;padding:48px 24px}.meki-document{margin:auto;max-width:${settings.lineWidth || 780}px}.meki-document img{max-width:100%}@page{background:${background}}@media print{body{padding:0}}\n${css}</style></head><body><article class="meki-document">${holder.innerHTML}</article></body></html>`;
 }

@@ -27,8 +27,8 @@ test('numbered HTML and TOC share labels while keeping heading IDs and source un
 });
 
 test('heading numbering defaults off, validates and persists independently of older settings', async t => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'moye-headings-'));
-  t.after(async () => { assert.ok(isWithin(root, os.tmpdir()) && path.basename(root).startsWith('moye-headings-')); await fs.rm(root, { recursive: true, force: true }); });
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'meki-headings-'));
+  t.after(async () => { assert.ok(isWithin(root, os.tmpdir()) && path.basename(root).startsWith('meki-headings-')); await fs.rm(root, { recursive: true, force: true }); });
   assert.equal(DEFAULT_SETTINGS.headingNumbering, false);
   assert.throws(() => validateSettings({ headingNumbering: 'true' }), /headingNumbering/);
   const store = new FileStore(root); await store.init(); await store.updateSettings({ headingNumbering: true, theme: 'night' });

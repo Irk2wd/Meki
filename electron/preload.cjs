@@ -2,20 +2,19 @@
 
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
-const invoke = (method, ...args) => ipcRenderer.invoke(`moye:${method}`, ...args);
+const invoke = (method, ...args) => ipcRenderer.invoke(`meki:${method}`, ...args);
 
-contextBridge.exposeInMainWorld('moye', Object.freeze({
+contextBridge.exposeInMainWorld('meki', Object.freeze({
   updateState: () => invoke('update-state'),
   checkUpdate: () => invoke('check-update'),
   downloadUpdate: () => invoke('download-update'),
   cancelUpdate: () => invoke('cancel-update'),
-  updateCredentials: input => invoke('update-credentials', input),
   applyUpdate: () => invoke('apply-update'),
   onUpdate: callback => {
     if (typeof callback !== 'function') throw new TypeError('An update callback is required.');
     const listener = (_event, state) => callback(state);
-    ipcRenderer.on('moye:update-state', listener);
-    return () => ipcRenderer.removeListener('moye:update-state', listener);
+    ipcRenderer.on('meki:update-state', listener);
+    return () => ipcRenderer.removeListener('meki:update-state', listener);
   },
   boot: () => invoke('boot'),
   newWindow: () => invoke('new-window'),
@@ -83,9 +82,9 @@ contextBridge.exposeInMainWorld('moye', Object.freeze({
   onCommand: (callback) => {
     if (typeof callback !== 'function') throw new TypeError('A command callback is required.');
     const listener = (_event, command, payload) => callback(command, payload);
-    ipcRenderer.on('moye:command', listener);
+    ipcRenderer.on('meki:command', listener);
     void invoke('commands-ready').catch(() => {});
-    return () => ipcRenderer.removeListener('moye:command', listener);
+    return () => ipcRenderer.removeListener('meki:command', listener);
   },
 }));
 

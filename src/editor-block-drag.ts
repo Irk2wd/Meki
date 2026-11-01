@@ -43,15 +43,15 @@ export class BlockDrag {
     event.dataTransfer.clearData(); event.dataTransfer.effectAllowed = 'copyMove';
     event.dataTransfer.setData('text/html', dom.innerHTML); event.dataTransfer.setData('text/plain', text);
     this.view.dragging = { slice, move: true };
-    this.ghost.width = this.ghost.height = 1; this.ghost.className = 'moye-block-native-ghost'; document.body.append(this.ghost);
+    this.ghost.width = this.ghost.height = 1; this.ghost.className = 'meki-block-native-ghost'; document.body.append(this.ghost);
     event.dataTransfer.setDragImage(this.ghost, 0, 0);
-    this.indicator.className = 'moye-block-drop-line'; this.indicator.hidden = true;
-    this.preview.className = 'moye-block-drag-preview'; this.preview.setAttribute('aria-hidden', 'true');
+    this.indicator.className = 'meki-block-drop-line'; this.indicator.hidden = true;
+    this.preview.className = 'meki-block-drag-preview'; this.preview.setAttribute('aria-hidden', 'true');
     const title = document.createElement('strong'); title.textContent = label;
     const summary = document.createElement('span'); summary.textContent = target.node.textContent.slice(0, 100) || label;
     const hint = document.createElement('small'); hint.textContent = t('Alt / Option 拖动可复制 · Esc 取消');
     this.preview.append(title, summary, hint); document.body.append(this.indicator, this.preview);
-    this.highlight(target, 'moye-block-drag-source');
+    this.highlight(target, 'meki-block-drag-source');
     this.view.state.doc.forEach((node, pos) => { const element = this.view.nodeDOM(pos); if (element instanceof HTMLElement) this.blocks.push({ node, pos, element }); });
     window.addEventListener('dragover', this.over, true); window.addEventListener('drop', this.drop, true);
     window.addEventListener('dragend', this.end, true); window.addEventListener('keydown', this.keydown, true);
@@ -106,7 +106,7 @@ export class BlockDrag {
       this.apply(tr); this.view.focus();
       const $pos = this.view.state.selection.$from;
       const target = captureBlock(this.view.state, $pos.depth ? $pos.before(1) : $pos.pos);
-      this.highlight(target, 'moye-block-dropped', 650);
+      this.highlight(target, 'meki-block-dropped', 650);
     }
   };
   private tick = (time: number) => {

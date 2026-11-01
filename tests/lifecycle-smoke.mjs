@@ -15,7 +15,7 @@ let a = path.join(notes, 'Alpha.md'), b = path.join(notes, 'Beta.md');
 const originalA = '\uFEFF# Alpha\r\n\r\nFirst paragraph.\r\n';
 await fs.writeFile(a, originalA); await fs.writeFile(b, '# Beta\n\nSecond paragraph.\n');
 const profile = path.join(run, 'profile');
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: profile, MOYE_TEST_FOLDER_PATH: folder, MOYE_TEST_DISCARD: 'cancel', MOYE_TEST_CONFLICT: 'cancel' };
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: profile, MEKI_TEST_FOLDER_PATH: folder, MEKI_TEST_DISCARD: 'cancel', MEKI_TEST_CONFLICT: 'cancel' };
 delete env.ELECTRON_RUN_AS_NODE;
 const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 const end = process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End';
@@ -26,7 +26,7 @@ function pass(message) { results.push(message); console.log(`PASS ${message}`); 
 async function idle() { await page.waitForFunction(() => !document.body.classList.contains('is-busy')); }
 async function action(name) { if (name === 'folder') await page.keyboard.press(`${modifier}+Shift+O`); else await page.locator(`[data-action="${name}"]`).first().evaluate(node => node.click()); await idle(); }
 async function setting(name, value) { await app.evaluate((_electron, { name, value }) => { process.env[name] = value; }, { name, value }); }
-async function open(file) { await setting('MOYE_TEST_OPEN_PATH', file); await action('open'); }
+async function open(file) { await setting('MEKI_TEST_OPEN_PATH', file); await action('open'); }
 async function tab(file) {
   // A disk write can finish before autosave's session commit releases the UI.
   await idle();
@@ -51,7 +51,7 @@ async function poll(check, timeout = 18000) {
   throw Error('Timed out waiting for lifecycle state');
 }
 async function launch(args = []) {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? args : [root, ...args], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? args : [root, ...args], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].show());
   await page.waitForSelector('#shell[data-ready="true"]');
@@ -67,7 +67,7 @@ async function menu(file, command) {
 }
 try {
   await launch(['--open', a]);
-  assert.equal((await page.evaluate(() => window.moye.boot())).settings.autoSave, false);
+  assert.equal((await page.evaluate(() => window.meki.boot())).settings.autoSave, false);
   const settingsControl = await page.locator('.tab-settings').elementHandle();
   await append('\nA source edit'); await open(b); await append('\nB unsaved edit');
   assert.equal(await settingsControl.evaluate(node => node.isConnected && node === document.querySelector('.tab-settings')), true);
@@ -87,18 +87,18 @@ try {
   await tab(b); await open(b); assert.equal(await page.locator('.document-tab').count(), 2); assert.match(await page.locator('#source-editor').innerText(), /B unsaved edit/);
   pass('rich editor undo survives tab switches; reopening the same file selects its existing dirty tab');
 
-  const beforeA = await fs.readFile(a); await setting('MOYE_TEST_SAVE_PATH', a); await action('saveAs');
+  const beforeA = await fs.readFile(a); await setting('MEKI_TEST_SAVE_PATH', a); await action('saveAs');
   assert.deepEqual(await fs.readFile(a), beforeA); assert.match(await page.locator('#toast').innerText(), /另一个标签/);
-  await setting('MOYE_TEST_SAVE_DELAY', '1200');
+  await setting('MEKI_TEST_SAVE_DELAY', '1200');
   await page.locator('[data-action="save"]').first().evaluate(button => button.click());
-  await poll(() => app.evaluate(() => process.env.MOYE_TEST_SAVE_PENDING === '1'));
+  await poll(() => app.evaluate(() => process.env.MEKI_TEST_SAVE_PENDING === '1'));
   await page.locator('#source-editor .cm-content').click(); await page.keyboard.press(end); await page.keyboard.insertText(' Later keystrokes'); await idle();
   assert.doesNotMatch(await fs.readFile(b, 'utf8'), /Later keystrokes/); assert.equal(await page.locator('#dirty-dot').isVisible(), true);
-  await setting('MOYE_TEST_SAVE_DELAY', '0'); await action('save'); assert.match(await fs.readFile(b, 'utf8'), /Later keystrokes/);
+  await setting('MEKI_TEST_SAVE_DELAY', '0'); await action('save'); assert.match(await fs.readFile(b, 'utf8'), /Later keystrokes/);
   pass('Save As rejects another open tab and asynchronous saves do not mark later input as saved');
 
   await append('\nClose confirmation'); await closeTab(); assert.equal(await page.locator('.document-tab').count(), 2); assert.equal(await page.locator('#dirty-dot').isVisible(), true);
-  await setting('MOYE_TEST_DISCARD', 'save'); await closeTab(); assert.equal(await page.locator('.document-tab').count(), 1); assert.match(await fs.readFile(b, 'utf8'), /Close confirmation/);
+  await setting('MEKI_TEST_DISCARD', 'save'); await closeTab(); assert.equal(await page.locator('.document-tab').count(), 1); assert.match(await fs.readFile(b, 'utf8'), /Close confirmation/);
   await open(b); await tab(a); await append('\nDefault autosave stays off'); await page.waitForTimeout(800);
   assert.doesNotMatch(await fs.readFile(a, 'utf8'), /Default autosave stays off/);
   pass('individual close respects cancel/save; recovery snapshots do not write Markdown while autosave is off');
@@ -106,12 +106,12 @@ try {
   await lifecycleSettings({ autoSave: true, autoSaveInterval: 10 }); await append('\nAutomatic writeback');
   await poll(async () => (await fs.readFile(a, 'utf8')).includes('Automatic writeback'));
   await idle(); assert.equal(await page.locator('#dirty-dot').isVisible(), false);
-  assert.ok((await page.evaluate(file => window.moye.listVersions(file), a)).length >= 2);
+  assert.ok((await page.evaluate(file => window.meki.listVersions(file), a)).length >= 2);
   pass('opt-in interval autosave writes saved documents and preserves their previous versions');
 
   const savedA = await fs.readFile(a);
   await append('\nBackground conflicting edit'); await tab(b); await fs.writeFile(a, 'External bytes must survive');
-  await setting('MOYE_TEST_CONFLICT', 'overwrite');
+  await setting('MEKI_TEST_CONFLICT', 'overwrite');
   await poll(() => page.locator('.document-tab').filter({ has: page.locator(`[title="${a.replace(/\\/g, '\\\\')}"]`) }).locator('.tab-paused').count().then(count => count > 0));
   await page.waitForTimeout(11000); assert.equal(await fs.readFile(a, 'utf8'), 'External bytes must survive');
   await tab(a); assert.match(await page.locator('#source-editor').innerText(), /Background conflicting edit/); assert.match(await page.locator('#document-state').innerText(), /暂停/);
@@ -123,7 +123,7 @@ try {
   pass('restoring the exact saved disk version clears only the external pause and resumes safe autosave');
 
   await tab(b); const diskB = await fs.readFile(b);
-  await append('\nUnsaved before history restore'); await setting('MOYE_TEST_DISCARD', 'cancel');
+  await append('\nUnsaved before history restore'); await setting('MEKI_TEST_DISCARD', 'cancel');
   await action('history'); await page.locator('#history-list button').last().click(); await page.locator('#restore-version').waitFor({ state: 'visible' });
   await poll(() => page.locator('#restore-version').isEnabled());
   const restored = await page.locator('#history-preview').inputValue();
@@ -131,12 +131,12 @@ try {
   await page.locator('#restore-version').click(); await idle();
   assert.equal(await page.locator('#history-dialog').isVisible(), true);
   assert.match(await page.locator('#source-editor').innerText(), /Unsaved before history restore/);
-  await setting('MOYE_TEST_DISCARD', 'discard'); await page.locator('#restore-version').click(); await idle(); await source();
+  await setting('MEKI_TEST_DISCARD', 'discard'); await page.locator('#restore-version').click(); await idle(); await source();
   assert.equal(await page.locator('#source-editor .cm-line').evaluateAll(lines => lines.map(line => line.textContent).join('\n')), restored);
   assert.equal(await page.locator('#dirty-dot').isVisible(), true); assert.match(await page.locator('#document-state').innerText(), /手动保存/);
   await page.waitForTimeout(11000); assert.deepEqual(await fs.readFile(b), diskB);
   const historical = JSON.parse(await fs.readFile(path.join(profile, 'session.json'), 'utf8')).documents.find(doc => doc.path === b);
-  const blocked = await page.evaluate(doc => window.moye.autoSaveDocument({ ...doc, tabId: doc.id }), historical);
+  const blocked = await page.evaluate(doc => window.meki.autoSaveDocument({ ...doc, tabId: doc.id }), historical);
   assert.equal(blocked.status, 'paused'); assert.deepEqual(await fs.readFile(b), diskB);
   await action('save'); assert.equal(await fs.readFile(b, 'utf8'), restored);
   pass('version previews restore only to a dirty buffer and stay paused until an explicit manual save');
@@ -146,16 +146,16 @@ try {
   await menu(notes, 'rename'); await page.locator('#workspace-entry-name').fill('moved'); await page.locator('#workspace-form button[type="submit"]').click(); await idle();
   const moved = path.join(folder, 'moved'); a = path.join(moved, 'Alpha.md'); b = path.join(moved, 'Beta.md');
   await tab(b); assert.match(await page.locator('#source-editor').innerText(), /B before workspace operation/); assert.equal(await page.locator('#dirty-dot').isVisible(), true);
-  assert.ok((await page.evaluate(file => window.moye.listVersions(file), b)).length);
-  await setting('MOYE_TEST_TRASH', 'confirm'); await menu(moved, 'trash');
+  assert.ok((await page.evaluate(file => window.meki.listVersions(file), b)).length);
+  await setting('MEKI_TEST_TRASH', 'confirm'); await menu(moved, 'trash');
   assert.equal(await fs.stat(moved).catch(() => null), null); assert.equal(await page.locator('.document-tab .tab-dirty.visible').count(), 2);
   assert.equal(await page.locator('#document-name').getAttribute('title'), '尚未保存到文件');
   const session = JSON.parse(await fs.readFile(path.join(profile, 'session.json'), 'utf8'));
   assert.ok(session.documents.every(doc => doc.path === null && doc.dirty));
   pass('workspace parent rename migrates every tab and history; trash preserves all open buffers as unsaved documents');
 
-  await setting('MOYE_TEST_DISCARD', 'cancel'); await action('close-all'); assert.equal(await page.locator('.document-tab').count(), 2);
-  await setting('MOYE_TEST_DISCARD', 'discard'); await action('close-all'); assert.equal(await page.locator('.document-tab').count(), 1);
+  await setting('MEKI_TEST_DISCARD', 'cancel'); await action('close-all'); assert.equal(await page.locator('.document-tab').count(), 2);
+  await setting('MEKI_TEST_DISCARD', 'discard'); await action('close-all'); assert.equal(await page.locator('.document-tab').count(), 1);
   await append('Crash draft one α'); await action('new'); await append('Crash draft two β');
   assert.equal(await page.locator('#document-name').textContent(), '未命名 2.md');
   await lifecycleSettings({ reopenSession: false }); await page.waitForTimeout(900); await crash(); await launch();
@@ -165,7 +165,7 @@ try {
   await page.screenshot({ path: path.join(run, 'recovered-tabs.png'), animations: 'disabled' });
   pass('close-all cancel retains every tab; crashes recover all dirty documents even with reopen-last-session disabled');
 
-  await setting('MOYE_TEST_DISCARD', 'discard'); await action('close-all');
+  await setting('MEKI_TEST_DISCARD', 'discard'); await action('close-all');
   const c = path.join(folder, 'Clean.md'), d = path.join(folder, 'Other.md'); await fs.writeFile(c, '# Clean'); await fs.writeFile(d, '# Other');
   await open(c); await open(d); await lifecycleSettings({ reopenSession: true }); await normalQuit();
   await fs.writeFile(c, '# Fresh external content'); await launch();
@@ -177,7 +177,7 @@ try {
 
   const rejected = await page.evaluate(async path => {
     const failures = [];
-    for (const call of [() => window.moye.listVersions(path), () => window.moye.readVersion(path, '../bad'), () => window.moye.saveSession({ documents: [{ path, name: 'outside.md', content: 'bad', revision: null, id: 'bad', dirty: true, mode: 'source', paused: null }], activeId: 'bad' }), () => window.moye.updateSettings({ autoSaveInterval: 1 })]) {
+    for (const call of [() => window.meki.listVersions(path), () => window.meki.readVersion(path, '../bad'), () => window.meki.saveSession({ documents: [{ path, name: 'outside.md', content: 'bad', revision: null, id: 'bad', dirty: true, mode: 'source', paused: null }], activeId: 'bad' }), () => window.meki.updateSettings({ autoSaveInterval: 1 })]) {
       try { await call(); failures.push(false); } catch { failures.push(true); }
     }
     return failures;

@@ -1,7 +1,7 @@
 import { t, ht } from '../electron/i18n.mjs';
 import type { WritingEditor } from './editor';
 import type { InsertionPoint } from './editor-actions';
-import type { Settings } from '../shared/moye';
+import type { Settings } from '../shared/meki';
 import { CodeOptionsDialog } from './code-options-dialog';
 import { clipboardCommands, type ClipboardCommand } from './editor-clipboard';
 import './code-options.css';

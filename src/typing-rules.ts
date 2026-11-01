@@ -18,7 +18,7 @@ export type TypingAction =
   | { kind: 'mark'; from: number; to: number; mark: string }
   | { kind: 'math'; from: number; to: number; tex: string };
 const brackets: Record<string, string> = { '(': ')', '[': ']', '{': '}', '（': '）', '【': '】', '「': '」', '『': '』', '《': '》' };
-const marks: Record<string, string> = { '*': 'emphasis', '_': 'emphasis', '**': 'strong', '__': 'strong', '`': 'inlineCode', '~': 'moye_sub', '~~': 'strike_through', '^': 'moye_sup', '=': 'moye_highlight', '==': 'moye_highlight' };
+const marks: Record<string, string> = { '*': 'emphasis', '_': 'emphasis', '**': 'strong', '__': 'strong', '`': 'inlineCode', '~': 'meki_sub', '~~': 'strike_through', '^': 'meki_sup', '=': 'meki_highlight', '==': 'meki_highlight' };
 const word = /[\p{L}\p{N}]/u;
 
 /** An unfinished $... expression is still prose until Milkdown parses it. */

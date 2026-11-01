@@ -75,7 +75,7 @@ for filename in args.artifacts.rglob('report.json'):
     require(target not in reports, f'Duplicate validation for {target}')
     require(target in ['win32-x64', 'darwin-arm64', 'darwin-x64'], 'Unexpected validation target')
     manifest = manifests['windows' if target == 'win32-x64' else 'macos']
-    for key in ['version', 'sourceCommit', 'installer', 'sha256', 'asarSha256', 'updateAssets', 'compatibilityInstaller']:
+    for key in ['version', 'sourceCommit', 'installer', 'sha256', 'asarSha256', 'updateAssets']:
         require(report[key] == manifest[key], f'{target}: verified payload differs from delivered build')
     require(report.get('success') is True and not report.get('errors'), f'{target}: incomplete verification')
     require(report['unitTests'] >= 192 and report['uiChecks'] >= 190
@@ -92,10 +92,6 @@ for installer in installers.values():
     shutil.copy2(installer, output / installer.name)
     require(sha256(output / installer.name) == sha256(installer), 'Copied installer changed')
 for platform, manifest in manifests.items():
-    alias = installers[platform].parent / manifest['compatibilityInstaller']
-    require(alias.name == manifest['compatibilityInstaller'] and sha256(alias) == manifest['sha256'], 'Compatibility installer differs')
-    shutil.copy2(alias, output / alias.name)
-    require(sha256(output / alias.name) == manifest['sha256'], 'Copied compatibility installer changed')
     for entry in manifest['updateAssets']:
         update_file = installers[platform].parent / entry['name']
         require(update_file.name == entry['name'] and sha256(update_file) == entry['sha256'], 'Invalid update asset')

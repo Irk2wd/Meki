@@ -18,7 +18,7 @@ const linkedPath = path.join(folder,'notes','子稿.md');
 const original = '\uFEFF# 欢迎\r\n\r\n[子稿](notes/%E5%AD%90%E7%A8%BF.md#目标)\r\n\r\nUnicode αβ\r\n';
 await fs.writeFile(originalPath,original);
 await fs.writeFile(linkedPath,'# 子稿\n\n第一段\n\n## 目标\n\nNeedle 中文内容\n\nneedle second\n');
-const env={...process.env,MOYE_TEST:'1',MOYE_USER_DATA:path.join(run,'profile'),MOYE_TEST_FOLDER_PATH:folder,MOYE_TEST_OPEN_PATH:originalPath,MOYE_TEST_SAVE_PATH:path.join(folder,'恢复.md'),MOYE_TEST_DISCARD:'cancel',MOYE_TEST_CONFLICT:'cancel'};
+const env={...process.env,MEKI_TEST:'1',MEKI_USER_DATA:path.join(run,'profile'),MEKI_TEST_FOLDER_PATH:folder,MEKI_TEST_OPEN_PATH:originalPath,MEKI_TEST_SAVE_PATH:path.join(folder,'恢复.md'),MEKI_TEST_DISCARD:'cancel',MEKI_TEST_CONFLICT:'cancel'};
 delete env.ELECTRON_RUN_AS_NODE;
 const modifier=process.platform==='darwin'?'Meta':'Control';
 const end=process.platform==='darwin'?'Meta+ArrowDown':'Control+End';
@@ -44,7 +44,7 @@ async function quick(query){
   await idle();
 }
 try{
-  app=await electron.launch({executablePath:process.env.MOYE_EXECUTABLE||require('electron'),args:process.env.MOYE_EXECUTABLE?[]:[root],env,timeout:30000});
+  app=await electron.launch({executablePath:process.env.MEKI_EXECUTABLE||require('electron'),args:process.env.MEKI_EXECUTABLE?[]:[root],env,timeout:30000});
   page=await app.firstWindow();page.setDefaultTimeout(15000);page.on('pageerror',error=>errors.push(error.message));
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].show());
   await page.waitForSelector('#shell[data-ready="true"]');
@@ -81,7 +81,7 @@ try{
   assert.match(await page.locator('#toast').innerText(),/已存在/);
   await menu(copy,'copy-path');
   await page.waitForFunction(()=>document.querySelector('#toast')?.textContent==='已复制完整路径');
-  assert.equal(await app.evaluate(()=>process.env.MOYE_TEST_COPIED_PATH),copy);
+  assert.equal(await app.evaluate(()=>process.env.MEKI_TEST_COPIED_PATH),copy);
   await menu(copy,'reveal');
   pass('duplicate preserves BOM/CRLF, occupied targets are rejected, and path actions use the native bridge');
 
@@ -89,12 +89,12 @@ try{
   await quick('欢迎.md');assert.equal(await page.locator('#document-name').getAttribute('title'),originalPath);
   await quick('renamed.md');assert.equal(await page.locator('#dirty-dot').isVisible(),true);assert.match(await page.locator('#source-editor').innerText(),/快速打开前的未保存编辑/);
   await action('close-tab');assert.equal(await page.locator('#document-name').getAttribute('title'),active);
-  await setting('MOYE_TEST_DISCARD','save');await action('close-tab');await quick('欢迎.md');
+  await setting('MEKI_TEST_DISCARD','save');await action('close-tab');await quick('欢迎.md');
   assert.equal(await page.locator('#document-name').getAttribute('title'),originalPath);assert.match(await fs.readFile(active,'utf8'),/快速打开前的未保存编辑/);
   await page.locator('[data-mode="visual"]').click();
-  await page.locator('.moye-document a').filter({hasText:'子稿'}).click({modifiers:[modifier]});await idle();
+  await page.locator('.meki-document a').filter({hasText:'子稿'}).click({modifiers:[modifier]});await idle();
   await page.waitForFunction(()=>document.querySelector('#document-name').textContent==='子稿.md');
-  assert.ok(await page.locator('.moye-document #目标').count());
+  assert.ok(await page.locator('.meki-document #目标').count());
   pass('quick open retains unsaved tabs, closing honors cancel/save, and relative links open their heading anchor');
 
   await page.keyboard.press(`${modifier}+Shift+k`);await page.locator('#workspace-query').fill('Needle');
@@ -106,23 +106,23 @@ try{
 
   await append('\n本地未保存修改');await fs.writeFile(linkedPath,'# 外部版本\n\n磁盘内容必须保留\n');
   await page.locator('#external-banner').waitFor({state:'visible',timeout:15000});assert.match(await page.locator('#source-editor').innerText(),/本地未保存修改/);
-  await setting('MOYE_TEST_DISCARD','cancel');await action('reload-document');assert.match(await page.locator('#source-editor').innerText(),/本地未保存修改/);
+  await setting('MEKI_TEST_DISCARD','cancel');await action('reload-document');assert.match(await page.locator('#source-editor').innerText(),/本地未保存修改/);
   await action('save');assert.match(await fs.readFile(linkedPath,'utf8'),/磁盘内容必须保留/);assert.equal(await page.locator('#dirty-dot').isVisible(),true);
-  await setting('MOYE_TEST_DISCARD','discard');await action('reload-document');assert.equal(await page.locator('#dirty-dot').isVisible(),false);assert.match(await page.locator('#source-editor').innerText(),/外部版本/);
+  await setting('MEKI_TEST_DISCARD','discard');await action('reload-document');assert.equal(await page.locator('#dirty-dot').isVisible(),false);assert.match(await page.locator('#source-editor').innerText(),/外部版本/);
   const added=path.join(folder,'external.md');await fs.writeFile(added,'# externally created');
   await page.waitForFunction(file=>[...document.querySelectorAll('[data-ws="open"]')].some(node=>node.dataset.wsPath===file),added,{timeout:15000});
   await fs.unlink(added);await page.waitForFunction(file=>![...document.querySelectorAll('[data-ws="open"]')].some(node=>node.dataset.wsPath===file),added,{timeout:15000});
   pass('external changes refresh the tree and prompt reload without replacing dirty editor text or bypassing conflicts');
 
   await menu(linkedPath,'trash');assert.ok(await fs.stat(linkedPath));
-  await setting('MOYE_TEST_TRASH','confirm');await menu(linkedPath,'trash');
+  await setting('MEKI_TEST_TRASH','confirm');await menu(linkedPath,'trash');
   assert.equal(await fs.stat(linkedPath).catch(()=>null),null);assert.equal(await page.locator('#dirty-dot').isVisible(),true);assert.match(await page.locator('#source-editor').innerText(),/外部版本/);
   assert.equal(await page.locator('#document-name').getAttribute('title'),'尚未保存到文件');
   await action('save');assert.match(await fs.readFile(path.join(folder,'恢复.md'),'utf8'),/外部版本/);
   pass('trash requires explicit confirmation, uses the system recycle bin, and retains the active document for Save As');
 
   const outside=path.join(run,'outside.md');await fs.writeFile(outside,'outside must survive');
-  const rejected=await page.evaluate(async file=>{try{await window.moye.workspaceOperation({action:'trash',path:file});return false;}catch{return true;}},outside);
+  const rejected=await page.evaluate(async file=>{try{await window.meki.workspaceOperation({action:'trash',path:file});return false;}catch{return true;}},outside);
   assert.equal(rejected,true);assert.equal(await fs.readFile(outside,'utf8'),'outside must survive');
   await page.screenshot({path:path.join(run,'workspace.png'),animations:'disabled'});
   assert.deepEqual(errors,[]);pass('renderer bridge rejects operations outside the workspace; no renderer errors');

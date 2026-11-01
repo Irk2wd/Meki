@@ -42,9 +42,9 @@ export async function prepareExportAssets(html: string, kind: ExportKind) {
     iframe.srcdoc = html.replace(/<head[^>]*>/i, match => match + '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data:; style-src \'unsafe-inline\'; font-src data:;">');
     await loaded;
     const doc = iframe.contentDocument!; await doc.fonts.ready;
-    for (const svg of doc.querySelectorAll<SVGSVGElement>('.moye-math svg, .moye-diagram svg')) {
+    for (const svg of doc.querySelectorAll<SVGSVGElement>('.meki-math svg, .meki-diagram svg')) {
       const raster = await svgPng(svg); const image = doc.createElement('img'); image.src = raster.data;
-      image.width = raster.width; image.height = raster.height; image.alt = svg.closest('.moye-diagram') ? t("Mermaid 图表") : svg.closest('.moye-math')?.getAttribute('aria-label') || t("数学公式");
+      image.width = raster.width; image.height = raster.height; image.alt = svg.closest('.meki-diagram') ? t("Mermaid 图表") : svg.closest('.meki-math')?.getAttribute('aria-label') || t("数学公式");
       svg.replaceWith(image);
     }
     for (const image of Array.from(doc.images)) {
@@ -64,7 +64,7 @@ export async function prepareExportAssets(html: string, kind: ExportKind) {
     doc.querySelectorAll('article,mjx-container,mjx-break').forEach(node => node.replaceWith(...node.childNodes));
     doc.querySelectorAll('style,script').forEach(node => node.remove());
     doc.querySelectorAll('*').forEach(node => { for (const attr of Array.from(node.attributes)) {
-      if (kind === 'docx' && ['data-moye-word-formula', 'data-moye-word-math'].includes(attr.name)) continue;
+      if (kind === 'docx' && ['data-meki-word-formula', 'data-meki-word-math'].includes(attr.name)) continue;
       if (attr.name === 'class' || attr.name === 'style' || attr.name.startsWith('data-')) node.removeAttribute(attr.name);
     } });
     return '<!doctype html>\n' + doc.documentElement.outerHTML;
@@ -76,19 +76,19 @@ export function installDiagramActions(notify: (message: string, error?: boolean)
   menu.innerHTML = `<button type="button" data-diagram-save="svg">${ht("另存 SVG")}</button><button type="button" data-diagram-save="png">${ht("另存 PNG")}</button><button type="button" data-diagram-save="clipboard">${ht("复制图片")}</button>`;
   document.body.append(menu); let active: SVGSVGElement | null = null;
   const open = (svg: SVGSVGElement, x: number, y: number) => { active = svg; menu.hidden = false; menu.style.left = `${Math.min(x, window.innerWidth - 160)}px`; menu.style.top = `${Math.min(y, window.innerHeight - 140)}px`; };
-  const refresh = () => document.querySelectorAll<HTMLElement>('.ProseMirror .moye-diagram[data-diagram-state="ready"]').forEach(diagram => {
+  const refresh = () => document.querySelectorAll<HTMLElement>('.ProseMirror .meki-diagram[data-diagram-state="ready"]').forEach(diagram => {
     if (diagram.querySelector('.diagram-actions')) return;
     const button = document.createElement('button'); button.type = 'button'; button.className = 'diagram-actions'; button.textContent = '⋯'; button.title = t("图表另存与复制"); button.setAttribute('aria-label', button.title); button.contentEditable = 'false';
     button.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); const box = button.getBoundingClientRect(); open(diagram.querySelector('svg')!, box.left, box.bottom); });
     diagram.append(button);
   });
   const observer = new MutationObserver(refresh); observer.observe(document.querySelector('#editor-workspace')!, { childList: true, subtree: true }); refresh();
-  document.addEventListener('contextmenu', event => { const svg = (event.target as Element).closest<SVGSVGElement>('.ProseMirror .moye-diagram svg'); if (svg) { event.preventDefault(); open(svg, event.clientX, event.clientY); } });
+  document.addEventListener('contextmenu', event => { const svg = (event.target as Element).closest<SVGSVGElement>('.ProseMirror .meki-diagram svg'); if (svg) { event.preventDefault(); open(svg, event.clientX, event.clientY); } });
   document.addEventListener('click', event => { if (!menu.contains(event.target as Node)) menu.hidden = true; });
   menu.addEventListener('click', async event => {
     const kind = (event.target as Element).closest<HTMLElement>('[data-diagram-save]')?.dataset.diagramSave as 'svg' | 'png' | 'clipboard' | undefined;
     if (!kind || !active) return; menu.hidden = true;
-    try { const snapshot = active; const result = await window.moye.saveDiagram(kind === 'svg' ? { kind, svg: standaloneSvg(snapshot).svg } : { kind, png: (await svgPng(snapshot, 2)).bytes }); if (result || kind === 'clipboard') notify(kind === 'clipboard' ? t("已复制图表图片") : t("已保存图表 {0}", kind.toUpperCase())); }
+    try { const snapshot = active; const result = await window.meki.saveDiagram(kind === 'svg' ? { kind, svg: standaloneSvg(snapshot).svg } : { kind, png: (await svgPng(snapshot, 2)).bytes }); if (result || kind === 'clipboard') notify(kind === 'clipboard' ? t("已复制图表图片") : t("已保存图表 {0}", kind.toUpperCase())); }
     catch (error) { notify(String(error), true); }
   });
 }

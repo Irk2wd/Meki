@@ -25,14 +25,14 @@ const server = http.createServer(async (request, response) => {
     if (request.url === '/heartbeat') { response.end(JSON.stringify({ success: true, result: 'alive' })); return; }
     assert.equal(request.url, '/upload'); const { list } = JSON.parse(body);
     uploads.push(list); for (const file of list) assert.deepEqual(await fs.readFile(file), png);
-    response.end(JSON.stringify({ success: true, result: list.map((_, index) => `https://images.moye.test/selected-${uploads.length}-${index}.png`) }));
+    response.end(JSON.stringify({ success: true, result: list.map((_, index) => `https://images.meki.test/selected-${uploads.length}-${index}.png`) }));
   } catch (error) { errors.push(error.message); if (!response.destroyed) response.writeHead(500).end(); }
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const port = server.address().port, remote = `http://127.0.0.1:${port}/remote.png?size=original`;
 const original = '\uFEFF# 图片管理\r\n\r\n<img src="原 图.png" width="84" height="36" alt="原图" title="Keep" />\r\n\r\n![重复](<原 图.png> "Same")\r\n\r\n<img src="other.png" width="84" height="36" alt="其他" />\r\n\r\n<img src="' + remote + '" width="84" height="36" alt="网络" />\r\n';
 await fs.writeFile(picture, png); await fs.writeFile(other, png); await fs.writeFile(doc, original);
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: profile, MOYE_TEST_DISCARD: 'cancel', MOYE_TEST_CONFLICT: 'cancel', MOYE_TEST_FOLDER_PATH: run, MOYE_TEST_IMAGE_DOWNLOAD_ORIGIN: `http://127.0.0.1:${port}` }; delete env.ELECTRON_RUN_AS_NODE;
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: profile, MEKI_TEST_DISCARD: 'cancel', MEKI_TEST_CONFLICT: 'cancel', MEKI_TEST_FOLDER_PATH: run, MEKI_TEST_IMAGE_DOWNLOAD_ORIGIN: `http://127.0.0.1:${port}` }; delete env.ELECTRON_RUN_AS_NODE;
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control', redo = process.platform === 'darwin' ? 'Meta+Shift+z' : 'Control+y';
 let app, page;
 const pass = name => { results.push(name); console.log(`PASS ${name}`); };
@@ -63,9 +63,9 @@ async function undo() {
   await page.keyboard.press(`${mod}+z`);
 }
 try {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? ['--open', doc] : [root, '--open', doc], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', doc] : [root, '--open', doc], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
-  await page.route('https://images.moye.test/**', route => route.fulfill({ contentType: 'image/png', body: png }));
+  await page.route('https://images.meki.test/**', route => route.fulfill({ contentType: 'image/png', body: png }));
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.setSize(1024, 694); window.show(); window.focus(); });
   await page.waitForSelector('#shell[data-ready="true"]');
   await action('image-hosting'); await page.locator('#picgo-port').fill(String(port));
@@ -126,7 +126,7 @@ try {
   await assert.rejects(fs.stat(path.join(run, 'conflicted')), { code: 'ENOENT' }); assert.equal(await content(text => text === copied), copied);
   await page.locator('#image-copy-dialog .dialog-actions [data-image-cancel]').click();
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(760, 660));
-  const firstBlock = page.locator('.moye-image-block').filter({ has: page.locator('img[alt="原图"]') });
+  const firstBlock = page.locator('.meki-image-block').filter({ has: page.locator('img[alt="原图"]') });
   await firstBlock.hover(); await firstBlock.locator('.image-more-actions').click();
   await page.locator('[data-image-action="copy"]').click();
   const layout = await page.locator('#image-copy-dialog').evaluate(dialog => { const b = dialog.getBoundingClientRect(); return { x: b.x, y: b.y, right: b.right, bottom: b.bottom, width: innerWidth, height: innerHeight }; });

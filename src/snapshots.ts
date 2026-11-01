@@ -1,5 +1,5 @@
 import { t, ht, getLocale } from '../electron/i18n.mjs';
-import type { DocumentSnapshot } from '../shared/moye';
+import type { DocumentSnapshot } from '../shared/meki';
 import type { DocumentTabs } from './document-tabs';
 import './snapshots.css';
 
@@ -45,7 +45,7 @@ export class SnapshotDialog {
     this.el('#copy-snapshot').addEventListener('click', () => { void this.restore(true); });
     this.el('#delete-snapshot').addEventListener('click', () => {
       const selected = this.selected; if (!selected) return;
-      void this.act(async () => { if (await window.moye.deleteSnapshot(selected.id)) { await this.refresh(); this.status(t("已删除快照。")); } });
+      void this.act(async () => { if (await window.meki.deleteSnapshot(selected.id)) { await this.refresh(); this.status(t("已删除快照。")); } });
     });
   }
   private el<T extends HTMLElement = HTMLElement>(selector: string) { return this.dialog.querySelector<T>(selector)!; }
@@ -79,7 +79,7 @@ export class SnapshotDialog {
     this.selected = null; this.controls(); this.el<HTMLTextAreaElement>('#snapshot-preview').value = '';
     this.el('#snapshot-list').replaceChildren(); this.status(t("正在读取快照…"));
     const tab = this.hooks.documents.active;
-    const entries = await window.moye.listSnapshots(this.el<HTMLSelectElement>('#snapshot-scope').value === 'all' ? undefined : { path: tab.document.path, tabId: tab.id });
+    const entries = await window.meki.listSnapshots(this.el<HTMLSelectElement>('#snapshot-scope').value === 'all' ? undefined : { path: tab.document.path, tabId: tab.id });
     if (request !== this.request || !this.dialog.open) return;
     this.el('#snapshot-count').textContent = t("{0} 份快照", entries.length);
     this.status(entries.length ? t("选择快照预览。") : t("还没有快照。可以创建一份，或继续写作，等待定期快照。"));
@@ -92,7 +92,7 @@ export class SnapshotDialog {
         if (this.working) return;
         const request = ++this.request;
         this.selected = null; this.controls(); this.el<HTMLTextAreaElement>('#snapshot-preview').value = ''; this.status(t("正在读取内容…"));
-        void window.moye.readSnapshot(entry.id).then(result => {
+        void window.meki.readSnapshot(entry.id).then(result => {
           if (request !== this.request || !this.dialog.open) return;
           this.selected = result.snapshot; this.el<HTMLTextAreaElement>('#snapshot-preview').value = result.content;
           this.el('#snapshot-list').querySelectorAll('button').forEach(node => node.classList.toggle('active', node === button));
@@ -105,7 +105,7 @@ export class SnapshotDialog {
   private async restore(copy: boolean) {
     const selected = this.selected; if (!selected) return;
     await this.act(async () => {
-      const result = await window.moye.readSnapshot(selected.id);
+      const result = await window.meki.readSnapshot(selected.id);
       if (copy) await this.hooks.documents.open({ path: null, revision: null, name: t("快照 · {0}", result.snapshot.name), content: result.content }, true);
       else {
         if (!this.sameDocument(result.snapshot)) throw new Error(t("文稿已切换，请重新打开快照。"));

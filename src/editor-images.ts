@@ -12,7 +12,7 @@ function imageView(create: NodeViewConstructor): NodeViewConstructor {
   return (initial, view, getPos, decorations, innerDecorations) => {
     const base = create(initial, view, getPos, decorations, innerDecorations), dom = base.dom as HTMLElement;
     let node = initial, alive = true, resizing = false, cancelDrag: (() => void) | undefined;
-    dom.classList.add('moye-image-block');
+    dom.classList.add('meki-image-block');
     const image = () => dom.querySelector<HTMLImageElement>('img');
     const editable = () => alive && view.editable && dom.isConnected && !dom.closest('[hidden],[inert]');
     const position = () => {
@@ -40,9 +40,9 @@ function imageView(create: NodeViewConstructor): NodeViewConstructor {
       for (const [key, value] of Object.entries(styles)) if (bitmap.style.getPropertyValue(key).replace(/\s/g, '') !== value.replace(/\s/g, '')) bitmap.style.setProperty(key, value);
       const operation = dom.querySelector('.operation');
       if (operation) {
-        let reset = operation.querySelector<HTMLButtonElement>('.moye-image-reset');
+        let reset = operation.querySelector<HTMLButtonElement>('.meki-image-reset');
         if (!reset) {
-          reset = document.createElement('button'); reset.type = 'button'; reset.className = 'moye-image-reset'; reset.textContent = t("还原尺寸"); reset.title = t("恢复图片原始尺寸");
+          reset = document.createElement('button'); reset.type = 'button'; reset.className = 'meki-image-reset'; reset.textContent = t("还原尺寸"); reset.title = t("恢复图片原始尺寸");
           reset.addEventListener('pointerdown', event => { event.preventDefault(); event.stopPropagation(); });
           reset.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); setSize(null, null); });
           operation.append(reset);

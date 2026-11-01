@@ -9,11 +9,11 @@ const { SnapshotStore } = require('../electron/snapshot-store.cjs');
 
 async function fixture(t, limits) {
   const parent = await fs.realpath(os.tmpdir());
-  const root = await fs.realpath(await fs.mkdtemp(path.join(parent, 'moye-snapshots-')));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(parent, 'meki-snapshots-')));
   t.after(async () => {
     const resolved = await fs.realpath(root);
     assert.equal(pathKey(path.dirname(resolved)), pathKey(parent));
-    assert.ok(path.basename(resolved).startsWith('moye-snapshots-'));
+    assert.ok(path.basename(resolved).startsWith('meki-snapshots-'));
     await fs.rm(resolved, { recursive: true, force: true });
   });
   const store = new FileStore(path.join(root, 'profile')); await store.init();

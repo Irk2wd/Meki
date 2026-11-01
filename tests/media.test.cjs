@@ -7,8 +7,8 @@ const { FileStore, isWithin } = require('../electron/file-store.cjs');
 const { readSelectedImages } = require('../electron/image-input.cjs');
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jp2cAAAAASUVORK5CYII=', 'base64');
 async function fixture(t) {
-  const parent = await fs.realpath(os.tmpdir()), root = await fs.realpath(await fs.mkdtemp(path.join(parent, 'moye-media-')));
-  t.after(async () => { assert.ok(isWithin(root, parent) && path.basename(root).startsWith('moye-media-')); await fs.rm(root, { recursive: true, force: true }); });
+  const parent = await fs.realpath(os.tmpdir()), root = await fs.realpath(await fs.mkdtemp(path.join(parent, 'meki-media-')));
+  t.after(async () => { assert.ok(isWithin(root, parent) && path.basename(root).startsWith('meki-media-')); await fs.rm(root, { recursive: true, force: true }); });
   const documentPath = path.join(root, '文 稿.md'); await fs.writeFile(documentPath, '# Hello');
   const store = new FileStore(path.join(root, 'profile')); await store.init();
   return { root, documentPath, store, assets: path.join(root, '文 稿.assets') };

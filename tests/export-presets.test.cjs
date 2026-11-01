@@ -117,13 +117,13 @@ test('DOCX policy rejects macros, external resources, XML entities and active co
   for (const target of ['https://example.com/page', 'http://example.com/', 'mailto:hello@example.com']) { const parts = tinyParts(); parts.set('word/_rels/document.xml.rels', relationship('hyperlink', target)); assert.equal(validateDocx(zip(parts)).entries, 5); }
 });
 test('real Pandoc reference template imports safely and carries styles rather than template body into DOCX', async t => {
-  const executable = process.env.MOYE_PANDOC_PATH;
-  if (!executable) return t.skip('Set MOYE_PANDOC_PATH for the real converter integration.');
+  const executable = process.env.MEKI_PANDOC_PATH;
+  if (!executable) return t.skip('Set MEKI_PANDOC_PATH for the real converter integration.');
   const { presets, root } = await fixture(t), run = promisify(execFile), reference = path.join(root, 'reference.docx'), referenceInput = path.join(root, 'reference.md');
   await fs.writeFile(referenceInput, '# Sample template\n\nTemplate body must not appear in export.\n');
   await run(executable, ['--sandbox', '--from=markdown', '--to=docx', `--output=${reference}`, referenceInput], { windowsHide: true, timeout: 45000 });
   const parts = zipEntries(await fs.readFile(reference));
-  parts.set('word/styles.xml', Buffer.from(parts.get('word/styles.xml').toString().replace(/<w:styles\b/, '<w:styles data-moye-test="reference-style-proof"')));
+  parts.set('word/styles.xml', Buffer.from(parts.get('word/styles.xml').toString().replace(/<w:styles\b/, '<w:styles data-meki-test="reference-style-proof"')));
   await fs.writeFile(reference, zip(parts)); validateDocx(await fs.readFile(reference));
   const imported = await presets.importReference(reference), copied = path.join(root, 'approved.docx'); await fs.writeFile(copied, await presets.readReference(imported.id));
   const output = path.join(root, 'output.docx'), service = new PandocService(path.join(root, 'profile'));
@@ -131,8 +131,8 @@ test('real Pandoc reference template imports safely and carries styles rather th
   const generated = zipEntries(await fs.readFile(output)); assert.match(generated.get('word/styles.xml').toString(), /reference-style-proof/); assert.match(generated.get('word/document.xml').toString(), /Exported body/); assert.doesNotMatch(generated.get('word/document.xml').toString(), /Template body/);
 });
 test('the official Pandoc default reference.docx imports and exports with its passive example hyperlinks', async t => {
-  const executable = process.env.MOYE_PANDOC_PATH;
-  if (!executable) return t.skip('Set MOYE_PANDOC_PATH for the real converter integration.');
+  const executable = process.env.MEKI_PANDOC_PATH;
+  if (!executable) return t.skip('Set MEKI_PANDOC_PATH for the real converter integration.');
   const { presets, root } = await fixture(t), run = promisify(execFile), reference = path.join(root, 'default-reference.docx');
   await run(executable, [`--output=${reference}`, '--print-default-data-file=reference.docx'], { windowsHide: true, timeout: 45000 });
   const original = await fs.readFile(reference); assert.ok(validateDocx(original).entries > 4); const imported = await presets.importReference(reference);

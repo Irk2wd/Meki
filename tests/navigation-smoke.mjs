@@ -15,7 +15,7 @@ await fs.writeFile(child,'# Child\n'); await fs.writeFile(note,'# Note\n'); awai
 await fs.symlink(outside,alias,process.platform==='win32'?'junction':'dir');
 const profile=path.join(run,'profile'); await fs.mkdir(profile);
 await fs.writeFile(path.join(profile,'state.json'),JSON.stringify({workspaceRoot:a,recentFolders:[b,missing,alias].map((folder,index)=>({path:folder,pinned:false,lastOpened:index+1}))}));
-const env={...process.env,MOYE_TEST:'1',MOYE_USER_DATA:profile,MOYE_TEST_FOLDER_PATH:a,MOYE_TEST_DISCARD:'cancel',MOYE_TEST_CONFLICT:'cancel'};
+const env={...process.env,MEKI_TEST:'1',MEKI_USER_DATA:profile,MEKI_TEST_FOLDER_PATH:a,MEKI_TEST_DISCARD:'cancel',MEKI_TEST_CONFLICT:'cancel'};
 delete env.ELECTRON_RUN_AS_NODE;
 const modifier=process.platform==='darwin'?'Meta':'Control', end=process.platform==='darwin'?'Meta+ArrowDown':'Control+End';
 const results=[],errors=[]; let app,page;
@@ -28,9 +28,9 @@ async function exists(file){return page.locator('.workspace-tree-row').evaluateA
 async function refresh(){await page.locator('[data-ws="refresh"]').evaluate(node=>node.click());await idle();}
 async function folders(){await action('recent-folders');await page.locator('#recent-folders-dialog').waitFor({state:'visible'});await page.waitForFunction(()=>!document.querySelector('#recent-folder-status').textContent.includes('正在读取'));}
 async function folderAction(folder,action){await page.locator('.recent-folder-row').evaluateAll((nodes,{folder,action})=>{const row=nodes.find(node=>node.dataset.folderPath===folder);if(!row)throw Error(`Missing folder ${folder}`);row.querySelector(`[data-folders="${action}"]`).click();},{folder,action});await page.waitForFunction(()=>!document.querySelector('#recent-folders-dialog').hasAttribute('aria-busy'));await idle();}
-async function denied(file){return page.evaluate(async file=>{try{await window.moye.openDocument(file);return false;}catch{return true;}},file);}
+async function denied(file){return page.evaluate(async file=>{try{await window.meki.openDocument(file);return false;}catch{return true;}},file);}
 async function launch(){
-  app=await electron.launch({executablePath:process.env.MOYE_EXECUTABLE||require('electron'),args:process.env.MOYE_EXECUTABLE?['--open',z]:[root,'--open',z],env,timeout:30000});
+  app=await electron.launch({executablePath:process.env.MEKI_EXECUTABLE||require('electron'),args:process.env.MEKI_EXECUTABLE?['--open',z]:[root,'--open',z],env,timeout:30000});
   page=await app.firstWindow();page.setDefaultTimeout(12000);page.on('pageerror',error=>errors.push(error.message));
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].show());await page.waitForSelector('#shell[data-ready="true"]');await page.locator('[data-tab="files"]').click();
 }
@@ -89,18 +89,18 @@ try{
   await folderAction(missing,'open');assert.equal(await page.locator('#recent-folders-dialog').isVisible(),true);assert.match(await page.locator('#recent-folder-status').innerText(),/无法打开最近文件夹/);
   assert.equal(await page.locator('#workspace-name').innerText(),'Workspace A');
   await folderAction(alias,'open');assert.match(await page.locator('#recent-folder-status').innerText(),/替换|链接/);assert.equal(await denied(secret),true);
-  const invalid=await page.evaluate(async outside=>{const failures=[];for(const input of [{action:'remember',path:outside},{action:'pin',path:outside},{action:'clear',path:outside}]){try{await window.moye.changeRecentFolders(input);failures.push(false);}catch{failures.push(true);}}try{await window.moye.openRecentFolder(outside);failures.push(false);}catch{failures.push(true);}return failures;},outside);
+  const invalid=await page.evaluate(async outside=>{const failures=[];for(const input of [{action:'remember',path:outside},{action:'pin',path:outside},{action:'clear',path:outside}]){try{await window.meki.changeRecentFolders(input);failures.push(false);}catch{failures.push(true);}}try{await window.meki.openRecentFolder(outside);failures.push(false);}catch{failures.push(true);}return failures;},outside);
   assert.deepEqual(invalid,[true,true,true,true]);
   pass('missing and replaced recent locations report visible errors without changing the workspace or granting access');
 
   const beforeTabs=await page.locator('.document-tab').count();await folderAction(b,'open');await page.locator('#recent-folders-dialog').waitFor({state:'hidden'});
   assert.equal(await page.locator('#workspace-name').innerText(),'Workspace B');assert.equal(await page.locator('.document-tab').count(),beforeTabs);
   await focus(bFile);await page.keyboard.press('Enter');await idle();await page.waitForFunction(()=>document.querySelector('#document-name').textContent==='beta.md');
-  await folders();const filesBefore=(await page.evaluate(()=>window.moye.boot())).recentFiles;
+  await folders();const filesBefore=(await page.evaluate(()=>window.meki.boot())).recentFiles;
   await page.locator('[data-folders="clear"]').click();await page.waitForFunction(()=>document.querySelectorAll('.recent-folder-row').length===1);
   assert.equal(await page.locator('.recent-folder-row').first().getAttribute('data-folder-path'),b);
   await folderAction(b,'remove');assert.equal(await page.locator('.recent-folder-row').count(),0);
-  assert.deepEqual((await page.evaluate(()=>window.moye.boot())).recentFiles,filesBefore);assert.equal(await fs.readFile(bFile,'utf8'),'# Beta\n');
+  assert.deepEqual((await page.evaluate(()=>window.meki.boot())).recentFiles,filesBefore);assert.equal(await fs.readFile(bFile,'utf8'),'# Beta\n');
   await page.locator('[data-folders="close"]').click();assert.equal(await page.locator('#workspace-name').innerText(),'Workspace B');
   await page.locator('.document-tab [role="tab"]').evaluateAll((nodes,z)=>nodes.find(node=>node.title===z).click(),z);await idle();
   await page.locator('[data-mode="source"]').click();assert.match(await page.locator('#source-editor').innerText(),/Unsaved navigation buffer/);

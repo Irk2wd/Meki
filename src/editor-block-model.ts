@@ -151,7 +151,7 @@ export function convertBlock(state: EditorState, target: BlockTarget, type: Bloc
   return replaceBlock(state, target, Fragment.from(schema.nodes[listType].create(null, item)));
 }
 
-const styles = ['strong', 'emphasis', 'strike_through', 'moye_highlight', 'inline_code'];
+const styles = ['strong', 'emphasis', 'strike_through', 'meki_highlight', 'inline_code'];
 export function styleBlock(state: EditorState, target: BlockTarget, name: string): Transaction | null {
   if (!currentBlock(state, target)) return null;
   const type = state.schema.marks[name];

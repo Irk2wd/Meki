@@ -188,7 +188,7 @@ class ImageHosting {
     await fs.mkdir(this.tempRoot, { recursive: true, mode: 0o700 });
     const rootInfo = await fs.lstat(this.tempRoot);
     if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw new Error(t("图片上传临时目录必须是本地目录。"));
-    const root = await fs.realpath(this.tempRoot), directory = await fs.mkdtemp(path.join(root, 'moye-picgo-'));
+    const root = await fs.realpath(this.tempRoot), directory = await fs.mkdtemp(path.join(root, 'meki-picgo-'));
     const directoryInfo = await fs.lstat(directory), files = [];
     const verifyDirectory = async () => {
       const currentRoot = await fs.lstat(this.tempRoot), currentDirectory = await fs.lstat(directory);

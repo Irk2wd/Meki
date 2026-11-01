@@ -15,7 +15,7 @@ async function fixture() {
     hardbreak: { inline: true, group: 'inline' }, math_inline: { inline: true, group: 'inline', atom: true, attrs: { value: { default: '' } } },
     image: { group: 'block', atom: true, attrs: { src: {}, width: { default: null } } },
     table: { group: 'block', content: 'table_row+' }, table_row: { content: 'table_cell+' }, table_cell: { content: 'paragraph+' },
-  }, marks: { strong: {}, emphasis: {}, strike_through: {}, moye_highlight: {}, inline_code: { excludes: '_' }, link: { attrs: { href: {} } } } });
+  }, marks: { strong: {}, emphasis: {}, strike_through: {}, meki_highlight: {}, inline_code: { excludes: '_' }, link: { attrs: { href: {} } } } });
   const n = (type, content, attrs) => schema.nodes[type].create(attrs, content);
   const p = text => n('paragraph', text ? schema.text(text) : null), item = (text, tail = [], attrs = {}) => n('list_item', [p(text), ...tail], attrs);
   const state = content => EditorState.create({ schema, doc: n('doc', content), plugins: [history.history()] });

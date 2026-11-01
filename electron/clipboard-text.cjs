@@ -9,7 +9,7 @@ function validateClipboardText(text) {
 function registerClipboardText(register, clipboard) {
   register('read-clipboard-text', async () => {
     const text = validateClipboardText(await clipboard.readText());
-    if (process.env.MOYE_TEST === '1') { const delay = Math.min(1000, Math.max(0, Number(process.env.MOYE_TEST_CLIPBOARD_DELAY) || 0)); if (delay) await new Promise(resolve => setTimeout(resolve, delay)); }
+    if (process.env.MEKI_TEST === '1') { const delay = Math.min(1000, Math.max(0, Number(process.env.MEKI_TEST_CLIPBOARD_DELAY) || 0)); if (delay) await new Promise(resolve => setTimeout(resolve, delay)); }
     return text;
   });
   register('write-clipboard-text', text => clipboard.writeText(validateClipboardText(text)));

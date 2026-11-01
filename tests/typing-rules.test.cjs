@@ -45,7 +45,7 @@ test('smart dashes avoid Markdown thematic-break and list prefixes', async () =>
 });
 test('Markdown selection symbols become semantic marks or an editable math node', async () => {
   const { typingDefaults, typingAction } = await rules, on = { ...typingDefaults, typingMarkdownPairs: true };
-  const pairs = [['*', 'emphasis'], ['**', 'strong'], ['_', 'emphasis'], ['`', 'inlineCode'], ['~', 'moye_sub'], ['~~', 'strike_through'], ['^', 'moye_sup'], ['=', 'moye_highlight']];
+  const pairs = [['*', 'emphasis'], ['**', 'strong'], ['_', 'emphasis'], ['`', 'inlineCode'], ['~', 'meki_sub'], ['~~', 'strike_through'], ['^', 'meki_sup'], ['=', 'meki_highlight']];
   for (const [key, mark] of pairs) assert.deepEqual(typingAction(point('hello', key, 0, 5), on), { kind: 'mark', from: 0, to: 5, mark });
   assert.deepEqual(typingAction(point('x^2', '$', 0, 3), on), { kind: 'math', from: 0, to: 3, tex: 'x^2' });
   assert.equal(typingAction(point('two words', '^', 0, 9), on), null);

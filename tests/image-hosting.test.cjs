@@ -48,7 +48,7 @@ async function remote(t) {
   return state;
 }
 async function fixture(t, options = {}) {
-  const root = await temporary(t, 'moye-hosting-'), service = await remote(t);
+  const root = await temporary(t, 'meki-hosting-'), service = await remote(t);
   const doc = path.join(root, '文稿.md'), picture = path.join(root, '原 图.png'), scratch = path.join(root, 'upload-temp');
   const raw = Buffer.from('\uFEFF# 原文\r\n\r\n![本地](原%20图.png)\r\n');
   await fs.writeFile(doc, raw); await fs.writeFile(picture, png);
@@ -112,7 +112,7 @@ test('remote-only and empty document plans make no request and create no upload 
 });
 
 test('unauthorized documents, traversal, protected paths, junctions and non-image content cannot be uploaded', async t => {
-  const f = await fixture(t), outside = await temporary(t, 'moye-hosting-outside-');
+  const f = await fixture(t), outside = await temporary(t, 'meki-hosting-outside-');
   await fs.writeFile(path.join(outside, 'secret.png'), png);
   await fs.symlink(outside, path.join(f.root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
   await fs.mkdir(path.join(f.root, '.git')); await fs.writeFile(path.join(f.root, '.git', 'secret.png'), png);
@@ -173,7 +173,7 @@ test('external image changes during transfer reject results and preserve the new
 });
 
 test('a request directory replaced before send is rejected without reading or posting through the link', async t => {
-  const f = await fixture(t), outside = await temporary(t, 'moye-hosting-swapped-'), plan = await f.prepare(['原%20图.png']);
+  const f = await fixture(t), outside = await temporary(t, 'meki-hosting-swapped-'), plan = await f.prepare(['原%20图.png']);
   const validate = f.hosting.validateDocument.bind(f.hosting); let checks = 0;
   f.hosting.validateDocument = async value => {
     await validate(value);
@@ -266,7 +266,7 @@ test('stale capabilities expire and temporary cleanup leaves unexpected files un
 });
 
 test('a linked temporary root is refused without writing or posting any images', async t => {
-  const f = await fixture(t), outside = await temporary(t, 'moye-hosting-temp-outside-');
+  const f = await fixture(t), outside = await temporary(t, 'meki-hosting-temp-outside-');
   await fs.symlink(outside, f.scratch, process.platform === 'win32' ? 'junction' : 'dir');
   await assert.rejects(f.hosting.uploadImages(input()), /临时目录/);
   assert.equal(f.service.requests.length, 0); assert.deepEqual(await fs.readdir(outside), []);

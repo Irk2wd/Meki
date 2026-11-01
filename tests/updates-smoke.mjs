@@ -14,40 +14,39 @@ const profile = path.join(run, 'profile'), documentPath = path.join(run, '更新
 const publicPath = path.join(run, 'verification.pem'), original = '\uFEFF# 更新检查\r\n\r\n保存我的文字。\r\n';
 await fs.writeFile(documentPath, original); await fs.writeFile(publicPath, pair.publicKey);
 const source = path.join(run, 'synthetic-payload'); await fs.mkdir(path.join(source, 'electron'), { recursive: true });
-const main = process.env.MOYE_EXECUTABLE
-  ? path.join(path.dirname(process.env.MOYE_EXECUTABLE), ...(process.platform === 'darwin' ? ['..', 'Resources'] : ['resources']), 'app.asar', 'electron', 'main.cjs')
+const main = process.env.MEKI_EXECUTABLE
+  ? path.join(path.dirname(process.env.MEKI_EXECUTABLE), ...(process.platform === 'darwin' ? ['..', 'Resources'] : ['resources']), 'app.asar', 'electron', 'main.cjs')
   : path.join(root, 'electron', 'main.cjs');
-await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: 'moye', version: updateVersion }));
+await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: 'meki', version: updateVersion }));
 await fs.writeFile(path.join(source, 'electron', 'main.cjs'), `require('node:fs').writeFileSync(require('node:path').join(require('electron').app.getPath('userData'),'updated-code-loaded.txt'),${JSON.stringify(updateVersion)});require(${JSON.stringify(main)});`);
 const archive = path.join(run, 'synthetic.asar'); await require('@electron/asar').createPackage(source, archive);
 const update = fixture(pair, { version: updateVersion, electron: pkg.devDependencies.electron, payload: await fs.readFile(archive) }), remote = await server(update);
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: profile, MOYE_TEST_OPEN_PATH: documentPath, MOYE_TEST_SAVE_PATH: documentPath,
-  MOYE_TEST_DISCARD: 'cancel', MOYE_TEST_UPDATE_KEY: publicPath, MOYE_TEST_UPDATE_SERVER: remote.origin, MOYE_TEST_UPDATE_TOKEN: 'moye-test-token' };
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: profile, MEKI_TEST_OPEN_PATH: documentPath, MEKI_TEST_SAVE_PATH: documentPath,
+  MEKI_TEST_DISCARD: 'cancel', MEKI_TEST_UPDATE_KEY: publicPath, MEKI_TEST_UPDATE_SERVER: remote.origin };
 delete env.ELECTRON_RUN_AS_NODE;
 let app, page; const results = [], errors = [], modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 const pass = name => { results.push(name); console.log(`PASS ${name}`); };
 const action = name => page.locator(`[data-update="${name}"]`).click();
 async function launch() {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? ['--open', documentPath] : [root, '--open', documentPath], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', documentPath] : [root, '--open', documentPath], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); });
   await page.waitForSelector('#shell[data-ready="true"]');
 }
 async function exit() { if (app) { await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await app.close().catch(() => {}); app = null; } }
-async function status(value) { await page.waitForFunction(async expected => (await window.moye.updateState()).status === expected, value); }
+async function status(value) { await page.waitForFunction(async expected => (await window.meki.updateState()).status === expected, value); }
 async function waitApply() { await page.locator('[data-update="apply"]:not(:disabled)').waitFor({ state: 'visible' }); }
 try {
   await launch();
   assert.equal(remote.requests.length, 0, 'opening the editor must not contact GitHub');
   const menu = await app.evaluate(({ Menu }) => { const walk = items => items.some(item => item.label === '检查更新…' || item.submenu && walk(item.submenu.items)); return walk(Menu.getApplicationMenu().items); });
   assert.equal(menu, true);
-  await page.locator('[data-action="updates"]').click(); await action('check'); await status('error');
-  assert.match(await page.locator('#update-message').textContent(), /先连接/);
-  await action('cli'); await action('check'); await status('available');
+  await page.locator('[data-action="updates"]').click(); await action('check'); await status('available');
+  assert.equal(await page.locator('#update-auth').count(), 0);
   assert.equal(await page.locator('#update-notes script').count(), 0);
   assert.equal(await page.evaluate(() => window.untrustedRelease), undefined);
   assert.equal(await fs.readFile(documentPath, 'utf8'), original);
-  pass('sidebar and native menus open updates; private login is required, startup stays offline and release notes render as text');
+  pass('sidebar and native menus open public updates without login; startup stays offline and release notes render as text');
 
   remote.holdDownloads = true; await action('download');
   // The click handler runs asynchronously; the cancel button remains available during the request.
@@ -55,7 +54,7 @@ try {
   assert.equal(await fs.access(path.join(profile, 'updates-v1', 'active.json')).then(() => true, () => false), false);
   remote.holdDownloads = false; await action('download'); await status('ready');
   assert.ok(remote.requests.filter(item => item.path.startsWith('/blob/')).every(item => !item.authorization));
-  pass('downloads show progress, cancel safely and retry; credentials never reach the redirected asset host');
+  pass('downloads show progress, cancel safely and retry; both API and redirected asset requests remain anonymous');
 
   await action('close');
   await page.locator('[data-mode="source"]').click(); await page.locator('#source-editor .cm-content').click();
@@ -64,7 +63,7 @@ try {
   await waitApply();
   assert.equal(await fs.access(path.join(profile, 'update-apply-test.json')).then(() => true, () => false), false);
   assert.ok((await page.locator('#source-editor .cm-content').innerText()).includes('更新前的新内容'));
-  await app.evaluate(() => { process.env.MOYE_TEST_DISCARD = 'save'; }); await action('apply');
+  await app.evaluate(() => { process.env.MEKI_TEST_DISCARD = 'save'; }); await action('apply');
   await waitApply();
   const applied = JSON.parse(await fs.readFile(path.join(profile, 'update-apply-test.json'), 'utf8'));
   assert.deepEqual(applied, { kind: 'payload', version: updateVersion });
@@ -92,19 +91,20 @@ try {
   assert.equal(JSON.parse(await fs.readFile(path.join(profile, 'update-apply-test.json'), 'utf8')).kind, 'installer');
   pass('an incompatible runtime selects and verifies the installer; the test records the launch without executing it');
 
-  await page.locator('#update-auth summary').click(); await action('disconnect');
-  await page.waitForFunction(async () => (await window.moye.updateState()).credential === 'none');
-  assert.deepEqual(errors, []); pass('disconnect clears update authentication and no renderer exceptions occur');
+  remote.publicAvailable = false;
+  await action('check'); await status('error');
+  assert.match(await page.locator('#update-message').textContent(), /尚无/);
+  assert.equal(await page.locator('#update-auth').count(), 0);
+  assert.deepEqual(errors, []); pass('an unavailable release gives an actionable message without asking for credentials');
 
   remote.publicAvailable = true;
   remote.current = fixture(pair, { version: installerVersion, electron: pkg.devDependencies.electron });
   await action('check'); await status('available');
-  assert.equal((await page.evaluate(() => window.moye.updateState())).credential, 'none');
   assert.match(await page.locator('#update-source').textContent(), /Irk2wd\/Meki/);
   await action('download'); await status('ready');
-  assert.ok(remote.requests.filter(item => item.path.startsWith('/repos/Irk2wd/Meki/')).every(item => !item.authorization));
+  assert.ok(remote.requests.every(item => !item.authorization));
   assert.ok((await fs.readFile(documentPath, 'utf8')).includes('更新前的新内容'));
-  pass('public Meki updates check and download without login while preserving the original profile and saved document');
+  pass('public Meki updates recover after a server error and preserve the profile and saved document');
 
   await exit();
   await fs.writeFile(path.join(profile, 'updates-v1', 'payloads', `${update.manifest.asarSha256}.asar`), 'damaged cache');

@@ -25,7 +25,7 @@ export function blockInsertMenu(boundary: HTMLElement) {
   return [offset(8), flip({ boundary, padding: 8 }), size({
     boundary, padding: 8,
     apply({ availableHeight, availableWidth, elements }) {
-      elements.floating.style.setProperty('--moye-menu-height', `${Math.max(0, Math.min(480, availableHeight))}px`);
+      elements.floating.style.setProperty('--meki-menu-height', `${Math.max(0, Math.min(480, availableHeight))}px`);
       elements.floating.style.maxWidth = `${Math.max(0, availableWidth)}px`;
     },
   }), shift({ boundary, padding: 8, crossAxis: true })];
@@ -65,7 +65,7 @@ export class FrameBlockService extends BlockService {
   private menu: BlockMenu | null = null;
   private hint: { target: BlockTarget; kind: string } | null = null;
   private hintTimer = 0;
-  private hintKey = new PluginKey<DecorationSet>('moye-block-hint');
+  private hintKey = new PluginKey<DecorationSet>('meki-block-hint');
   private drag: BlockDrag | null = null;
   private suppressClick = false;
   private get view() { return this.context?.get(editorViewCtx); }
@@ -261,7 +261,7 @@ export class FrameBlockService extends BlockService {
     const conversions: [BlockType, string][] = [['paragraph', t('正文')], ...[1, 2, 3, 4, 5, 6].map(level => [`h${level}` as BlockType, t('标题 {0}', level)] as [BlockType, string]), ['bullet', t('无序列表')], ['ordered', t('有序列表')], ['task', t('待办清单')], ['blockquote', t('引用')], ['code_block', t('代码块')]];
     const actions: BlockAction[] = [
       group('convert', t('转换为'), conversions.map(([type, label]) => mutation(`convert-${type}`, label, () => convertBlock(view.state, target, type))), 'source'),
-      group('style', t('文字样式'), [[t('加粗'), 'strong'], [t('斜体'), 'emphasis'], [t('删除线'), 'strike_through'], [t('高亮'), 'moye_highlight'], [t('清除文字样式'), 'clear']].map(([label, mark]) => mutation(`style-${mark}`, label, () => styleBlock(view.state, target, mark), 'style')), 'style'),
+      group('style', t('文字样式'), [[t('加粗'), 'strong'], [t('斜体'), 'emphasis'], [t('删除线'), 'strike_through'], [t('高亮'), 'meki_highlight'], [t('清除文字样式'), 'clear']].map(([label, mark]) => mutation(`style-${mark}`, label, () => styleBlock(view.state, target, mark), 'style')), 'style'),
     ];
     if (target.node.type.name === 'list_item') {
       const command = (action: Command): Transaction | null => {
@@ -277,7 +277,7 @@ export class FrameBlockService extends BlockService {
       if (!valid()) { this.menu?.close(false); return; }
       const menu = this.menu;
       const text = markdown ? this.context!.get(serializerCtx)(blockDocument(view.state, target)) : blockPlainText(view.state, target);
-      await window.moye.writeClipboardText(text); menu?.status(t('已复制'));
+      await window.meki.writeClipboardText(text); menu?.status(t('已复制'));
     } });
     actions.push(copy(true), copy(false), mutation('duplicate', t('创建副本'), () => duplicateBlock(view.state, target), 'page'));
     actions.push(group('move', t('移动'), (['up', 'down', 'first', 'last'] as BlockMove[]).map((direction, i) => mutation(`move-${direction}`, [t('上移一块'), t('下移一块'), t('移到当前层级开头'), t('移到当前层级末尾')][i], () => {
@@ -285,7 +285,7 @@ export class FrameBlockService extends BlockService {
     }, 'down')), 'down'));
     actions.push(group('insert', t('插入块'), [mutation('insert-before', t('在上方插入块'), () => insertNearBlock(view.state, target, false), 'plus'), mutation('insert-after', t('在下方插入块'), () => insertNearBlock(view.state, target, true), 'plus')], 'plus'));
     actions.push({ ...mutation('delete', t('删除'), () => deleteBlock(view.state, target), 'close'), danger: true });
-    this.highlight(target, 'moye-block-menu-target'); grip.setAttribute('aria-expanded', 'true');
+    this.highlight(target, 'meki-block-menu-target'); grip.setAttribute('aria-expanded', 'true');
     const text = target.node.textContent;
     this.menu = new BlockMenu(grip, blockLabel(target), t('{0} 个词 · {1} 个字符', countWords(text), [...text].length), actions, focus => {
       this.menu = null; this.highlight(null);

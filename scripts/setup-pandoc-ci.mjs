@@ -15,7 +15,7 @@ const releases = {
 const release = releases[`${process.platform}-${process.arch}`];
 if (!release) throw new Error(`No verified Pandoc asset for ${process.platform}-${process.arch}`);
 if (!process.env.GITHUB_ENV) throw new Error('Run this installer in GitHub Actions; select a local Pandoc through Meki settings for normal use.');
-const folder = await fs.mkdtemp(path.join(await fs.realpath(process.env.RUNNER_TEMP || os.tmpdir()), 'moye-pandoc-ci-'));
+const folder = await fs.mkdtemp(path.join(await fs.realpath(process.env.RUNNER_TEMP || os.tmpdir()), 'meki-pandoc-ci-'));
 const archive = path.join(folder, 'pandoc.zip'), destination = path.join(folder, 'portable');
 const url = `https://github.com/jgm/pandoc/releases/download/${version}/pandoc-${version}-${release[0]}`;
 for (let attempt = 0; ; attempt++) {
@@ -35,7 +35,7 @@ for (let attempt = 0; ; attempt++) {
 }
 await fs.mkdir(destination);
 if (process.platform === 'win32') {
-  await execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Expand-Archive -LiteralPath $env:MOYE_CI_ARCHIVE -DestinationPath $env:MOYE_CI_DESTINATION'], { windowsHide: true, timeout: 120_000, env: { ...process.env, MOYE_CI_ARCHIVE: archive, MOYE_CI_DESTINATION: destination } });
+  await execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Expand-Archive -LiteralPath $env:MEKI_CI_ARCHIVE -DestinationPath $env:MEKI_CI_DESTINATION'], { windowsHide: true, timeout: 120_000, env: { ...process.env, MEKI_CI_ARCHIVE: archive, MEKI_CI_DESTINATION: destination } });
 } else await execute('/usr/bin/ditto', ['-x', '-k', archive, destination], { timeout: 120_000 });
 async function findExecutable(root) {
   for (const item of await fs.readdir(root, { withFileTypes: true })) {
@@ -48,6 +48,6 @@ const executable = await findExecutable(destination); if (!executable) throw new
 if (process.platform !== 'win32') await fs.chmod(executable, 0o755);
 const { stdout } = await execute(executable, ['--version'], { windowsHide: true, timeout: 15_000 });
 if (!stdout.startsWith(`pandoc ${version}\n`) && !stdout.startsWith(`pandoc ${version}\r\n`)) throw new Error('Unexpected Pandoc executable version');
-await fs.appendFile(process.env.GITHUB_ENV, `MOYE_PANDOC_PATH=${executable}\nMOYE_REQUIRE_PANDOC=1\n`);
+await fs.appendFile(process.env.GITHUB_ENV, `MEKI_PANDOC_PATH=${executable}\nMEKI_REQUIRE_PANDOC=1\n`);
 await fs.unlink(archive);
 console.log(`Verified Pandoc ${version}: ${executable}`);

@@ -1,6 +1,6 @@
 'use strict';
 const { t, setLocale } = require('./i18n.mjs');
-const { app, dialog, session, safeStorage } = require('electron');
+const { app, dialog, session } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { fileURLToPath } = require('node:url');
@@ -12,8 +12,8 @@ const { WindowManager } = require('./window-manager.cjs');
 const { UpdateService } = require('./update-service.cjs');
 const { GithubUpdates } = require('./update-network.cjs');
 const { configureApp } = require('./app-identity.cjs');
-const bootstrap = globalThis[Symbol.for('moye.bootstrap')];
-const TEST_MODE = process.env.MOYE_TEST === '1';
+const bootstrap = globalThis[Symbol.for('meki.bootstrap')];
+const TEST_MODE = process.env.MEKI_TEST === '1';
 let manager, updates, reopening;
 let initialized = false;
 const launchPaths = [];
@@ -58,10 +58,8 @@ else {
     const sessions = new WindowSessions(store, history); await sessions.init();
     if (bootstrap?.runtime) {
       updates = new UpdateService({ runtime: bootstrap.runtime,
-        encryption: { available: () => safeStorage.isEncryptionAvailable(), encrypt: value => safeStorage.encryptString(value), decrypt: bytes => safeStorage.decryptString(bytes) },
-        network: new GithubUpdates(TEST_MODE && process.env.MOYE_TEST_UPDATE_SERVER ? { testOrigin: process.env.MOYE_TEST_UPDATE_SERVER } : {}),
-        ...(TEST_MODE ? { cliToken: async () => { if (!process.env.MOYE_TEST_UPDATE_TOKEN) throw new Error('No test login'); return process.env.MOYE_TEST_UPDATE_TOKEN; } } : {}),
-        notify: state => { for (const controller of manager?.controllers.values() || []) controller.window?.webContents.send('moye:update-state', state); },
+        network: new GithubUpdates(TEST_MODE && process.env.MEKI_TEST_UPDATE_SERVER ? { testOrigin: process.env.MEKI_TEST_UPDATE_SERVER } : {}),
+        notify: state => { for (const controller of manager?.controllers.values() || []) controller.window?.webContents.send('meki:update-state', state); },
       });
     }
     manager = new WindowManager({ store, sessions, snapshots, updates, reopen });

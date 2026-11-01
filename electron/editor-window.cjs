@@ -2,7 +2,7 @@
 const { t, getLocale } = require('./i18n.mjs');
 
 const { app, BrowserWindow, Menu, dialog, shell, screen, clipboard, session } = require('electron');
-const bootstrap = globalThis[Symbol.for('moye.bootstrap')];
+const bootstrap = globalThis[Symbol.for('meki.bootstrap')];
 const { WorkspaceStore, documentStatus } = require('./workspace-store.cjs');
 const { validateSession } = require('./lifecycle-store.cjs');
 const { validateTarget } = require('./snapshot-store.cjs');
@@ -20,7 +20,7 @@ const {
   pathKey, isWithin, isDocumentPath,
 } = require('./file-store.cjs');
 
-const TEST_MODE = process.env.MOYE_TEST === '1';
+const TEST_MODE = process.env.MEKI_TEST === '1';
 const DOCUMENT_FILTERS = [
   { get name() { return t("Markdown 文档"); }, extensions: ['md', 'markdown', 'mdown', 'mkd', 'mkdn'] },
   { get name() { return t("文本文件"); }, extensions: ['txt'] },
@@ -52,10 +52,10 @@ let bootResult = null;
 let shortcutCapture = false;
 
 const developerUrl = (() => {
-  if (!process.env.MOYE_DEV_URL) return null;
-  const candidate = new URL(process.env.MOYE_DEV_URL);
+  if (!process.env.MEKI_DEV_URL) return null;
+  const candidate = new URL(process.env.MEKI_DEV_URL);
   if (candidate.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(candidate.hostname)) {
-    throw new Error('MOYE_DEV_URL must point to a local HTTP development server.');
+    throw new Error('MEKI_DEV_URL must point to a local HTTP development server.');
   }
   return candidate.href;
 })();
@@ -91,12 +91,12 @@ function sendCommand(command, payload) {
     pendingCommands.push([command, payload]);
     return;
   }
-  mainWindow.webContents.send('moye:command', command, payload);
+  mainWindow.webContents.send('meki:command', command, payload);
 }
 
 function flushCommands() {
   if (!mainWindow || mainWindow.isDestroyed() || !rendererBooted || !commandsReady) return;
-  for (const [command, payload] of pendingCommands.splice(0)) mainWindow.webContents.send('moye:command', command, payload);
+  for (const [command, payload] of pendingCommands.splice(0)) mainWindow.webContents.send('meki:command', command, payload);
 }
 
 function acceptLaunchPath(filePath) {
@@ -128,7 +128,7 @@ async function openKnownDocument(filePath) {
 
 async function chooseOpenPath() {
   if (TEST_MODE) {
-    const selected = process.env.MOYE_TEST_OPEN_PATH;
+    const selected = process.env.MEKI_TEST_OPEN_PATH;
     return selected ? authorize(selected) : null;
   }
   const result = await dialog.showOpenDialog(mainWindow, { title: t("打开 Markdown 文档"), filters: DOCUMENT_FILTERS, properties: ['openFile'] });
@@ -143,7 +143,7 @@ function suggestedFilename(name, extension) {
 
 async function chooseSavePath(document) {
   if (TEST_MODE) {
-    const selected = process.env.MOYE_TEST_SAVE_PATH;
+    const selected = process.env.MEKI_TEST_SAVE_PATH;
     return selected ? authorize(selected) : null;
   }
   const result = await dialog.showSaveDialog(mainWindow, {
@@ -155,7 +155,7 @@ async function chooseSavePath(document) {
 
 async function chooseConflictAction(filePath) {
   if (TEST_MODE) {
-    const answer = process.env.MOYE_TEST_CONFLICT || 'cancel';
+    const answer = process.env.MEKI_TEST_CONFLICT || 'cancel';
     return ['cancel', 'saveAs', 'overwrite'].includes(answer) ? answer : 'cancel';
   }
   const answer = await dialog.showMessageBox(mainWindow, {
@@ -200,10 +200,10 @@ async function saveDocument(input) {
         const info = await fs.promises.lstat(document.path).catch(error => { if (error.code !== 'ENOENT') throw error; return null; });
         if (info) await workspaceStore.existing(document.path, { document: true });
       }
-      if (TEST_MODE && process.env.MOYE_TEST_SAVE_DELAY) {
-        process.env.MOYE_TEST_SAVE_PENDING = '1';
-        try { await new Promise(resolve => setTimeout(resolve, Math.min(3000, Number(process.env.MOYE_TEST_SAVE_DELAY) || 0))); }
-        finally { delete process.env.MOYE_TEST_SAVE_PENDING; }
+      if (TEST_MODE && process.env.MEKI_TEST_SAVE_DELAY) {
+        process.env.MEKI_TEST_SAVE_PENDING = '1';
+        try { await new Promise(resolve => setTimeout(resolve, Math.min(3000, Number(process.env.MEKI_TEST_SAVE_DELAY) || 0))); }
+        finally { delete process.env.MEKI_TEST_SAVE_PENDING; }
       }
       const saved = await coordinator.saveTarget(id, actualSavePath, input.tabId, () => store.saveDocument(document, { overwrite, formatFrom: originalPath, beforeReplace: (filePath, bytes) => lifecycle.record(filePath, bytes) }));
       if (!originalPath && input.tabId) {
@@ -257,7 +257,7 @@ async function mutateWorkspace(input) {
     if (input?.action === 'trash') {
       const entry = await selected.existing(input.path);
       let confirmed = false;
-      if (TEST_MODE) confirmed = process.env.MOYE_TEST_TRASH === 'confirm';
+      if (TEST_MODE) confirmed = process.env.MEKI_TEST_TRASH === 'confirm';
       else {
         const answer = await dialog.showMessageBox(mainWindow, {
           type: 'warning', title: t("移入回收站"), message: t("将“{0}”{1}移入系统回收站？", path.basename(entry.path), entry.stat.isDirectory() ? t("及其全部内容") : ''),
@@ -314,10 +314,10 @@ async function mutateWorkspace(input) {
 async function askDiscard(name) {
   if (typeof name !== 'string' || name.length > 512) throw new TypeError('Invalid document name.');
   if (TEST_MODE) {
-    let answer = process.env.MOYE_TEST_DISCARD || 'cancel';
-    if (process.env.MOYE_TEST_DISCARD_SEQUENCE) {
-      const sequence = JSON.parse(process.env.MOYE_TEST_DISCARD_SEQUENCE);
-      if (Array.isArray(sequence) && sequence.length) { answer = sequence.shift(); process.env.MOYE_TEST_DISCARD_SEQUENCE = JSON.stringify(sequence); }
+    let answer = process.env.MEKI_TEST_DISCARD || 'cancel';
+    if (process.env.MEKI_TEST_DISCARD_SEQUENCE) {
+      const sequence = JSON.parse(process.env.MEKI_TEST_DISCARD_SEQUENCE);
+      if (Array.isArray(sequence) && sequence.length) { answer = sequence.shift(); process.env.MEKI_TEST_DISCARD_SEQUENCE = JSON.stringify(sequence); }
     }
     return ['save', 'discard', 'cancel'].includes(answer) ? answer : 'cancel';
   }
@@ -377,7 +377,6 @@ function registerIpc() {
   register('check-update', () => updater().check());
   register('download-update', () => updater().download());
   register('cancel-update', () => updater().cancel());
-  register('update-credentials', input => updater().credentials(input));
   register('apply-update', async () => {
     if (coordinator.count() > 1) throw new Error(t("请先关闭其他编辑窗口，再应用更新。"));
     if (saveOperation) await saveOperation;
@@ -493,7 +492,7 @@ function registerIpc() {
   register('delete-snapshot', async id => {
     const entry = snapshots.list().find(item => item.id === id);
     if (!entry) throw new Error(t("此快照已不可用。"));
-    const confirmed = TEST_MODE ? process.env.MOYE_TEST_DELETE_SNAPSHOT === 'confirm' : (await dialog.showMessageBox(mainWindow, {
+    const confirmed = TEST_MODE ? process.env.MEKI_TEST_DELETE_SNAPSHOT === 'confirm' : (await dialog.showMessageBox(mainWindow, {
       type: 'warning', title: t("删除快照"), message: t("删除“{0}”？", entry.label || new Date(entry.createdAt).toLocaleString()),
       detail: t("只删除此快照，当前文稿和原文件保持不变。此操作无法撤销。"), buttons: [t("取消"), t("删除快照")], defaultId: 0, cancelId: 0, noLink: true,
     })).response === 1;
@@ -502,7 +501,7 @@ function registerIpc() {
   });
   register('choose-folder', async () => {
     let selected;
-    if (TEST_MODE) selected = process.env.MOYE_TEST_FOLDER_PATH;
+    if (TEST_MODE) selected = process.env.MEKI_TEST_FOLDER_PATH;
     else {
       const result = await dialog.showOpenDialog(mainWindow, { title: t("打开 Markdown 文件夹"), properties: ['openDirectory'] });
       if (result.canceled) return null;
@@ -532,7 +531,7 @@ function registerIpc() {
     if (!workspaceStore || !['reveal', 'copy-path'].includes(action)) throw new Error(t("无效的工作区操作。"));
     const entry = await workspaceStore.existing(filePath, { root: true });
     if (action === 'copy-path') {
-      if (TEST_MODE) process.env.MOYE_TEST_COPIED_PATH = entry.path;
+      if (TEST_MODE) process.env.MEKI_TEST_COPIED_PATH = entry.path;
       else await clipboard.writeText(entry.path);
     }
     else if (!TEST_MODE) shell.showItemInFolder(entry.path);
@@ -559,7 +558,7 @@ function registerIpc() {
   });
   register('import-theme', async () => {
     let selected;
-    if (TEST_MODE) selected = process.env.MOYE_TEST_THEME_PATH;
+    if (TEST_MODE) selected = process.env.MEKI_TEST_THEME_PATH;
     else {
       const result = await dialog.showOpenDialog(mainWindow, {
         title: t("导入 CSS 主题"), filters: [{ name: t("CSS 主题"), extensions: ['css'] }], properties: ['openFile'],
@@ -591,13 +590,13 @@ function registerIpc() {
     return store.saveAttachment(input, workspace?.root);
   });
   register('choose-images', async () => {
-    const selected = TEST_MODE ? JSON.parse(process.env.MOYE_TEST_IMAGE_PATHS || '[]') : (await dialog.showOpenDialog(mainWindow, { title: t("添加图片"), filters: [{ name: t("图片"), extensions: imageExtensions }], properties: ['openFile', 'multiSelections'] })).filePaths;
+    const selected = TEST_MODE ? JSON.parse(process.env.MEKI_TEST_IMAGE_PATHS || '[]') : (await dialog.showOpenDialog(mainWindow, { title: t("添加图片"), filters: [{ name: t("图片"), extensions: imageExtensions }], properties: ['openFile', 'multiSelections'] })).filePaths;
     return selected.length ? readSelectedImages(selected) : null;
   });
   register('save-attachments', async (input) => {
     if (!input || !input.documentPath) throw new Error(t("先保存文稿，再添加图片。"));
     requireAuthorized(input.documentPath);
-    if (TEST_MODE && process.env.MOYE_TEST_IMAGE_DELAY) await new Promise(resolve => setTimeout(resolve, Math.min(2000, Number(process.env.MOYE_TEST_IMAGE_DELAY) || 0)));
+    if (TEST_MODE && process.env.MEKI_TEST_IMAGE_DELAY) await new Promise(resolve => setTimeout(resolve, Math.min(2000, Number(process.env.MEKI_TEST_IMAGE_DELAY) || 0)));
     return store.saveAttachments(input, workspace?.root);
   });
   register('prepare-attachments', input => attachments.prepare(input));
@@ -821,10 +820,10 @@ const controller = {
   close() { closingAllowed = true; mainWindow?.close(); },
   destroy() { closingAllowed = true; mainWindow?.destroy(); },
 };
-const testDownload = TEST_MODE && process.env.MOYE_TEST_IMAGE_DOWNLOAD_ORIGIN ? createImageDownloader({ allowedAddress: address => address === '127.0.0.1' || address === '::1' }) : null;
+const testDownload = TEST_MODE && process.env.MEKI_TEST_IMAGE_DOWNLOAD_ORIGIN ? createImageDownloader({ allowedAddress: address => address === '127.0.0.1' || address === '::1' }) : null;
 attachments = new AttachmentStore({ authorize: requireAuthorized, settings: () => store.metadata.settings, workspace: () => workspace?.root,
   ...(testDownload ? { download: (source, options) => {
-    if (new URL(source).origin !== process.env.MOYE_TEST_IMAGE_DOWNLOAD_ORIGIN) throw new Error(t("测试图片来源不匹配。"));
+    if (new URL(source).origin !== process.env.MEKI_TEST_IMAGE_DOWNLOAD_ORIGIN) throw new Error(t("测试图片来源不匹配。"));
     return testDownload(source, options);
   } } : {}), boundary: async documentPath =>
   workspaceStore && isWithin(documentPath, workspaceStore.root) ? workspaceStore.root : fs.promises.realpath(path.dirname(documentPath)) });

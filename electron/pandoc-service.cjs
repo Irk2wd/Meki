@@ -53,7 +53,7 @@ async function cleanAst(ast, imageResolver) {
 class PandocService {
   constructor(userData) { this.config = path.join(userData, 'export-tools.json'); }
   async executable() {
-    if (process.env.MOYE_PANDOC_PATH) return validateAbsolutePath(process.env.MOYE_PANDOC_PATH);
+    if (process.env.MEKI_PANDOC_PATH) return validateAbsolutePath(process.env.MEKI_PANDOC_PATH);
     try { const saved = JSON.parse(await fs.readFile(this.config, 'utf8')); if (saved.path) return validateAbsolutePath(saved.path); } catch {}
     for (const folder of [...(process.env.PATH || '').split(path.delimiter), '/opt/homebrew/bin', '/usr/local/bin']) {
       const file = path.join(folder, process.platform === 'win32' ? 'pandoc.exe' : 'pandoc');
@@ -83,11 +83,11 @@ class PandocService {
     const status = await this.status(); if (!status.available) throw new Error(status.message);
     // Windows TEMP may use an 8.3 alias; use one canonical root for containment checks.
     const temporaryRoot = await fs.realpath(os.tmpdir());
-    const folder = await fs.mkdtemp(path.join(temporaryRoot, 'moye-pandoc-'));
+    const folder = await fs.mkdtemp(path.join(temporaryRoot, 'meki-pandoc-'));
     const args = ['--sandbox', `--data-dir=${folder}`, '+RTS', '-M512M', '-RTS'];
     try { return await action(folder, (more, input) => run(status.path, [...args, ...more], input, folder)); }
     finally {
-      if (path.dirname(folder) !== temporaryRoot || !path.basename(folder).startsWith('moye-pandoc-')) throw new Error('Invalid conversion temporary directory');
+      if (path.dirname(folder) !== temporaryRoot || !path.basename(folder).startsWith('meki-pandoc-')) throw new Error('Invalid conversion temporary directory');
       await fs.rm(folder, { recursive: true, force: true });
     }
   }

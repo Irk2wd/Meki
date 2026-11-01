@@ -66,20 +66,20 @@ function escapeHTML(value: string) {
 
 function errorResult(expression: MathExpression, message: string): RenderedMath {
   return {
-    html: `<span class="moye-math moye-math-error" data-math-display="${expression.display}" role="math" title="${escapeHTML(message)}"><span class="moye-math-error-message">${ht("公式错误：{0}", escapeHTML(message))}</span><code>${escapeHTML(expression.tex)}</code></span>`,
+    html: `<span class="meki-math meki-math-error" data-math-display="${expression.display}" role="math" title="${escapeHTML(message)}"><span class="meki-math-error-message">${ht("公式错误：{0}", escapeHTML(message))}</span><code>${escapeHTML(expression.tex)}</code></span>`,
     error: message,
   };
 }
 
-const errorCSS = '.moye-math-error{display:inline-flex;flex-direction:column;gap:.25em;max-width:100%;color:#a24437}.moye-math-error code{white-space:pre-wrap;overflow-wrap:anywhere}.moye-math-error-message{font:12px/1.5 sans-serif}.moye-math[data-math-display="true"]{display:block;max-width:100%;overflow-x:auto}.moye-math mjx-container[jax="SVG"]{max-width:100%}.moye-math mjx-container[jax="SVG"] a{fill:currentColor;stroke:currentColor}';
+const errorCSS = '.meki-math-error{display:inline-flex;flex-direction:column;gap:.25em;max-width:100%;color:#a24437}.meki-math-error code{white-space:pre-wrap;overflow-wrap:anywhere}.meki-math-error-message{font:12px/1.5 sans-serif}.meki-math[data-math-display="true"]{display:block;max-width:100%;overflow-x:auto}.meki-math mjx-container[jax="SVG"]{max-width:100%}.meki-math mjx-container[jax="SVG"] a{fill:currentColor;stroke:currentColor}';
 
 /** Render all expressions in document order, including forward references.
  * A fresh TeX input jax isolates numbering, labels and user macros per document.
  * SVG contains its glyph outlines and needs neither a font URL nor a script.
  */
-export function renderMathDocument(expressions: readonly MathExpression[], settings: MathSettings = {}, idPrefix = 'moye-equation'): MathDocumentResult {
+export function renderMathDocument(expressions: readonly MathExpression[], settings: MathSettings = {}, idPrefix = 'meki-equation'): MathDocumentResult {
   if (!expressions.length) return { items: [], css: errorCSS, labels: {} };
-  const prefix = /^[a-zA-Z][\w-]{0,48}$/.test(idPrefix) ? idPrefix : 'moye-equation';
+  const prefix = /^[a-zA-Z][\w-]{0,48}$/.test(idPrefix) ? idPrefix : 'meki-equation';
   const numbering = ['none', 'ams', 'all'].includes(settings.mathNumbering || '') ? settings.mathNumbering! : 'none';
   const errors = new Map<Item, string>();
   const indexes = new Map<Item, number>();
@@ -146,7 +146,7 @@ export function renderMathDocument(expressions: readonly MathExpression[], setti
     });
     if (error || !item.typesetRoot) return errorResult(expressions[index], String(error || t("无法渲染公式")));
     const content = adaptor.outerHTML(item.typesetRoot);
-    return { html: `<span class="moye-math" data-math-display="${expressions[index].display}" role="math" aria-label="${escapeHTML(expressions[index].tex)}">${content}</span>`, ...exchangeMath(item) };
+    return { html: `<span class="meki-math" data-math-display="${expressions[index].display}" role="math" aria-label="${escapeHTML(expressions[index].tex)}">${content}</span>`, ...exchangeMath(item) };
   });
   const labels = Object.fromEntries(Object.entries(tags.allLabels).map(([key, label]) => [key, { tag: label.tag, id: label.id }]));
   return { items: rendered, css: adaptor.cssText(svg.styleSheet(document)) + '\n' + errorCSS, labels };
@@ -154,6 +154,6 @@ export function renderMathDocument(expressions: readonly MathExpression[], setti
 
 /** Isolated formula dialog preview; it cannot change the document's numbering. */
 export function renderMath(tex: string, display = true, settings: MathSettings = {}) {
-  const document = renderMathDocument([{ tex, display }], settings, 'moye-preview-equation');
+  const document = renderMathDocument([{ tex, display }], settings, 'meki-preview-equation');
   return { ...document.items[0], css: document.css };
 }

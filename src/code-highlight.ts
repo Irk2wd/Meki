@@ -3,11 +3,11 @@ import { languages } from '@codemirror/language-data';
 import { highlightTree, tags } from '@lezer/highlight';
 
 export const codeHighlightStyle = HighlightStyle.define([
-  { tag: tags.comment, class: 'moye-code-comment' },
-  { tag: [tags.keyword, tags.modifier, tags.operatorKeyword], class: 'moye-code-keyword' },
-  { tag: [tags.string, tags.regexp, tags.special(tags.string)], class: 'moye-code-string' },
-  { tag: [tags.number, tags.bool, tags.null], class: 'moye-code-number' },
-  { tag: [tags.function(tags.variableName), tags.typeName, tags.className, tags.tagName], class: 'moye-code-function' },
+  { tag: tags.comment, class: 'meki-code-comment' },
+  { tag: [tags.keyword, tags.modifier, tags.operatorKeyword], class: 'meki-code-keyword' },
+  { tag: [tags.string, tags.regexp, tags.special(tags.string)], class: 'meki-code-string' },
+  { tag: [tags.number, tags.bool, tags.null], class: 'meki-code-number' },
+  { tag: [tags.function(tags.variableName), tags.typeName, tags.className, tags.tagName], class: 'meki-code-function' },
 ]);
 
 /** Export uses the editor's bundled parsers and token classes, never a document-provided script. */

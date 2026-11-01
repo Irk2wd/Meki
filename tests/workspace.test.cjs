@@ -8,7 +8,7 @@ const crypto = require('node:crypto');
 const { WorkspaceStore, documentStatus, allowedName } = require('../electron/workspace-store.cjs');
 
 async function fixture(t) {
-  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'moye-workspace-test-'));
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'meki-workspace-test-'));
   const root = path.join(temporary,'workspace'), outside = path.join(temporary,'outside');
   await fs.mkdir(root); await fs.mkdir(outside);
   t.after(() => fs.rm(temporary,{recursive:true,force:true}));

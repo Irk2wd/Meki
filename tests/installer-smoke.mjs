@@ -9,7 +9,7 @@ import { root } from '../scripts/stage-application.mjs';
 import { verifyUpdateAssets } from '../scripts/update-assets.mjs';
 
 // Installation mutates OS registration. Use only disposable GitHub-hosted runners,
-// never the developer's real profile or an existing Moye installation.
+// never the developer's real profile or an existing Meki installation.
 assert.equal(process.env.GITHUB_ACTIONS, 'true', 'Installer lifecycle tests require a disposable CI runner.');
 assert.ok(['win32', 'darwin'].includes(process.platform));
 const require = createRequire(import.meta.url);
@@ -36,7 +36,7 @@ await fs.mkdir(resultRoot, { recursive: true });
 const run = await fs.mkdtemp(path.join(resultRoot, 'installer-'));
 const report = { ...manifest, testedOn: `${process.platform}-${process.arch}`, checks: [], ui: [], errors: [] };
 const pass = name => { report.checks.push(name); console.log(`PASS ${name}`); };
-const profile = path.join(process.platform === 'win32' ? process.env.APPDATA : path.join(process.env.HOME, 'Library', 'Application Support'), 'Moye');
+const profile = path.join(process.platform === 'win32' ? process.env.APPDATA : path.join(process.env.HOME, 'Library', 'Application Support'), 'Meki');
 assert.equal(await exists(profile), false, 'Refuse to test against an existing user profile.');
 await fs.mkdir(profile, { recursive: true });
 const marker = path.join(profile, 'installer-preservation-check.txt');
@@ -47,18 +47,18 @@ await fs.writeFile(document, preserved);
 const preservedFiles = async () => { assert.equal(await fs.readFile(marker, 'utf8'), preserved); assert.equal(await fs.readFile(document, 'utf8'), preserved); };
 let executable, application, mount;
 const installDirectory = path.join(run, 'Applications', pkg.productName);
-process.env.MOYE_INSTALLER_PATH = installer;
-process.env.MOYE_INSTALL_DIRECTORY = installDirectory;
+process.env.MEKI_INSTALLER_PATH = installer;
+process.env.MEKI_INSTALL_DIRECTORY = installDirectory;
 const registry = String.raw`
 $found = @(Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue | Get-ItemProperty | Where-Object { $_.DisplayName -eq 'Meki' })
 $installed = @($found | Select-Object DisplayVersion,UninstallString,@{Name='InstallLocation';Expression={(Get-ItemProperty -LiteralPath ("HKCU:\Software\" + $_.PSChildName)).InstallLocation}})
-$open = Get-Item 'HKCU:\Software\Classes\Moye.Markdown\shell\open\command' -ErrorAction SilentlyContinue
+$open = Get-Item 'HKCU:\Software\Classes\Meki.Markdown\shell\open\command' -ErrorAction SilentlyContinue
 $md = Get-Item 'HKCU:\Software\Classes\.md\OpenWithProgids' -ErrorAction SilentlyContinue
 $links = @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs')) | ForEach-Object {
   $link = Join-Path $_ 'Meki.lnk'
   if (Test-Path -LiteralPath $link) { (New-Object -ComObject WScript.Shell).CreateShortcut($link).TargetPath }
 }
-@{ installed = $installed; command = $(if ($open) { $open.GetValue('') } else { $null }); openWith = $(if ($md) { $md.GetValueNames() -contains 'Moye.Markdown' } else { $false }); shortcuts = @($links) } | ConvertTo-Json -Depth 4 -Compress
+@{ installed = $installed; command = $(if ($open) { $open.GetValue('') } else { $null }); openWith = $(if ($md) { $md.GetValueNames() -contains 'Meki.Markdown' } else { $false }); shortcuts = @($links) } | ConvertTo-Json -Depth 4 -Compress
 `;
 const defaultAssociation = () => powershell(String.raw`
 $values = @()
@@ -70,8 +70,8 @@ foreach ($extension in @('.md', '.markdown', '.mdown', '.mkd', '.mkdn', '.txt'))
 }
 ConvertTo-Json -InputObject $values -Compress`);
 const installWindows = () => powershell(`
-$arguments = '/S /currentuser /D=' + $env:MOYE_INSTALL_DIRECTORY
-$installerProcess = Start-Process -FilePath $env:MOYE_INSTALLER_PATH -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
+$arguments = '/S /currentuser /D=' + $env:MEKI_INSTALL_DIRECTORY
+$installerProcess = Start-Process -FilePath $env:MEKI_INSTALLER_PATH -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
 if ($installerProcess.ExitCode -ne 0) { throw "Installer exit: $($installerProcess.ExitCode)" }`);
 async function verifyPayload() {
   const archive = process.platform === 'win32' ? path.join(application, 'resources', 'app.asar') : path.join(application, 'Contents', 'Resources', 'app.asar');
@@ -82,7 +82,7 @@ async function verifyPayload() {
     await runFile('codesign', ['--verify', '--deep', '--strict', application]);
     const architectures = (await runFile('lipo', ['-archs', executable])).split(/\s+/).sort();
     assert.deepEqual(architectures, ['arm64', 'x86_64']);
-    assert.equal(await runFile('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleIdentifier', path.join(application, 'Contents', 'Info.plist')]), 'io.moye.editor');
+    assert.equal(await runFile('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleIdentifier', path.join(application, 'Contents', 'Info.plist')]), 'io.meki.editor');
     assert.equal(await runFile('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleShortVersionString', path.join(application, 'Contents', 'Info.plist')]), pkg.version);
   }
 }
@@ -103,13 +103,13 @@ try {
     assert.equal(before.shortcuts.length, 0);
     await installWindows();
     application = installDirectory;
-    executable = path.join(application, 'Moye.exe');
+    executable = path.join(application, 'Meki.exe');
     await verifyPayload();
     const state = JSON.parse(await powershell(registry));
     assert.equal(state.installed.length, 1);
     assert.equal(state.installed[0].DisplayVersion, pkg.version);
     assert.equal(path.resolve(state.installed[0].InstallLocation), application);
-    assert.equal(state.installed[0].UninstallString, `"${path.join(application, 'Uninstall Moye.exe')}" /currentuser`);
+    assert.equal(state.installed[0].UninstallString, `"${path.join(application, 'Uninstall Meki.exe')}" /currentuser`);
     assert.equal(state.command, `"${executable}" --open "%1"`);
     assert.equal(state.openWith, true);
     assert.deepEqual(state.shortcuts, [executable, executable]);
@@ -143,7 +143,7 @@ try {
   const failedSuites = [];
   for (const command of uiCommands) {
     await new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [command.slice(5)], { cwd: root, windowsHide: true, stdio: 'inherit', env: { ...process.env, MOYE_EXECUTABLE: executable, MOYE_REQUIRE_PANDOC: '1' } });
+      const child = spawn(process.execPath, [command.slice(5)], { cwd: root, windowsHide: true, stdio: 'inherit', env: { ...process.env, MEKI_EXECUTABLE: executable, MEKI_REQUIRE_PANDOC: '1' } });
       child.on('error', reject); child.on('exit', code => code === 0 ? resolve() : reject(new Error(`${command} failed (${code})`)));
     }).catch(error => {
       failedSuites.push(error.message);
@@ -166,7 +166,7 @@ try {
   pass(`${report.uiChecks} desktop checks against the installed application, including real Pandoc conversion`);
   if (process.platform === 'win32') {
     await powershell(`
-$uninstaller = Join-Path $env:MOYE_INSTALL_DIRECTORY 'Uninstall Moye.exe'
+$uninstaller = Join-Path $env:MEKI_INSTALL_DIRECTORY 'Uninstall Meki.exe'
 $uninstallProcess = Start-Process -FilePath $uninstaller -ArgumentList '/S /currentuser' -WindowStyle Hidden -Wait -PassThru
 if ($uninstallProcess.ExitCode -ne 0) { throw "Uninstaller exit: $($uninstallProcess.ExitCode)" }`);
     for (let attempt = 0; await exists(executable) && attempt < 120; attempt++) await new Promise(resolve => setTimeout(resolve, 500));

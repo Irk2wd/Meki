@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url), root = path.resolve(path.dirname
 const run = await fs.realpath(await fs.mkdtemp(path.join(root, 'test-results', 'panes-'))), profile = path.join(run, 'profile');
 const files = Object.fromEntries(['Alpha', 'Beta', 'Gamma', 'Delta', 'Extra'].map(name => [name, path.join(run, `${name}.md`)]));
 for (const [name, file] of Object.entries(files)) await fs.writeFile(file, `\uFEFF# ${name}\r\n\r\n${name} original $x+1$.\r\n`);
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: profile, MOYE_TEST_DISCARD: 'cancel' }; delete env.ELECTRON_RUN_AS_NODE;
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: profile, MEKI_TEST_DISCARD: 'cancel' }; delete env.ELECTRON_RUN_AS_NODE;
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control', end = process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End';
 let app, page; const results = [], errors = [];
 const pass = name => { results.push(name); console.log(`PASS ${name}`); };
@@ -18,7 +18,7 @@ async function setting(name, value) { await app.evaluate((_electron, { name, val
 async function idle() { await page.waitForFunction(() => !document.body.classList.contains('is-busy')); }
 async function focus() { await (await app.browserWindow(page)).evaluate(win => { win.show(); win.focus(); }); await page.waitForFunction(() => document.hasFocus()); }
 async function launch() {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? ['--open', files.Alpha] : [root, '--open', files.Alpha], env });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', files.Alpha] : [root, '--open', files.Alpha], env });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
   await page.waitForSelector('#shell[data-ready="true"]'); await focus();
   await page.evaluate(() => {
@@ -33,7 +33,7 @@ async function launch() {
 async function stop() { if (app) { await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await app.close().catch(() => {}); app = null; } }
 async function action(name) { await idle(); await page.locator(`[data-action="${name}"]`).first().evaluate(node => node.click()); }
 // Keep each predicate based on a single persisted session snapshot.
-async function openFile(name) { await setting('MOYE_TEST_OPEN_PATH', files[name]); await action('open'); await poll(async () => { const state = await session(); return state.documents.find(doc => doc.id === state.activeId)?.path === files[name]; }, 'open file'); await idle(); }
+async function openFile(name) { await setting('MEKI_TEST_OPEN_PATH', files[name]); await action('open'); await poll(async () => { const state = await session(); return state.documents.find(doc => doc.id === state.activeId)?.path === files[name]; }, 'open file'); await idle(); }
 const tabs = name => page.locator(`[role="tab"][title="${files[name].replaceAll('\\', '\\\\')}"]:visible`);
 async function source() { await focus(); await page.locator('[data-mode="source"]').click(); return page.locator('#source-editor .cm-content'); }
 async function append(value) { const field = await source(); await field.click(); await page.keyboard.press(end); await page.keyboard.insertText(value); await poll(async () => (await session()).documents.some(doc => doc.content.includes(value)), 'buffer persisted'); }
@@ -180,12 +180,12 @@ try {
   await app.evaluate(() => { process.getBuiltinModule('node:fs/promises').rename = globalThis.paneTestRename; delete globalThis.paneTestRename; });
   assert.deepEqual((await session()).documents.map(doc => doc.id).sort(), priorDocs);
   pass('failed session persistence rolls back docking and retains every document and dirty buffer');
-  await setting('MOYE_TEST_WINDOW_FAILURE', '1');
+  await setting('MEKI_TEST_WINDOW_FAILURE', '1');
   await drag('Beta', { x: -45, y: 200 }, false); await page.mouse.up();
   await page.locator('#toast').filter({ hasText: '模拟新窗口启动失败' }).waitFor(); await idle();
   assert.equal(app.windows().length, 1); assert.equal(JSON.stringify((await session()).layout), previousLayout);
   assert.deepEqual((await session()).documents.map(doc => doc.id).sort(), priorDocs);
-  await setting('MOYE_TEST_WINDOW_FAILURE', '0');
+  await setting('MEKI_TEST_WINDOW_FAILURE', '0');
   pass('failed destination startup restores the original split layout and document ownership durably');
   const created = app.waitForEvent('window');
   await drag('Beta', { x: -45, y: 200 }, false); await page.mouse.up();

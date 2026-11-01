@@ -1,7 +1,7 @@
-.milkdown .milkdown-image-block.moye-image-block>.image-wrapper{max-width:100%;min-width:0}
-.milkdown .milkdown-image-block.moye-image-block>.image-wrapper img{min-height:0;object-fit:fill}
-.milkdown .moye-image-block>.image-wrapper>.operation{top:0;right:0;transform:translateY(-100%);padding-bottom:4px;white-space:nowrap;pointer-events:none}
-.milkdown .moye-image-block:is(:hover,:focus-within,.selected)>.image-wrapper>.operation{opacity:1;pointer-events:auto}
-.milkdown .moye-image-block .moye-image-reset{background:var(--text);color:var(--bg);border-radius:5px;padding:3px 9px;font:11px var(--ui);opacity:.85}
-.milkdown .moye-image-block .image-resize-handle{touch-action:none}
-@media print{.moye-image-block .operation,.moye-image-block .image-resize-handle{display:none!important}}
+.milkdown .milkdown-image-block.meki-image-block>.image-wrapper{max-width:100%;min-width:0}
+.milkdown .milkdown-image-block.meki-image-block>.image-wrapper img{min-height:0;object-fit:fill}
+.milkdown .meki-image-block>.image-wrapper>.operation{top:0;right:0;transform:translateY(-100%);padding-bottom:4px;white-space:nowrap;pointer-events:none}
+.milkdown .meki-image-block:is(:hover,:focus-within,.selected)>.image-wrapper>.operation{opacity:1;pointer-events:auto}
+.milkdown .meki-image-block .meki-image-reset{background:var(--text);color:var(--bg);border-radius:5px;padding:3px 9px;font:11px var(--ui);opacity:.85}
+.milkdown .meki-image-block .image-resize-handle{touch-action:none}
+@media print{.meki-image-block .operation,.meki-image-block .image-resize-handle{display:none!important}}

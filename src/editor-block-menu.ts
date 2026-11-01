@@ -17,13 +17,13 @@ export class BlockMenu {
   private list = document.createElement('div');
   private footer = document.createElement('div');
   constructor(private anchor: HTMLElement, title: string, summary: string, private actions: BlockAction[], private onClose: (focus: boolean) => void) {
-    this.element.className = 'moye-block-menu';
+    this.element.className = 'meki-block-menu';
     this.element.setAttribute('role', 'dialog'); this.element.setAttribute('aria-label', t('块操作'));
     this.input.type = 'search'; this.input.placeholder = t('搜索块操作…'); this.input.setAttribute('aria-label', t('搜索块操作'));
     this.input.autocomplete = 'off'; this.input.spellcheck = false;
-    const heading = document.createElement('div'); heading.className = 'moye-block-menu-title'; heading.textContent = title;
-    this.list.className = 'moye-block-menu-items'; this.list.setAttribute('role', 'menu');
-    this.footer.className = 'moye-block-menu-footer'; this.footer.textContent = summary; this.footer.setAttribute('role', 'status');
+    const heading = document.createElement('div'); heading.className = 'meki-block-menu-title'; heading.textContent = title;
+    this.list.className = 'meki-block-menu-items'; this.list.setAttribute('role', 'menu');
+    this.footer.className = 'meki-block-menu-footer'; this.footer.textContent = summary; this.footer.setAttribute('role', 'status');
     this.element.append(this.input, heading, this.list, this.footer); document.body.append(this.element);
     this.render();
     void this.position(this.element, anchor, 'bottom-start').then(() => { if (!this.closed) this.input.focus({ preventScroll: true }); });
@@ -56,17 +56,17 @@ export class BlockMenu {
       ? flatten(action.children, `${action.label} · `) : [{ ...action, label: prefix + action.label }]);
     const actions = query ? flatten(this.actions).filter(action => action.label.toLocaleLowerCase().includes(query)) : this.actions;
     for (const action of actions) this.list.append(this.button(action));
-    if (!actions.length) { const empty = document.createElement('p'); empty.className = 'moye-block-menu-empty'; empty.textContent = t('没有匹配的操作'); this.list.append(empty); }
+    if (!actions.length) { const empty = document.createElement('p'); empty.className = 'meki-block-menu-empty'; empty.textContent = t('没有匹配的操作'); this.list.append(empty); }
   }
   private button(action: BlockAction) {
     const button = document.createElement('button'); button.type = 'button'; button.dataset.blockAction = action.id;
     button.setAttribute('role', 'menuitem'); button.disabled = Boolean(action.disabled);
     if (action.danger) button.classList.add('danger');
-    const symbol = document.createElement('span'); symbol.className = 'moye-block-menu-icon'; symbol.innerHTML = icon(action.icon || 'page', 17);
+    const symbol = document.createElement('span'); symbol.className = 'meki-block-menu-icon'; symbol.innerHTML = icon(action.icon || 'page', 17);
     const label = document.createElement('span'); label.textContent = action.label; button.append(symbol, label);
     if (action.children) {
       button.setAttribute('aria-haspopup', 'menu'); button.setAttribute('aria-expanded', 'false');
-      const arrow = document.createElement('span'); arrow.className = 'moye-block-menu-arrow'; arrow.innerHTML = icon('chevron', 14); button.append(arrow);
+      const arrow = document.createElement('span'); arrow.className = 'meki-block-menu-arrow'; arrow.innerHTML = icon('chevron', 14); button.append(arrow);
       button.addEventListener('pointerenter', () => { window.clearTimeout(this.hoverTimer); this.hoverTimer = window.setTimeout(() => this.openSubmenu(action, button, false), 140); });
       button.addEventListener('pointerleave', () => window.clearTimeout(this.hoverTimer));
       button.addEventListener('click', () => this.openSubmenu(action, button, true));
@@ -84,9 +84,9 @@ export class BlockMenu {
     if (this.closed || button.disabled) return;
     if (this.parentButton !== button) {
       this.closeSubmenu(); this.parentButton = button; button.setAttribute('aria-expanded', 'true');
-      const submenu = document.createElement('section'); submenu.className = 'moye-block-menu moye-block-submenu';
+      const submenu = document.createElement('section'); submenu.className = 'meki-block-menu meki-block-submenu';
       submenu.setAttribute('role', 'menu'); submenu.setAttribute('aria-label', action.label);
-      const heading = document.createElement('div'); heading.className = 'moye-block-menu-title'; heading.textContent = action.label; submenu.append(heading);
+      const heading = document.createElement('div'); heading.className = 'meki-block-menu-title'; heading.textContent = action.label; submenu.append(heading);
       for (const child of action.children!) submenu.append(this.button(child));
       submenu.addEventListener('keydown', this.keydown); document.body.append(submenu); this.submenu = submenu;
       void this.position(submenu, button, 'right-start').then(() => {

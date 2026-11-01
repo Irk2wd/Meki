@@ -11,7 +11,7 @@ const run = await fs.realpath(await fs.mkdtemp(path.join(root, 'test-results', '
 const folder = path.join(run, 'notes'), otherFolder = path.join(run, 'other'); await fs.mkdir(folder); await fs.mkdir(otherFolder);
 const a = path.join(folder, 'Alpha.md'), b = path.join(folder, 'Beta.md'), c = path.join(otherFolder, 'Gamma.md');
 await fs.writeFile(a, '\uFEFF# Alpha\r\n\r\nOriginal A\r\n'); await fs.writeFile(b, '# Beta\n'); await fs.writeFile(c, '# Gamma\n');
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: profile, MOYE_TEST_FOLDER_PATH: folder, MOYE_TEST_DISCARD: 'cancel', MOYE_TEST_CONFLICT: 'cancel' }; delete env.ELECTRON_RUN_AS_NODE;
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: profile, MEKI_TEST_FOLDER_PATH: folder, MEKI_TEST_DISCARD: 'cancel', MEKI_TEST_CONFLICT: 'cancel' }; delete env.ELECTRON_RUN_AS_NODE;
 const modifier = process.platform === 'darwin' ? 'Meta' : 'Control', end = process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End';
 const results = [], errors = []; let app;
 const tracked = new Set();
@@ -32,17 +32,17 @@ async function action(page, name) {
   await idle(page);
 }
 async function setting(name, value) { await app.evaluate((_electron, { name, value }) => { process.env[name] = value; }, { name, value }); }
-async function open(page, file) { await setting('MOYE_TEST_OPEN_PATH', file); await action(page, 'open'); }
+async function open(page, file) { await setting('MEKI_TEST_OPEN_PATH', file); await action(page, 'open'); }
 async function source(page) { await page.locator('[data-mode="source"]').click(); return page.locator('#source-editor .cm-content'); }
 async function append(page, value) { await native(page, 'focus'); const editor = await source(page); await editor.click(); await page.keyboard.press(end); await page.keyboard.insertText(value); }
 async function text(page) { return page.locator('#source-editor .cm-line').evaluateAll(lines => lines.map(line => line.textContent).join('\n')); }
 async function tab(page, file) { await page.locator('.document-tab [role="tab"]').evaluateAll((nodes, file) => nodes.find(node => node.title === file).click(), file); await idle(page); }
 async function catalog() { return JSON.parse(await fs.readFile(path.join(profile, 'windows-v1.json'), 'utf8')).windows; }
-async function windowId(page) { return page.evaluate(async () => (await window.moye.boot()).windowId); }
+async function windowId(page) { return page.evaluate(async () => (await window.meki.boot()).windowId); }
 async function active(page) { const id = await windowId(page), record = (await catalog()).find(record => record.id === id); return record.session.documents.find(doc => doc.id === record.session.activeId); }
 async function newWindow(page, command = 'new-window') { const created = app.waitForEvent('window'); await action(page, command); return ready(await created); }
 async function launch(args = []) {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? args : [root, ...args], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? args : [root, ...args], env, timeout: 30000 });
   app.on('window', page => { void ready(page).catch(() => {}); });
   const page = await ready(await app.firstWindow()); await native(page, 'focus'); return page;
 }
@@ -64,51 +64,51 @@ try {
 
   await action(first, 'toggle-autosave'); await poll(() => second.locator('#toggle-autosave').getAttribute('aria-pressed').then(value => value === 'true'));
   await action(first, 'toggle-autosave'); await poll(() => second.locator('#toggle-autosave').getAttribute('aria-pressed').then(value => value === 'false'));
-  await setting('MOYE_TEST_FOLDER_PATH', otherFolder); await action(second, 'folder');
-  assert.equal((await first.evaluate(() => window.moye.boot())).workspace.root, folder);
-  assert.equal((await second.evaluate(() => window.moye.boot())).workspace.root, otherFolder);
-  assert.equal(await first.evaluate(async file => { try { await window.moye.openDocument(file); return false; } catch { return true; } }, c), true);
+  await setting('MEKI_TEST_FOLDER_PATH', otherFolder); await action(second, 'folder');
+  assert.equal((await first.evaluate(() => window.meki.boot())).workspace.root, folder);
+  assert.equal((await second.evaluate(() => window.meki.boot())).workspace.root, otherFolder);
+  assert.equal(await first.evaluate(async file => { try { await window.meki.openDocument(file); return false; } catch { return true; } }, c), true);
   pass('settings propagate between windows while workspace selection and file authorization stay scoped to each window');
 
   await append(first, '\nMove this dirty buffer'); await poll(async () => (await active(first)).content.includes('Move this dirty buffer'));
   const beforeMove = await active(first), diskA = await fs.readFile(a);
-  const snapshot = await first.evaluate(doc => window.moye.createSnapshot({ ...doc, tabId: doc.id, kind: 'manual', label: 'Before move' }), beforeMove);
+  const snapshot = await first.evaluate(doc => window.meki.createSnapshot({ ...doc, tabId: doc.id, kind: 'manual', label: 'Before move' }), beforeMove);
   let third = await newWindow(first, 'detach-document');
   assert.equal(await first.locator('.document-tab').count(), 1); assert.equal((await active(third)).id, beforeMove.id);
   assert.equal(await text(third), beforeMove.content); assert.equal(await third.locator('#dirty-dot').isVisible(), true);
   assert.equal(await third.locator('#recovery-banner').isVisible(), false); assert.deepEqual(await fs.readFile(a), diskA);
-  assert.equal((await third.evaluate(target => window.moye.listSnapshots(target), { path: a, tabId: beforeMove.id }))[0].id, snapshot.id);
+  assert.equal((await third.evaluate(target => window.meki.listSnapshots(target), { path: a, tabId: beforeMove.id }))[0].id, snapshot.id);
   pass('detaching a dirty tab moves its stable identity, text, mode and snapshots only after the new editor is ready');
 
-  await setting('MOYE_TEST_SAVE_PATH', a); await action(first, 'saveAs');
+  await setting('MEKI_TEST_SAVE_PATH', a); await action(first, 'saveAs');
   assert.match(await first.locator('#toast').innerText(), /另一个窗口/); assert.deepEqual(await fs.readFile(a), diskA);
   await open(first, a); assert.equal(await first.locator('.document-tab').count(), 1);
   const ownership = (await catalog()).flatMap(record => record.session?.documents || []).filter(doc => doc.path === a); assert.equal(ownership.length, 1);
   pass('cross-window Save As cannot overwrite an owned file and repeated opens never duplicate its live buffer');
 
-  await setting('MOYE_TEST_WINDOW_FAILURE', '1'); await action(third, 'detach-document'); await setting('MOYE_TEST_WINDOW_FAILURE', '0');
+  await setting('MEKI_TEST_WINDOW_FAILURE', '1'); await action(third, 'detach-document'); await setting('MEKI_TEST_WINDOW_FAILURE', '0');
   assert.equal(app.windows().length, 3); assert.equal(await text(third), beforeMove.content);
   assert.equal((await active(third)).id, beforeMove.id); assert.match(await third.locator('#toast').innerText(), /启动失败/);
   pass('failed destination startup rolls the durable transfer back without losing the source tab');
 
-  const blocked = await first.evaluate(async file => { try { await window.moye.workspaceOperation({ action: 'rename', path: file, name: 'renamed.md' }); return false; } catch (error) { return String(error).includes('其他窗口'); } }, a);
+  const blocked = await first.evaluate(async file => { try { await window.meki.workspaceOperation({ action: 'rename', path: file, name: 'renamed.md' }); return false; } catch (error) { return String(error).includes('其他窗口'); } }, a);
   assert.equal(blocked, true); assert.ok(await fs.stat(a));
   await append(second, '\nCancel closing this window'); await native(second, 'close'); await poll(() => second.locator('#document-scroll').evaluate(node => !node.closest('[inert]')));
   assert.equal(app.windows().length, 3); assert.match(await text(second), /Cancel closing/);
-  await setting('MOYE_TEST_DISCARD', 'discard'); await native(second, 'close'); await poll(() => app.windows().length === 2);
+  await setting('MEKI_TEST_DISCARD', 'discard'); await native(second, 'close'); await poll(() => app.windows().length === 2);
   assert.equal((await catalog()).length, 2); assert.equal(await text(third), beforeMove.content);
   pass('filesystem moves protect other windows; canceling or closing one window leaves the remaining editors intact');
 
   await append(first, '\nB kept when quit is canceled');
-  await setting('MOYE_TEST_DISCARD_SEQUENCE', JSON.stringify(['discard', 'cancel']));
+  await setting('MEKI_TEST_DISCARD_SEQUENCE', JSON.stringify(['discard', 'cancel']));
   await app.evaluate(({ app }) => { setTimeout(() => app.quit(), 20); });
-  await poll(() => app.evaluate(() => process.env.MOYE_TEST_DISCARD_SEQUENCE === '[]'));
+  await poll(() => app.evaluate(() => process.env.MEKI_TEST_DISCARD_SEQUENCE === '[]'));
   await idle(first); await idle(third);
   assert.equal(app.windows().length, 2); assert.match(await text(first), /B kept when quit/); assert.equal(await text(third), beforeMove.content);
   assert.ok((await catalog()).every(record => record.session.documents.some(doc => doc.dirty)));
   pass('canceling application quit keeps every window and every earlier discarded buffer recoverable');
 
-  await setting('MOYE_TEST_DISCARD', 'save'); await quit();
+  await setting('MEKI_TEST_DISCARD', 'save'); await quit();
   assert.match(await fs.readFile(b, 'utf8'), /B kept when quit/); assert.match(await fs.readFile(a, 'utf8'), /Move this dirty buffer/);
   await fs.writeFile(a, '# Fresh external A\n');
   first = await launch(); await poll(() => app.windows().length === 2); for (const page of app.windows()) await ready(page);
@@ -120,13 +120,13 @@ try {
 
   await action(bPage, 'new'); await append(bPage, 'Untitled window recovery α'); await poll(async () => (await active(bPage)).content.includes('Untitled window recovery'));
   const draft = await active(bPage);
-  const draftSnapshot = await bPage.evaluate(doc => window.moye.createSnapshot({ ...doc, tabId: doc.id, kind: 'manual', label: 'Untitled before move' }), draft);
+  const draftSnapshot = await bPage.evaluate(doc => window.meki.createSnapshot({ ...doc, tabId: doc.id, kind: 'manual', label: 'Untitled before move' }), draft);
   const draftPage = await newWindow(bPage, 'detach-document');
   assert.equal((await active(draftPage)).id, draft.id); assert.equal((await active(draftPage)).path, null);
-  assert.equal((await draftPage.evaluate(target => window.moye.listSnapshots(target), { path: null, tabId: draft.id }))[0].id, draftSnapshot.id);
+  assert.equal((await draftPage.evaluate(target => window.meki.listSnapshots(target), { path: null, tabId: draft.id }))[0].id, draftSnapshot.id);
   await append(aPage, '\nSecond dirty window β');
   await aPage.locator('.tab-settings').click(); await aPage.locator('#reopen-session').uncheck(); await aPage.locator('.tab-settings').click();
-  await poll(() => aPage.evaluate(async () => !(await window.moye.boot()).settings.reopenSession));
+  await poll(() => aPage.evaluate(async () => !(await window.meki.boot()).settings.reopenSession));
   await pageWaitForRecovery(aPage, draftPage); await crash();
   first = await launch(); await poll(() => app.windows().length === 2); for (const page of app.windows()) await ready(page);
   const contents = [];
@@ -156,13 +156,13 @@ try {
   pass('side-by-side arrangement uses the current display without overlapping the two editor windows');
 
   const filePage = await findPageByPath(a), draftWindow = pair.find(page => page !== filePage);
-  await append(filePage, '\nNative menu targets this window'); await setting('MOYE_TEST_SAVE_PATH', path.join(run, 'unexpected.md')); await native(filePage, 'focus');
+  await append(filePage, '\nNative menu targets this window'); await setting('MEKI_TEST_SAVE_PATH', path.join(run, 'unexpected.md')); await native(filePage, 'focus');
   await app.evaluate(({ Menu }) => { Menu.getApplicationMenu().items.find(item => item.label === '文件').submenu.items.find(item => item.label === '保存').click(); });
   await poll(async () => (await fs.readFile(a, 'utf8')).includes('Native menu targets this window'));
   assert.equal((await active(draftWindow)).path, null); assert.equal(await fs.stat(path.join(run, 'unexpected.md')).catch(() => null), null);
   // macOS keeps the application alive after its last window closes. Exercise that path on every host.
   await app.evaluate(({ app }) => app.removeAllListeners('window-all-closed'));
-  await setting('MOYE_TEST_DISCARD', 'discard');
+  await setting('MEKI_TEST_DISCARD', 'discard');
   await native(draftWindow, 'close'); await poll(() => app.windows().length === 1);
   await native(filePage, 'close'); await poll(() => app.windows().length === 0);
   const reopenedWindow = app.waitForEvent('window');

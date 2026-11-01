@@ -11,8 +11,8 @@ const { WindowSessions, validateWindows, MAX_WINDOWS } = require('../electron/wi
 const entry = (id, content = id, file = null) => ({ id, name: `${id}.md`, path: file, content, revision: null, dirty: true, mode: 'source', paused: null });
 const session = (...documents) => ({ documents, activeId: documents[0]?.id || null });
 async function fixture(t) {
-  const parent = await fs.realpath(os.tmpdir()), root = await fs.realpath(await fs.mkdtemp(path.join(parent, 'moye-windows-')));
-  t.after(async () => { const real = await fs.realpath(root); assert.equal(pathKey(path.dirname(real)), pathKey(parent)); assert.ok(path.basename(real).startsWith('moye-windows-')); await fs.rm(real, { recursive: true, force: true }); });
+  const parent = await fs.realpath(os.tmpdir()), root = await fs.realpath(await fs.mkdtemp(path.join(parent, 'meki-windows-')));
+  t.after(async () => { const real = await fs.realpath(root); assert.equal(pathKey(path.dirname(real)), pathKey(parent)); assert.ok(path.basename(real).startsWith('meki-windows-')); await fs.rm(real, { recursive: true, force: true }); });
   const store = new FileStore(path.join(root, 'profile')); await store.init();
   const history = new LifecycleStore(store); await history.init();
   const windows = new WindowSessions(store, history); await windows.init();

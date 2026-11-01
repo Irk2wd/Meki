@@ -9,7 +9,7 @@ const { digest, pathKey } = require('../electron/file-store.cjs');
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 
 async function fixture(t, options = {}) {
-  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'moye-attachments-')));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'meki-attachments-')));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const doc = path.join(root, '笔记.md'), raw = Buffer.from('\uFEFF# 文稿\r\n\r\nOriginal disk bytes.\r\n'), picture = path.join(root, '原 图.png'), target = path.join(root, '笔记.assets');
   await fs.writeFile(doc, raw); await fs.writeFile(picture, png);
@@ -83,7 +83,7 @@ test('external document or image changes invalidate the preview and leave origin
 });
 
 test('source links, target links, traversal, protected paths and unauthorized documents are rejected', async t => {
-  const f = await fixture(t); const outside = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'moye-attachments-outside-')));
+  const f = await fixture(t); const outside = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'meki-attachments-outside-')));
   t.after(() => fs.rm(outside, { recursive: true, force: true })); await fs.writeFile(path.join(outside, 'secret.png'), png);
   await fs.symlink(outside, path.join(f.root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
   await fs.mkdir(path.join(f.root, '.git')); await fs.writeFile(path.join(f.root, '.git', 'secret.png'), png);

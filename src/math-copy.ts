@@ -11,7 +11,7 @@ export function installMathCopyActions(settings: () => MathSettings, notify: (me
     try {
       const value = kind === 'tex' ? expression.tex : expression.mathml;
       if (!value) throw new Error(kind === 'tex' ? t("请先输入公式。") : t("此公式存在错误，请修正后再复制 MathML。"));
-      await window.moye.writeClipboardText(value);
+      await window.meki.writeClipboardText(value);
       notify(kind === 'tex' ? t("已复制 LaTeX") : t("已复制 MathML；在 Word 中使用“仅保留文本”粘贴为公式。"));
     } catch (error) { notify(String(error).replace(/^Error: /, ''), true); }
   };

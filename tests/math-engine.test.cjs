@@ -70,8 +70,8 @@ test('none and all modes respect manual tags, nonumber and repeated formula occu
     block(String.raw`z=3\label{last}`),
   ], { mathNumbering: 'all' });
   noErrors(automatic);
-  assert.match(automatic.items[0].html, /id="moye-equation-1-1"/);
-  assert.match(automatic.items[1].html, /id="moye-equation-2-2"/);
+  assert.match(automatic.items[0].html, /id="meki-equation-1-1"/);
+  assert.match(automatic.items[1].html, /id="meki-equation-2-2"/);
   assert.equal(automatic.labels.last.tag, '3');
 });
 

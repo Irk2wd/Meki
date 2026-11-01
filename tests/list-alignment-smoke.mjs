@@ -12,7 +12,7 @@ const file = path.join(run, 'tasks.md');
 const original = '\uFEFF' + ('- [x] 原生文件读写与未保存草稿恢复\n- [ ] 写下你的第一篇笔记\n- [ ] 多行待办：' + '文字换行后仍对齐第一行。'.repeat(8)
   + '\n\n  任务的第二个段落。\n\n  - [ ] 嵌套待办\n  - 嵌套普通列表\n\n1. 有序列表\n2. Ordered item\n\n- 普通列表\n- English item\n').replaceAll('\n', '\r\n');
 await fs.writeFile(file, original);
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: path.join(run, 'profile'), MOYE_TEST_DISCARD: 'discard' };
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: path.join(run, 'profile'), MEKI_TEST_DISCARD: 'discard' };
 delete env.ELECTRON_RUN_AS_NODE;
 const results = [], samples = [], errors = []; let app, page;
 const pass = message => { results.push(message); console.log(`PASS ${message}`); };
@@ -46,7 +46,7 @@ async function aligned(text, controls = true) {
   }
 }
 try {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? ['--open', file] : [root, '--open', file], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', file] : [root, '--open', file], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(12000); page.on('pageerror', error => errors.push(error.message));
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.setSize(1100, 900); window.show(); });
   await page.waitForSelector('#shell[data-ready="true"]'); await page.evaluate(() => document.fonts.ready); await frames();

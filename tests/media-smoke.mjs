@@ -14,11 +14,11 @@ await sharp({ create: { width: 100, height: 60, channels: 3, background: '#c7514
 await sharp({ create: { width: 100, height: 60, channels: 3, background: '#386cb0' } }).png().toFile(bluePath);
 const original = '\uFEFF---\r\ntitle: 元数据保留\r\n---\r\n\r\n# 文稿\r\n\r\n图片从这里开始。\r\n';
 await fs.writeFile(documentPath, original); await fs.writeFile(otherPath, '# 不应被切换\n');
-const env = { ...process.env, MOYE_TEST: '1', MOYE_USER_DATA: path.join(run, 'profile'), MOYE_TEST_OPEN_PATH: otherPath, MOYE_TEST_SAVE_PATH: newPath, MOYE_TEST_IMAGE_PATHS: JSON.stringify([redPath, bluePath]), MOYE_TEST_IMAGE_DELAY: '250', MOYE_TEST_DISCARD: 'discard' }; delete env.ELECTRON_RUN_AS_NODE;
+const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: path.join(run, 'profile'), MEKI_TEST_OPEN_PATH: otherPath, MEKI_TEST_SAVE_PATH: newPath, MEKI_TEST_IMAGE_PATHS: JSON.stringify([redPath, bluePath]), MEKI_TEST_IMAGE_DELAY: '250', MEKI_TEST_DISCARD: 'discard' }; delete env.ELECTRON_RUN_AS_NODE;
 let app, page, failureState; const results = [], errors = [];
 const record = name => { results.push(name); console.log(`PASS ${name}`); };
 async function launch(launchEnv = env, args = ['--open', documentPath]) {
-  app = await electron.launch({ executablePath: process.env.MOYE_EXECUTABLE || require('electron'), args: process.env.MOYE_EXECUTABLE ? args : [root, ...args], env: launchEnv, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? args : [root, ...args], env: launchEnv, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => { errors.push(error.stack || error.message); console.error(error.stack || error.message); });
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); });
   await page.waitForSelector('#shell[data-ready="true"]', { timeout: 30000 });
@@ -141,10 +141,10 @@ try {
     return selection?.isCollapsed && paragraph?.textContent === 'Plain text' && document.querySelector('#selection-count')?.hidden;
   });
   await page.locator('#heading-format').selectOption('h6'); assert.equal(await rich.locator('h6').textContent(), 'Plain text');
-  await command('toc'); assert.equal(await rich.locator('.moye-toc').count(), 1);
+  await command('toc'); assert.equal(await rich.locator('.meki-toc').count(), 1);
   await sourceFill('Task text\n'); await page.locator('[data-mode="visual"]').click(); await rich.locator('p').click(); await command('task');
   assert.equal(await rich.locator('li .label.unchecked').count(), 1); assert.match(await saveText(), /^[*-] \[ \] Task text/m);
-  await sourceFill('An important paragraph\n'); await page.locator('[data-mode="visual"]').click(); await rich.locator('p').click(); await command('alert'); assert.equal(await rich.locator('.moye-alert').count(), 1);
+  await sourceFill('An important paragraph\n'); await page.locator('[data-mode="visual"]').click(); await rich.locator('p').click(); await command('alert'); assert.equal(await rich.locator('.meki-alert').count(), 1);
   record('compact format menu supports marks, undo/redo, links, footnotes, H6, TOC, tasks and alerts without deleting selected words');
 
   await sourceFill('Source words'); await page.keyboard.press(`${mod}+a`); await command('highlight'); assert.equal(await sourceText(), '==Source words==');
@@ -183,7 +183,7 @@ try {
   text = await saveText(); assert.ok(text.includes('const answer = 42;'));
   record('existing code copy writes the real clipboard and code line numbers can be toggled');
 
-  await exit(); const cancelEnv = { ...env, MOYE_USER_DATA: path.join(run, 'cancel-profile'), MOYE_TEST_SAVE_PATH: '' };
+  await exit(); const cancelEnv = { ...env, MEKI_USER_DATA: path.join(run, 'cancel-profile'), MEKI_TEST_SAVE_PATH: '' };
   await launch(cancelEnv, []); await action('new'); await page.locator('.ProseMirror').click(); await page.keyboard.insertText('取消保存仍保留文字');
   await action('image'); assert.equal(await page.locator('#document-name').textContent(), '未命名.md'); assert.equal(await page.locator('.ProseMirror img').count(), 0);
   assert.ok((await page.locator('.ProseMirror').innerText()).includes('取消保存仍保留文字'));

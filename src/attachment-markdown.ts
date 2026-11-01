@@ -44,7 +44,7 @@ export function scanAttachmentImages(content: string): ImageReferenceRange[] {
         if (!token?.labelEnd || token.end !== end) throw new Error(t("无法安全定位图片引用，请检查 Markdown 语法。"));
         result.push({ source: definition.url, from, to, raw, kind: 'reference', alt: body.slice(start, token.labelEnd), title: definition.title });
       }
-    } else if (node.type === 'html' || String(node.type) === 'moyeImage') {
+    } else if (node.type === 'html' || String(node.type) === 'mekiImage') {
       const image = parseImageTag(raw);
       if (image) result.push({ source: image.src, from, to, raw, kind: 'html' });
     }

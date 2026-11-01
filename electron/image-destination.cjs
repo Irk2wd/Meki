@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const DEFAULT_DIRECTORY = '${filename}.assets';
-const FORBIDDEN = new Set(['.git', '.hg', '.svn', 'node_modules', '.moye', '.next', '.cache', '$recycle.bin', 'system volume information']);
+const FORBIDDEN = new Set(['.git', '.hg', '.svn', 'node_modules', '.meki', '.next', '.cache', '$recycle.bin', 'system volume information']);
 const key = value => process.platform === 'win32' ? path.resolve(value).toLowerCase() : path.resolve(value);
 const within = (value, root) => { const relative = path.relative(key(root), key(value)); return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative)); };
 const same = (first, second) => first.dev === second.dev && first.ino === second.ino;
