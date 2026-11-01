@@ -79,6 +79,8 @@ if ($installerProcess.ExitCode -ne 0) { throw "Installer exit: $($installerProce
 async function verifyPayload() {
   const archive = process.platform === 'win32' ? path.join(application, 'resources', 'app.asar') : path.join(application, 'Contents', 'Resources', 'app.asar');
   assert.equal(await hash(archive), manifest.asarSha256);
+  // Upgrading replaces this path; discard the previous archive's cached index.
+  asar.uncache(archive);
   assert.equal(JSON.parse(asar.extractFile(archive, 'package.json').toString()).version, pkg.version);
   assert.ok(await exists(executable));
   if (process.platform === 'darwin') {
