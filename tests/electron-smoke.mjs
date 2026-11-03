@@ -88,6 +88,34 @@ try {
   await click(page, 'save');
   assert.equal(await fs.readFile(documentPath, 'utf8'), original);
   record('open/save without edits preserves original BOM and CRLF bytes');
+  const inlineFormula = page.locator('.meki-inline-math').first();
+  const inlineTooltip = page.locator('.milkdown-latex-inline-edit[data-show="true"]');
+  const inlineSource = inlineTooltip.locator('.ProseMirror');
+  for (const theme of ['paper', 'linen', 'night']) {
+    await click(page, 'style'); await page.locator(`button[data-theme="${theme}"]`).click(); await click(page, 'style');
+    await inlineFormula.click(); await inlineSource.waitFor();
+    assert.equal(await inlineSource.innerText(), 'E=mc^2');
+    const layout = await inlineTooltip.evaluate(tooltip => {
+      const input = tooltip.querySelector('.ProseMirror'), bounds = tooltip.getBoundingClientRect();
+      const range = document.createRange(); range.selectNodeContents(input);
+      const text = range.getBoundingClientRect(), x = (text.left + text.right) / 2, y = (text.top + text.bottom) / 2;
+      return { height: bounds.height, textVisible: input.contains(document.elementFromPoint(x, y)) };
+    });
+    assert.ok(layout.height < 120, `inline formula tooltip must fit its source in ${theme}: ${layout.height}px`);
+    assert.ok(layout.textVisible, `inline formula source must be visible in ${theme}`);
+    await page.screenshot({ path: path.join(run, `inline-math-${theme}.png`) });
+    await page.locator('.editor.ProseMirror h1').click();
+  }
+  assert.equal(await page.locator('#dirty-dot').isVisible(), false);
+  await inlineFormula.click(); await inlineSource.fill('E=mc^3'); await inlineSource.press('Enter');
+  await page.waitForFunction(() => document.querySelector('.meki-inline-math')?.dataset.mathTex === 'E=mc^3');
+  await page.locator('.editor.ProseMirror h1').click();
+  await click(page, 'save');
+  await pollFile(documentPath, bytes => bytes.toString().includes('$E=mc^3$'));
+  await inlineFormula.click(); assert.equal(await inlineSource.innerText(), 'E=mc^3');
+  await page.locator('.editor.ProseMirror h1').click();
+  await click(page, 'style'); await page.locator('button[data-theme="paper"]').click(); await click(page, 'style');
+  record('inline formula source stays compact and visible in every theme; edits save and reopen');
   await page.locator('[data-mode="source"]').click();
   const source = page.locator('#source-editor .cm-content');
   await source.click(); await page.keyboard.press(documentEndKey);
