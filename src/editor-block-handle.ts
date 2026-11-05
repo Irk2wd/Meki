@@ -35,7 +35,7 @@ export function blockInsertMenu(boundary: HTMLElement) {
 export function blockHandlePosition({ active, editorDom }: DeriveContext): DOMRect {
   const element = active.el;
   const textBlock = element.matches('p,h1,h2,h3,h4,h5,h6') ? element
-    : element.querySelector<HTMLElement>('p,h1,h2,h3,h4,h5,h6,.cm-line') || element;
+    : [...element.querySelectorAll<HTMLElement>('p,h1,h2,h3,h4,h5,h6,.cm-line')].find(candidate => !candidate.closest('svg') && candidate.getBoundingClientRect().height > 0) || element;
   const walker = document.createTreeWalker(textBlock, NodeFilter.SHOW_TEXT);
   let text: Node | null;
   while ((text = walker.nextNode())) {
@@ -61,7 +61,6 @@ export class FrameBlockService extends BlockService {
   private active: ActiveNode | null = null;
   private pointer: { x: number; y: number } | null = null;
   private frame = 0;
-  private captured: BlockTarget | null = null;
   private menu: BlockMenu | null = null;
   private hint: { target: BlockTarget; kind: string } | null = null;
   private hintTimer = 0;
@@ -80,7 +79,7 @@ export class FrameBlockService extends BlockService {
     view: () => ({ update: (view, previous) => {
     if (view.state.doc !== previous.doc) this.cancel();
   } }) }));
-  cancel = () => { this.menu?.close(false); this.drag?.cancel(); this.highlight(null); this.captured = null; this.hide(); };
+  cancel = () => { this.menu?.close(false); this.drag?.cancel(); this.highlight(null); this.hide(); };
   private highlight = (target: BlockTarget | null, kind = '', duration = 0) => {
     window.clearTimeout(this.hintTimer);
     const view = this.view;
@@ -184,11 +183,10 @@ export class FrameBlockService extends BlockService {
   override addEvent = (dom: HTMLElement) => {
     const add = dom.firstElementChild as HTMLElement, grip = dom.lastElementChild as HTMLElement;
     add.setAttribute('role', 'button'); add.tabIndex = 0; add.title = t('在下方插入块'); add.setAttribute('aria-label', add.title);
-    grip.setAttribute('draggable', 'true'); grip.setAttribute('role', 'button'); grip.tabIndex = 0;
-    grip.title = t('点击打开块菜单，拖动调整位置'); grip.setAttribute('aria-label', t('块操作')); grip.setAttribute('aria-haspopup', 'dialog'); grip.setAttribute('aria-expanded', 'false');
-    dom.addEventListener('mousedown', this.mouseDown);
-    dom.addEventListener('dragstart', this.dragStart);
-    dom.addEventListener('dragend', this.dragEnd);
+    grip.setAttribute('draggable', 'false'); grip.setAttribute('role', 'button'); grip.tabIndex = 0;
+    grip.title = `${t('点击打开块菜单，拖动调整位置')}\n${t('Alt / Option 拖动可复制 · Esc 取消')}`; grip.setAttribute('aria-label', t('块操作')); grip.setAttribute('aria-haspopup', 'dialog'); grip.setAttribute('aria-expanded', 'false');
+    dom.addEventListener('pointerdown', this.pointerDown);
+    dom.addEventListener('dragstart', this.preventNativeDrag);
     dom.addEventListener('click', this.click);
     dom.addEventListener('keydown', this.handleKey);
     // The provider sets the container draggable after addEvent; only the grip
@@ -196,29 +194,29 @@ export class FrameBlockService extends BlockService {
     queueMicrotask(() => { dom.draggable = false; });
   };
   override removeEvent = (dom: HTMLElement) => {
-    dom.removeEventListener('mousedown', this.mouseDown);
-    dom.removeEventListener('dragstart', this.dragStart);
-    dom.removeEventListener('dragend', this.dragEnd);
+    dom.removeEventListener('pointerdown', this.pointerDown);
+    dom.removeEventListener('dragstart', this.preventNativeDrag);
     dom.removeEventListener('click', this.click);
     dom.removeEventListener('keydown', this.handleKey);
   };
-  private mouseDown = (event: MouseEvent) => {
-    this.captured = null; this.suppressClick = false;
+  private pointerDown = (event: PointerEvent) => {
+    this.suppressClick = false;
     const view = this.view;
-    if (event.button !== 0 || !view || !view.editable || view.composing) return;
+    const grip = (event.currentTarget as HTMLElement).lastElementChild as HTMLElement;
+    if (event.button !== 0 || !event.isPrimary || !(event.target instanceof Node) || !grip.contains(event.target) || !view || !view.editable || view.composing) return;
     cancelAnimationFrame(this.frame); this.frame = 0;
     const active = this.active;
     if (!active || view.state.doc.nodeAt(active.$pos.pos) !== active.node || !NodeSelection.isSelectable(active.node)) return;
-    this.captured = captureBlock(view.state, active.$pos.pos);
+    const target = captureBlock(view.state, active.$pos.pos);
+    if (!target) return;
+    event.preventDefault();
+    this.drag?.cancel();
+    this.drag = new BlockDrag(view, this.scroll!, tr => this.apply(tr), this.highlight, () => this.menu?.close(false), lifted => {
+      if (lifted) { this.suppressClick = true; this.hide(); }
+    });
+    this.drag.start(event, target, blockLabel(target), grip);
   };
-  private dragStart = (event: DragEvent) => {
-    const view = this.view, target = this.captured, active = this.active;
-    if (!view || !target || !active || event.target !== (event.currentTarget as HTMLElement).lastElementChild) { event.preventDefault(); return; }
-    this.menu?.close(false); this.suppressClick = true;
-    this.drag = new BlockDrag(view, this.scroll!, tr => this.apply(tr), this.highlight, () => { this.captured = null; this.hide(); });
-    if (!this.drag.start(event, target, blockLabel(target))) event.preventDefault();
-  };
-  private dragEnd = () => this.drag?.cancel();
+  private preventNativeDrag = (event: DragEvent) => { event.preventDefault(); };
   override keydownCallback = () => { if (!this.drag?.active) this.hide(); return false; };
   override dragendCallback = () => { this.drag?.cancel(); };
   override dropCallback = () => false;
@@ -228,7 +226,8 @@ export class FrameBlockService extends BlockService {
 
   private click = (event: MouseEvent) => {
     const grip = (event.currentTarget as HTMLElement).lastElementChild as HTMLElement;
-    if (!(event.target instanceof Node) || !grip.contains(event.target) || this.suppressClick) return;
+    if (!(event.target instanceof Node) || !grip.contains(event.target)) return;
+    if (this.suppressClick) { event.preventDefault(); event.stopPropagation(); this.suppressClick = false; return; }
     event.preventDefault(); event.stopPropagation(); this.openMenu(grip);
   };
   private handleKey = (event: KeyboardEvent) => {

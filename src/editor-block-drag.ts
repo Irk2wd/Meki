@@ -1,103 +1,133 @@
 import { NodeSelection, type Selection, type Transaction } from '@milkdown/kit/prose/state';
 import type { EditorView } from '@milkdown/kit/prose/view';
-import { t } from '../electron/i18n.mjs';
 import { captureBlock, currentBlock, moveBlock, type BlockTarget } from './editor-block-model';
 
 interface DropSlot { pos: number; x: number; y: number; width: number }
+
+// Keep the rendered block's typography and SVG markers without duplicating
+// document IDs or carrying its editing controls into the floating preview.
+function clonePreview(source: HTMLElement) {
+  const clone = source.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('button,.tools,.language-picker,.preview-label,.preview-divider,.drag-preview').forEach(element => element.remove());
+  const elements = [clone, ...clone.querySelectorAll<HTMLElement>('*')];
+  const prefix = `meki-drag-${crypto.randomUUID()}`;
+  const ids = new Map(elements.filter(element => element.id).map((element, index) => [element.id, `${prefix}-${index}`]));
+  const reference = (id: string) => ids.get(id) || id;
+  for (const element of elements) {
+    if (element.id) element.id = reference(element.id);
+    element.removeAttribute('contenteditable');
+    element.classList.remove('ProseMirror-selectednode', 'meki-block-drag-source', 'meki-block-dropped', 'meki-block-menu-target');
+    for (const attribute of [...element.attributes]) {
+      let value = attribute.value.replace(/url\((["']?)#([^)'"\s]+)\1\)/g, (_match, quote, id) => `url(${quote}#${reference(id)}${quote})`);
+      if (attribute.localName === 'href' && value.startsWith('#')) value = `#${reference(value.slice(1))}`;
+      if (['aria-labelledby', 'aria-describedby'].includes(attribute.name)) value = value.split(/\s+/).map(reference).join(' ');
+      if (value !== attribute.value) element.setAttribute(attribute.name, value);
+    }
+  }
+  if (ids.size) {
+    const selectors = new RegExp(`#(${[...ids.keys()].sort((a, b) => b.length - a.length).map(id => id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?=[^\\w-]|$)`, 'g');
+    clone.querySelectorAll('style').forEach(style => { style.textContent = style.textContent!.replace(selectors, (_match, id) => `#${reference(id)}`); });
+  }
+  return clone;
+}
+
 export class BlockDrag {
   active = false;
+  private lifted = false;
   private target: BlockTarget | null = null;
   private originalSelection: Selection | null = null;
   private point = { x: 0, y: 0, copy: false };
+  private origin = { x: 0, y: 0 };
+  private pointerId = -1;
+  private grip: HTMLElement | null = null;
+  private label = '';
   private indicator = document.createElement('div');
   private preview = document.createElement('div');
-  private ghost = document.createElement('canvas');
   private frame = 0;
   private previousTime = 0;
   private transaction: Transaction | null = null;
   private destination = -1;
   private copied = false;
-  private overflow = '';
-  private gutter = '';
+  private snap: { pos: number; after: boolean } | null = null;
   private blocks: { node: BlockTarget['node']; pos: number; element: HTMLElement }[] = [];
   constructor(private view: EditorView, private scroll: HTMLElement,
     private apply: (transaction: Transaction) => void,
-    private highlight: (target: BlockTarget | null, kind?: string, duration?: number) => void, private done: () => void) {}
+    private highlight: (target: BlockTarget | null, kind?: string, duration?: number) => void,
+    private onLift: () => void, private done: (lifted: boolean) => void) {}
 
-  start(event: DragEvent, target: BlockTarget, label: string) {
-    if (!event.dataTransfer || !this.view.editable || !currentBlock(this.view.state, target)) return false;
+  start(event: PointerEvent, target: BlockTarget, label: string, grip: HTMLElement) {
+    if (!this.view.editable || !currentBlock(this.view.state, target)) return false;
     this.target = target; this.originalSelection = this.view.state.selection;
     this.active = true; this.point = { x: event.clientX, y: event.clientY, copy: event.altKey };
-    // Own edge scrolling for this gesture. Chromium's native drag autoscroll
-    // otherwise competes with our frame loop and can outlive Escape on Windows.
-    // Hidden overflow still permits scrollTop; the stable gutter avoids reflow.
-    this.overflow = this.scroll.style.overflowY; this.gutter = this.scroll.style.scrollbarGutter;
-    if (this.scroll.scrollHeight > this.scroll.clientHeight) this.scroll.style.scrollbarGutter = 'stable';
-    this.scroll.style.overflowY = 'hidden';
-    this.view.dom.dataset.dragging = 'true';
-    // Chromium cancels a pending native drag when DOM selection changes on
-    // mousedown. Capture the block then, but select it only inside dragstart.
-    const selection = NodeSelection.create(this.view.state.doc, target.pos);
-    this.view.dispatch(this.view.state.tr.setSelection(selection));
-    const slice = selection.content(), { dom, text } = this.view.serializeForClipboard(slice);
-    event.dataTransfer.clearData(); event.dataTransfer.effectAllowed = 'copyMove';
-    event.dataTransfer.setData('text/html', dom.innerHTML); event.dataTransfer.setData('text/plain', text);
-    this.view.dragging = { slice, move: true };
-    this.ghost.width = this.ghost.height = 1; this.ghost.className = 'meki-block-native-ghost'; document.body.append(this.ghost);
-    event.dataTransfer.setDragImage(this.ghost, 0, 0);
-    this.indicator.className = 'meki-block-drop-line'; this.indicator.hidden = true;
-    this.preview.className = 'meki-block-drag-preview'; this.preview.setAttribute('aria-hidden', 'true');
-    const title = document.createElement('strong'); title.textContent = label;
-    const summary = document.createElement('span'); summary.textContent = target.node.textContent.slice(0, 100) || label;
-    const hint = document.createElement('small'); hint.textContent = t('Alt / Option 拖动可复制 · Esc 取消');
-    this.preview.append(title, summary, hint); document.body.append(this.indicator, this.preview);
-    this.highlight(target, 'meki-block-drag-source');
-    this.view.state.doc.forEach((node, pos) => { const element = this.view.nodeDOM(pos); if (element instanceof HTMLElement) this.blocks.push({ node, pos, element }); });
-    window.addEventListener('dragover', this.over, true); window.addEventListener('drop', this.drop, true);
-    window.addEventListener('dragend', this.end, true); window.addEventListener('keydown', this.keydown, true);
-    window.addEventListener('blur', this.blur);
-    this.frame = requestAnimationFrame(this.tick);
+    this.origin = { x: event.clientX, y: event.clientY }; this.pointerId = event.pointerId; this.grip = grip; this.label = label;
+    grip.setPointerCapture(event.pointerId);
+    grip.addEventListener('lostpointercapture', this.cancel);
+    window.addEventListener('pointermove', this.move, true); window.addEventListener('pointerup', this.drop, true);
+    window.addEventListener('pointercancel', this.cancelPointer, true); window.addEventListener('keydown', this.keydown, true);
+    window.addEventListener('keyup', this.modifier, true); window.addEventListener('blur', this.cancel);
     return true;
   }
-  cancel() { this.finish(true); }
+  private lift() {
+    const target = this.target!;
+    this.lifted = true;
+    this.onLift();
+    const source = this.view.nodeDOM(target.pos);
+    this.indicator.className = 'meki-block-drop-line'; this.indicator.hidden = true;
+    this.preview.className = 'meki-block-drag-preview meki-document milkdown'; this.preview.setAttribute('aria-hidden', 'true'); this.preview.inert = true;
+    const content = document.createElement('div'); content.className = 'meki-block-drag-content';
+    if (source instanceof HTMLElement) {
+      const clone = clonePreview(source);
+      if (clone.tagName === 'LI') {
+        const list = document.createElement(source.parentElement?.tagName === 'OL' ? 'ol' : 'ul'); list.append(clone); content.append(list);
+      } else content.append(clone);
+      this.preview.style.width = `${Math.min(440, source.getBoundingClientRect().width + 24)}px`;
+    } else content.textContent = target.node.textContent || this.label;
+    const copy = document.createElement('span'); copy.className = 'meki-block-drag-copy'; copy.textContent = '+';
+    this.preview.append(content, copy); document.body.append(this.indicator, this.preview);
+    this.preview.dataset.truncated = String(content.scrollHeight > 76);
+    document.body.classList.add('meki-block-dragging');
+    this.view.dom.dataset.dragging = 'true';
+    this.view.dispatch(this.view.state.tr.setSelection(NodeSelection.create(this.view.state.doc, target.pos)));
+    this.highlight(target, 'meki-block-drag-source');
+    this.view.state.doc.forEach((node, pos) => { const element = this.view.nodeDOM(pos); if (element instanceof HTMLElement) this.blocks.push({ node, pos, element }); });
+    this.update();
+    this.frame = requestAnimationFrame(this.tick);
+  }
+  cancel = () => { this.finish(true); };
   private finish(restore: boolean) {
     if (!this.active) return;
     this.active = false; cancelAnimationFrame(this.frame); this.frame = 0;
-    window.removeEventListener('dragover', this.over, true); window.removeEventListener('drop', this.drop, true);
-    window.removeEventListener('dragend', this.end, true); window.removeEventListener('keydown', this.keydown, true);
-    window.removeEventListener('blur', this.blur);
-    this.highlight(null); this.view.dom.dataset.dragging = 'false'; this.view.dragging = null;
-    this.indicator.remove(); this.preview.remove(); this.ghost.remove();
-    this.scroll.style.overflowY = this.overflow; this.scroll.style.scrollbarGutter = this.gutter;
-    if (restore && this.target && currentBlock(this.view.state, this.target) && this.originalSelection)
-      this.view.dispatch(this.view.state.tr.setSelection(this.originalSelection));
-    this.target = null; this.originalSelection = null; this.transaction = null; this.blocks = []; this.done();
-    if (restore) {
-      // Escape or a document switch can cancel our model before the OS ends
-      // its drag. Swallow that gesture's final drop instead of letting the
-      // default text drop handler reinsert its stale clipboard payload.
-      window.addEventListener('dragover', this.cancelledOver, true); window.addEventListener('drop', this.cancelledDrop, true);
-      for (const name of ['dragend', 'pointerdown', 'dragstart']) window.addEventListener(name, this.releaseCancelled, true);
+    window.removeEventListener('pointermove', this.move, true); window.removeEventListener('pointerup', this.drop, true);
+    window.removeEventListener('pointercancel', this.cancelPointer, true); window.removeEventListener('keydown', this.keydown, true);
+    window.removeEventListener('keyup', this.modifier, true); window.removeEventListener('blur', this.cancel);
+    this.grip?.removeEventListener('lostpointercapture', this.cancel);
+    if (this.grip?.hasPointerCapture(this.pointerId)) this.grip.releasePointerCapture(this.pointerId);
+    this.grip = null;
+    if (this.lifted) {
+      this.highlight(null); this.view.dom.dataset.dragging = 'false';
+      document.body.classList.remove('meki-block-dragging'); this.indicator.remove(); this.preview.remove();
     }
+    if (restore && this.lifted && this.target && currentBlock(this.view.state, this.target) && this.originalSelection)
+      this.view.dispatch(this.view.state.tr.setSelection(this.originalSelection));
+    this.target = null; this.originalSelection = null; this.transaction = null; this.blocks = []; this.done(this.lifted);
   }
-  private releaseCancelled = () => {
-    window.removeEventListener('dragover', this.cancelledOver, true); window.removeEventListener('drop', this.cancelledDrop, true);
-    for (const name of ['dragend', 'pointerdown', 'dragstart']) window.removeEventListener(name, this.releaseCancelled, true);
-  };
-  private cancelledOver = (event: DragEvent) => { event.preventDefault(); event.stopPropagation(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'; };
-  private cancelledDrop = (event: DragEvent) => { event.preventDefault(); event.stopPropagation(); this.releaseCancelled(); };
-  private blur = () => this.cancel();
-  private end = () => { this.cancel(); this.releaseCancelled(); };
+  private cancelPointer = (event: PointerEvent) => { if (event.pointerId === this.pointerId) this.cancel(); };
   private keydown = (event: KeyboardEvent) => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); this.cancel(); }
+    else this.modifier(event);
   };
-  private over = (event: DragEvent) => {
+  private modifier = (event: KeyboardEvent) => { this.point.copy = event.altKey; };
+  private move = (event: PointerEvent) => {
+    if (event.pointerId !== this.pointerId) return;
     event.preventDefault(); event.stopPropagation();
     this.point = { x: event.clientX, y: event.clientY, copy: event.altKey };
-    this.update();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = this.transaction ? (this.point.copy ? 'copy' : 'move') : 'none';
+    // A click or a small hand tremor still opens the block menu. Once lifted,
+    // pointer events only record coordinates; layout work runs once per frame.
+    if (!this.lifted && Math.hypot(this.point.x - this.origin.x, this.point.y - this.origin.y) >= 5) this.lift();
   };
-  private drop = (event: DragEvent) => {
+  private drop = (event: PointerEvent) => {
+    if (event.pointerId !== this.pointerId) return;
+    if (!this.lifted) { this.finish(false); return; }
     event.preventDefault(); event.stopPropagation();
     this.point = { x: event.clientX, y: event.clientY, copy: event.altKey }; this.update();
     const tr = this.transaction;
@@ -106,7 +136,7 @@ export class BlockDrag {
       this.apply(tr); this.view.focus();
       const $pos = this.view.state.selection.$from;
       const target = captureBlock(this.view.state, $pos.depth ? $pos.before(1) : $pos.pos);
-      this.highlight(target, 'meki-block-dropped', 650);
+      this.highlight(target, 'meki-block-dropped', 420);
     }
   };
   private tick = (time: number) => {
@@ -125,9 +155,10 @@ export class BlockDrag {
   private update() {
     if (!this.active || !this.target || !currentBlock(this.view.state, this.target)) { this.transaction = null; return; }
     const slot = this.slot();
-    this.preview.style.transform = `translate3d(${Math.max(8, Math.min(innerWidth - 290, this.point.x + 18))}px, ${Math.max(8, Math.min(innerHeight - 90, this.point.y + 20))}px, 0)`;
+    const width = this.preview.offsetWidth, height = this.preview.offsetHeight;
+    this.preview.style.transform = `translate3d(${Math.max(8, Math.min(innerWidth - width - 8, this.point.x + 18))}px, ${Math.max(8, Math.min(innerHeight - height - 8, this.point.y + 16))}px, 0)`;
     this.preview.dataset.copy = String(this.point.copy);
-    if (!slot) { this.transaction = null; this.destination = -1; this.indicator.hidden = true; return; }
+    if (!slot) { this.transaction = null; this.destination = -1; this.snap = null; this.indicator.hidden = true; return; }
     if (slot.pos !== this.destination || this.point.copy !== this.copied) {
       this.transaction = moveBlock(this.view.state, this.target, slot.pos, this.point.copy);
       this.destination = slot.pos; this.copied = this.point.copy;
@@ -160,7 +191,12 @@ export class BlockDrag {
         }
       }
     }
-    const after = y > (rect.top + rect.bottom) / 2, $pos = this.view.state.doc.resolve(chosen.pos), index = $pos.index();
+    const middle = (rect.top + rect.bottom) / 2;
+    // Keep the current side around the midpoint rather than flickering between
+    // two insertion lines on tiny pointer movements.
+    const after = this.snap?.pos === chosen.pos && Math.abs(y - middle) < Math.min(6, rect.height / 4) ? this.snap.after : y > middle;
+    this.snap = { pos: chosen.pos, after };
+    const $pos = this.view.state.doc.resolve(chosen.pos), index = $pos.index();
     let line = after ? rect.bottom + 3 : rect.top - 3;
     const siblingPos = after ? (index + 1 < $pos.parent.childCount ? chosen.pos + chosen.node.nodeSize : null)
       : (index ? chosen.pos - $pos.parent.child(index - 1).nodeSize : null);

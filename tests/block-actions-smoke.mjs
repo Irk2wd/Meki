@@ -11,7 +11,7 @@ const run = await fs.realpath(await fs.mkdtemp(path.join(root, 'test-results', '
 await fs.mkdir(profile);
 await fs.writeFile(path.join(profile, 'state.json'), JSON.stringify({ settings: { locale: 'en', autoSave: false, autoSnapshot: false } }));
 const file = path.join(run, 'Blocks.md'), second = path.join(run, 'Other.md');
-const original = '\uFEFF' + ('# Block actions\n\nAlpha **bold** text.\n\nBeta plain text.\n\nGamma plain text.\n\n- [x] Task done\n  - Nested child\n- [ ] Task todo\n\n| Column | Value |\n| --- | --- |\n| Cell | 42 |\n\n```js\nconst answer = 42;\n```\n\n---\n\nLong block: ' + 'Keep every word and show a compact preview. '.repeat(220) + '\n\n' + Array.from({ length: 70 }, (_, i) => `Scroll paragraph ${i + 1}.`).join('\n\n') + '\n').replaceAll('\n', '\r\n');
+const original = '\uFEFF' + ('# Block actions\n\nAlpha **bold** text.\n\nBeta plain text.\n\nGamma plain text.\n\n- [x] Task done\n  - Nested child\n- [ ] Task todo\n\n| Column | Value |\n| --- | --- |\n| Cell | 42 |\n\n```js\nconst answer = 42;\n```\n\n```mermaid\nflowchart LR\n A[Write] --> B[Arrange]\n```\n\n$$\nE=mc^2\n$$\n\n---\n\nLong block: ' + 'Keep every word and show a compact preview. '.repeat(220) + '\n\n' + Array.from({ length: 70 }, (_, i) => `Scroll paragraph ${i + 1}.`).join('\n\n') + '\n').replaceAll('\n', '\r\n');
 await fs.writeFile(file, original); await fs.writeFile(second, '# Other document\n\nUntouched second document.\n');
 const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: profile, MEKI_TEST_DISCARD: 'discard' }; delete env.ELECTRON_RUN_AS_NODE;
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
@@ -27,9 +27,14 @@ async function hover(block) {
   await frames();
   const point = await block.evaluate(element => {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT); let text;
-    while ((text = walker.nextNode())) if (text.textContent.trim() && !text.parentElement.closest('button,svg')) break;
-    const range = document.createRange(); range.setStart(text, text.textContent.search(/\S/)); range.setEnd(text, text.textContent.search(/\S/) + 1);
-    const rect = range.getBoundingClientRect(); return { x: rect.left + 3, y: (rect.top + rect.bottom) / 2 };
+    while ((text = walker.nextNode())) {
+      const start = text.textContent.search(/\S/);
+      if (start < 0 || text.parentElement.closest('button,svg')) continue;
+      const range = document.createRange(); range.setStart(text, start); range.setEnd(text, start + 1);
+      const rect = range.getBoundingClientRect();
+      if (rect.height) return { x: rect.left + 3, y: (rect.top + rect.bottom) / 2 };
+    }
+    const rect = element.getBoundingClientRect(); return { x: rect.left + 30, y: rect.top + Math.min(20, rect.height / 2) };
   });
   await page.mouse.move(point.x, point.y); await frames();
   return page.locator('.milkdown-block-handle[data-show="true"] .operation-item').last();
@@ -114,6 +119,96 @@ try {
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1200, 1000));
   pass('menus support keyboard navigation, empty search, viewport fitting and clean print output');
 
+  await reload();
+  const clickGrip = await (await hover(alpha)).boundingBox();
+  await page.mouse.move(clickGrip.x + clickGrip.width / 2, clickGrip.y + clickGrip.height / 2); await page.mouse.down();
+  await page.mouse.move(clickGrip.x + clickGrip.width / 2 + 2, clickGrip.y + clickGrip.height / 2 + 1);
+  assert.equal(await page.locator('.meki-block-drag-preview').count(), 0);
+  await page.mouse.up(); await menuRoot().waitFor(); await page.keyboard.press('Escape');
+  assert.equal(await order(), 'Alpha bold text.|Beta plain text.|Gamma plain text.');
+  pass('a small pointer tremor opens the block menu without starting a drag or changing content');
+
+  await dragStart(alpha);
+  assert.equal(await page.locator('.meki-block-drag-content strong').textContent(), 'bold');
+  const follow = await beta.boundingBox(), pointer = { x: follow.x + 50, y: follow.y + follow.height * .75 };
+  await page.mouse.move(pointer.x, pointer.y); await frames();
+  const preview = await page.locator('.meki-block-drag-preview').boundingBox();
+  assert.ok(Math.abs(preview.x - pointer.x - 18) < 2 && Math.abs(preview.y - pointer.y - 16) < 2);
+  assert.equal(await page.locator('.meki-block-drag-preview [contenteditable]').count(), 0);
+  await page.keyboard.down('Alt'); await frames();
+  assert.equal(await page.locator('.meki-block-drag-preview').getAttribute('data-copy'), 'true');
+  assert.equal(await page.locator('.meki-block-drag-copy').isVisible(), true);
+  await page.keyboard.up('Alt'); await frames();
+  assert.equal(await page.locator('.meki-block-drag-preview').getAttribute('data-copy'), 'false');
+  await page.screenshot({ path: path.join(run, 'formatted-drag-preview.png') });
+  await page.keyboard.press('Escape'); await page.mouse.up();
+  assert.equal(await page.locator('.meki-block-drag-preview').count(), 0);
+  assert.equal(await page.locator('body').evaluate(node => node.classList.contains('meki-block-dragging')), false);
+  pass('drag previews preserve rich text, follow the pointer within a frame and reflect Option changes without pointer movement');
+
+  await dragStart(gamma); const first = await alpha.boundingBox(), midpoint = first.y + first.height / 2;
+  await page.mouse.move(first.x + 60, midpoint - 9); await frames();
+  const snapped = await page.locator('.meki-block-drop-line').boundingBox();
+  for (const delta of [-1, 1, -2, 2]) {
+    await page.mouse.move(first.x + 60, midpoint + delta); await frames();
+    assert.ok(Math.abs((await page.locator('.meki-block-drop-line').boundingBox()).y - snapped.y) < 1);
+  }
+  await page.mouse.move(first.x + 60, midpoint + 9); await frames();
+  assert.ok((await page.locator('.meki-block-drop-line').boundingBox()).y > snapped.y + first.height);
+  await page.keyboard.press('Escape'); await page.mouse.up();
+  assert.equal(await order(), 'Alpha bold text.|Beta plain text.|Gamma plain text.');
+  pass('insertion guides resist midpoint jitter and switch only after a deliberate pointer movement');
+
+  await menu(alpha);
+  const openGrip = await page.locator('.milkdown-block-handle[data-show="true"] .operation-item').last().boundingBox();
+  await page.mouse.move(openGrip.x + openGrip.width / 2, openGrip.y + openGrip.height / 2); await page.mouse.down();
+  await page.mouse.move(openGrip.x + 70, openGrip.y + 12, { steps: 4 });
+  await page.locator('.meki-block-drag-preview').waitFor();
+  assert.equal(await menuRoot().count(), 0);
+  await page.keyboard.press('Escape'); await page.mouse.up();
+  pass('dragging from an open block menu dismisses the menu and cancellation leaves the block intact');
+
+  for (const theme of ['linen', 'night']) {
+    await action('style'); await page.locator(`button[data-theme="${theme}"]`).click(); await action('style');
+    await dragStart(alpha); const target = await beta.boundingBox();
+    await page.mouse.move(target.x + 60, target.y + target.height * .75); await frames();
+    assert.equal(await page.locator('.meki-block-drag-preview').evaluate(node => getComputedStyle(node).backgroundColor),
+      await page.locator('.editor.ProseMirror').evaluate(node => getComputedStyle(node).backgroundColor));
+    assert.equal(await page.locator('.meki-block-drop-line').isVisible(), true);
+    await page.screenshot({ path: path.join(run, `drag-${theme}.png`) });
+    await page.keyboard.press('Escape'); await page.mouse.up();
+  }
+  await action('style'); await page.locator('button[data-theme="paper"]').click(); await action('style');
+  for (const [block, selector, text] of [
+    [page.locator('.ProseMirror table.children').first(), 'table', 'Cell'],
+    [page.locator('.milkdown-code-block').first(), '.cm-line', 'const answer = 42;'],
+  ]) {
+    await dragStart(block);
+    assert.ok((await page.locator(`.meki-block-drag-content ${selector}`).innerText()).includes(text));
+    assert.ok((await page.locator('.meki-block-drag-preview').boundingBox()).height < 100);
+    await page.screenshot({ path: path.join(run, `preview-${selector === 'table' ? 'table' : 'code'}.png`) });
+    await page.keyboard.press('Escape'); await page.mouse.up();
+  }
+  pass('previews retain the document theme, table cells and code content without overflowing');
+
+  for (const selector of ['.meki-block-diagram', '.meki-block-math']) {
+    const block = page.locator('.editor.ProseMirror .milkdown-code-block').filter({ has: page.locator(selector) }).first();
+    await block.scrollIntoViewIfNeeded(); await block.locator(`${selector} svg`).first().waitFor(); await dragStart(block);
+    const svg = page.locator('.meki-block-drag-preview svg').first(); assert.equal(await svg.isVisible(), true);
+    const references = await page.locator('.meki-block-drag-preview').evaluate(preview => {
+      const ids = [...preview.querySelectorAll('[id]')].map(node => node.id);
+      const references = [...preview.querySelectorAll('*')].flatMap(node => [...node.attributes].flatMap(attribute => [...attribute.value.matchAll(/url\(["']?#([^)'"\s]+)/g)].map(match => match[1])));
+      return { unique: ids.every(id => !document.querySelector('.editor.ProseMirror').querySelector(`[id="${id}"]`)),
+        resolved: references.every(id => ids.includes(id)), markers: preview.querySelectorAll('marker').length };
+    });
+    assert.equal(references.unique, true); assert.equal(references.resolved, true);
+    assert.equal(await page.locator('.meki-block-drag-preview').getAttribute('data-truncated'), 'false');
+    if (selector === '.meki-block-diagram') assert.ok(references.markers > 0);
+    await page.screenshot({ path: path.join(run, selector === '.meki-block-diagram' ? 'preview-diagram.png' : 'preview-equation.png') });
+    await page.keyboard.press('Escape'); await page.mouse.up();
+  }
+  pass('diagram and equation handles ignore hidden source editors; preview SVG references remain valid and isolated');
+
   await reload(); await alpha.scrollIntoViewIfNeeded(); const destination = await beta.boundingBox();
   await dragStart(gamma); await page.mouse.move(destination.x + 50, destination.y + destination.height * .25, { steps: 12 });
   await page.locator('.meki-block-drop-line').waitFor({ state: 'visible' });
@@ -121,7 +216,7 @@ try {
   await page.screenshot({ path: path.join(run, 'drag-boundary.png') }); await page.mouse.up();
   await page.waitForFunction(() => [...document.querySelectorAll('.ProseMirror > p')].slice(0, 3).map(node => node.textContent).join('|') === 'Alpha bold text.|Gamma plain text.|Beta plain text.');
   await undo(); assert.equal(await order(), 'Alpha bold text.|Beta plain text.|Gamma plain text.');
-  pass('native mouse dragging snaps to block boundaries, shows an insertion line and never splits the target text');
+  pass('pointer dragging snaps to block boundaries, shows an insertion line and never splits the target text');
 
   await dragStart(alpha, true); const copyTarget = await gamma.boundingBox(); await page.mouse.move(copyTarget.x + 40, copyTarget.y + copyTarget.height - 1, { steps: 12 });
   await page.waitForFunction(() => document.querySelector('.meki-block-drag-preview')?.dataset.copy === 'true');
@@ -137,7 +232,7 @@ try {
   await page.locator('.meki-block-drop-line').waitFor({ state: 'visible' }); await page.mouse.up();
   await page.waitForFunction(() => { const text = document.querySelector('.ProseMirror').textContent; return text.indexOf('Task todo') < text.indexOf('Task done'); });
   await paragraph('Nested child').waitFor(); await undo();
-  pass('native dragging reorders a task with its nested list instead of extracting or flattening its contents');
+  pass('pointer dragging reorders a task with its nested list instead of extracting or flattening its contents');
 
   const long = paragraph('Long block:'); await dragStart(long);
   assert.ok((await page.locator('.meki-block-drag-preview').boundingBox()).height < 100);

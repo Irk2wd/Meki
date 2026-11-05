@@ -114,7 +114,7 @@ try {
   await page.keyboard.press('Escape'); await page.mouse.up();
   await page.waitForFunction(() => document.querySelector('.ProseMirror').dataset.dragging !== 'true');
   assert.deepEqual(await page.locator('.ProseMirror > p').allTextContents().then(items => items.slice(0, 3)), ['Alpha 第一段。', 'Beta 第二段。', 'Gamma 第三段。']);
-  pass('cancelling a native drag preserves the document and releases drag state');
+  pass('cancelling a pointer drag preserves the document and releases drag state');
 
   await aligned(paragraphs[1]); await page.mouse.move(10, 10); await frames(); assert.equal(await page.locator(handle).getAttribute('data-show'), 'false');
   await page.locator('[data-mode="source"]').click(); assert.equal(await page.locator(handle).isVisible(), false);
