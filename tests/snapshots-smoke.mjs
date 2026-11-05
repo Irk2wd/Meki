@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
+const { LIMITS } = require('../electron/snapshot-store.cjs');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 await fs.mkdir(path.join(root, 'test-results'), { recursive: true });
 const run = await fs.realpath(await fs.mkdtemp(path.join(root, 'test-results', 'snapshots-')));
@@ -49,8 +50,9 @@ async function snapshots() { return page.evaluate(() => window.meki.listSnapshot
 async function openSnapshots() { await action('snapshots'); await poll(async () => !((await page.locator('#snapshot-status').innerText()).includes('正在读取'))); }
 async function closeSnapshots() { await page.locator('#close-snapshots').click(); await page.locator('#snapshot-dialog').waitFor({ state: 'hidden' }); }
 async function createNamed(label) {
-  await openSnapshots(); await page.locator('#snapshot-label').fill(label); await page.locator('#snapshot-create button').click();
-  await poll(async () => (await page.locator('#snapshot-status').innerText()).includes('快照已保存'));
+  await openSnapshots(); await page.locator('#snapshot-manual summary').click();
+  await page.locator('#snapshot-label').fill(label); await page.locator('#snapshot-create button').click();
+  await poll(async () => (await page.locator('#snapshot-status').innerText()).includes('版本已保留'));
   await idle();
   return (await snapshots()).find(item => item.label === label);
 }
@@ -68,6 +70,9 @@ async function crash() { if (app) { await app.evaluate(({ app }) => app.exit(0))
 try {
   await launch(['--open', file]);
   await openSnapshots();
+  assert.equal(await page.locator('#snapshot-dialog h2').innerText(), '版本历史');
+  assert.equal(await page.locator('#snapshot-manual').getAttribute('open'), null);
+  assert.match(await page.locator('#snapshot-protection').innerText(), /自动记录已关闭/);
   await page.evaluate(() => {
     document.querySelector('#close-snapshots').click();
     document.querySelector('[data-action="snapshots"]').click();
@@ -80,7 +85,7 @@ try {
     const visit = items => items.flatMap(item => [{ label: item.label, checked: item.checked }, ...visit(item.submenu?.items || [])]);
     return visit(Menu.getApplicationMenu().items);
   });
-  assert.equal(menu.find(item => item.label === '自动保存').checked, true); assert.ok(menu.some(item => item.label === '快照…'));
+  assert.equal(menu.find(item => item.label === '自动保存').checked, true); assert.ok(menu.some(item => item.label === '版本历史…'));
   await page.locator('.tab-settings').click();
   await page.evaluate(() => {
     for (const [selector, values] of [['#auto-save-blur', [true, false]], ['#auto-snapshot', [true, false]]]) {
@@ -147,6 +152,13 @@ try {
   const untitled = await active();
   await poll(async () => (await snapshots()).some(item => item.tabId === untitled.id && item.kind === 'auto'), 18000);
   const automatic = (await snapshots()).find(item => item.tabId === untitled.id && item.kind === 'auto');
+  await openSnapshots();
+  assert.match(await page.locator('#snapshot-protection').innerText(), /自动记录已开启/);
+  assert.equal(await page.locator('#snapshot-list button.active').getAttribute('data-snapshot-id'), automatic.id);
+  assert.match(await page.locator('#snapshot-preview').inputValue(), /定期保留未命名内容/);
+  assert.ok(await page.locator('.snapshot-date').count());
+  await page.screenshot({ path: path.join(run, 'automatic-history.png'), animations: 'disabled' });
+  await closeSnapshots();
   assert.match((await page.evaluate(id => window.meki.readSnapshot(id), automatic.id)).content, /定期保留未命名内容/);
   await page.waitForTimeout(11000);
   assert.equal((await snapshots()).filter(item => item.tabId === untitled.id).length, 1);
@@ -201,19 +213,21 @@ try {
   const kept = await createNamed('恢复失败也要保留'); await closeSnapshots(); await append('\n这些新输入不能丢');
   await poll(async () => (await active()).content.includes('这些新输入不能丢'));
   const before = await active();
-  await page.evaluate(async doc => {
-    for (let i = 0; i < 19; i++) await window.meki.createSnapshot({ ...doc, tabId: doc.id, kind: 'manual', label: `保留 ${i}` });
-  }, before);
+  await page.evaluate(async ({ doc, count }) => {
+    for (let i = 0; i < count - 1; i++) await window.meki.createSnapshot({ ...doc, tabId: doc.id, kind: 'manual', label: `保留 ${i}` });
+  }, { doc: before, count: LIMITS.count });
   await openSnapshots(); await select(kept.id); await page.locator('#restore-snapshot').click();
   await poll(() => page.locator('#snapshot-status').innerText().then(text => text.includes('空间已满'))); await idle();
   assert.doesNotMatch(await page.locator('#snapshot-status').innerText(), /Error invoking|meki:create-snapshot/);
   assert.equal(await sourceText(), before.content);
-  assert.equal((await snapshots()).filter(item => item.path === null && item.tabId === before.id).length, 20);
+  assert.equal((await snapshots()).filter(item => item.path === null && item.tabId === before.id).length, LIMITS.count);
   assert.equal(await page.locator('#snapshot-dialog').isVisible(), true);
   await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].unmaximize(); BrowserWindow.getAllWindows()[0].setSize(800, 600); });
   await page.screenshot({ path: path.join(run, 'compact-snapshots.png'), animations: 'disabled' });
   const bounds = await page.locator('#snapshot-dialog').boundingBox();
   assert.ok(bounds.x >= 0 && bounds.y >= 0);
+  const restoreBounds = await page.locator('#restore-snapshot').boundingBox();
+  assert.ok(restoreBounds.y >= bounds.y && restoreBounds.y + restoreBounds.height <= bounds.y + bounds.height, 'restore action fits in a compact window');
   await page.locator('#close-snapshots').click();
   assert.deepEqual(errors, []);
   pass('a full manual-snapshot quota stops restoration before replacing current input; the dialog remains usable in a compact window');

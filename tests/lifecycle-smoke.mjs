@@ -158,9 +158,22 @@ try {
   await setting('MEKI_TEST_DISCARD', 'discard'); await action('close-all'); assert.equal(await page.locator('.document-tab').count(), 1);
   await append('Crash draft one α'); await action('new'); await append('Crash draft two β');
   assert.equal(await page.locator('#document-name').textContent(), '未命名 2.md');
-  await lifecycleSettings({ reopenSession: false }); await page.waitForTimeout(900); await crash(); await launch();
+  await lifecycleSettings({ reopenSession: false });
+  await append('\nContinuous recovery ');
+  const typingUntil = Date.now() + 6500;
+  let persistedDuringTyping = '';
+  while (Date.now() < typingUntil) {
+    await page.keyboard.insertText('x');
+    await page.waitForTimeout(180);
+    const saved = JSON.parse(await fs.readFile(path.join(profile, 'windows-v1.json'), 'utf8'));
+    const content = saved.windows.flatMap(record => record.session?.documents || []).find(doc => doc.content.includes('Continuous recovery '))?.content || '';
+    if (content.includes('Continuous recovery x')) persistedDuringTyping = content;
+  }
+  assert.ok(persistedDuringTyping.includes('Continuous recovery x'), 'continuous input is persisted without waiting for an idle pause');
+  await crash(); await launch();
   assert.equal(await page.locator('.document-tab').count(), 2); assert.equal(await page.locator('#recovery-banner').isVisible(), true);
   await source(); assert.match(await page.locator('#source-editor').innerText(), /Crash draft two/);
+  assert.ok((await page.locator('#source-editor').innerText()).includes(persistedDuringTyping));
   await page.locator('.document-tab [role="tab"]').first().click(); await idle(); await source(); assert.match(await page.locator('#source-editor').innerText(), /Crash draft one/);
   await page.screenshot({ path: path.join(run, 'recovered-tabs.png'), animations: 'disabled' });
   pass('close-all cancel retains every tab; crashes recover all dirty documents even with reopen-last-session disabled');

@@ -1,11 +1,12 @@
 import { t, ht, getLocale } from '../electron/i18n.mjs';
-import type { DocumentSnapshot } from '../shared/meki';
+import type { DocumentSnapshot, Settings } from '../shared/meki';
 import type { DocumentTabs } from './document-tabs';
 import './snapshots.css';
 
 interface Hooks {
   documents: DocumentTabs;
   platform(): string;
+  settings(): Settings;
   run(action: () => Promise<void>): Promise<void>;
   notify(message: string, error?: boolean): void;
 }
@@ -18,13 +19,14 @@ export class SnapshotDialog {
   private working = false;
   constructor(private hooks: Hooks) {
     this.dialog.id = 'snapshot-dialog';
-    this.dialog.innerHTML = `<div class="dialog-heading"><div><span class="eyebrow">LOCAL SNAPSHOTS</span><h2>${ht("文稿快照")}</h2></div><button type="button" id="close-snapshots" class="icon-button" aria-label="${ht("关闭快照")}">×</button></div>
-      <p class="history-help">${ht("保留编辑区的内容，也支持未命名文稿。恢复前会先创建快照，再恢复到编辑区；原文件等待你手动保存。")}</p>
-      <form id="snapshot-create"><input id="snapshot-label" maxlength="80" aria-label="${ht("快照名称")}" placeholder="${ht("快照名称（可选，例如：修改前）")}"><button type="submit" class="secondary-button">${ht("创建快照")}</button></form>
+    this.dialog.innerHTML = `<div class="dialog-heading"><div><span class="eyebrow">LOCAL HISTORY</span><h2>${ht("版本历史")}</h2></div><button type="button" id="close-snapshots" class="icon-button" aria-label="${ht("关闭版本历史")}">×</button></div>
+      <p class="history-help">${ht("自动保留编辑记录，包括未保存和未命名的文稿。选择版本预览，需要时恢复。")}</p>
+      <p id="snapshot-protection" class="snapshot-protection"></p>
       <div class="snapshot-filter"><label for="snapshot-scope">${ht("查看")}</label><select id="snapshot-scope"><option value="current">${ht("当前文稿")}</option><option value="all">${ht("全部文稿")}</option></select><span id="snapshot-count"></span></div>
-      <div class="snapshot-layout"><div id="snapshot-list" role="list" aria-label="${ht("快照列表")}"></div><textarea id="snapshot-preview" readonly spellcheck="false" aria-label="${ht("快照内容")}"></textarea></div>
-      <p id="snapshot-status" role="status"></p><div class="dialog-actions"><button id="delete-snapshot" type="button" class="text-button" disabled>${ht("删除快照")}</button><div><button id="copy-snapshot" type="button" class="secondary-button" disabled>${ht("打开为新文稿")}</button><button id="restore-snapshot" type="button" class="primary-button" disabled>${ht("恢复到当前文稿")}</button></div></div>
-      <p class="snapshot-note">${ht("每篇最多 20 份 / 32 MiB，总计 128 MiB。空间不足时清理旧自动快照，手动快照需自行删除。快照保留文字和图片引用，不备份图片文件；关闭文稿后仍可从“全部文稿”找回。")}</p>`;
+      <div class="snapshot-layout"><div id="snapshot-list" role="list" aria-label="${ht("历史版本列表")}"></div><textarea id="snapshot-preview" readonly spellcheck="false" aria-label="${ht("版本内容")}"></textarea></div>
+      <p id="snapshot-status" role="status"></p><div class="dialog-actions"><button id="delete-snapshot" type="button" class="text-button" disabled>${ht("删除版本")}</button><div><button id="copy-snapshot" type="button" class="secondary-button" disabled>${ht("打开为新文稿")}</button><button id="restore-snapshot" type="button" class="primary-button" disabled>${ht("恢复到当前文稿")}</button></div></div>
+      <details id="snapshot-manual"><summary>${ht("手动保留版本")}</summary><form id="snapshot-create"><input id="snapshot-label" maxlength="80" aria-label="${ht("版本名称")}" placeholder="${ht("版本名称（可选，例如：修改前）")}"><button type="submit" class="secondary-button">${ht("保留当前版本")}</button></form></details>
+      <p class="snapshot-note">${ht("近期密集保留，较早版本按小时、按天合并。每篇最多 256 份 / 32 MiB，总计 128 MiB；空间不足时清理较早的自动版本，手动版本需自行删除。保留文字和图片引用，不备份图片文件。关闭文稿后可从“全部文稿”找回。")}</p>`;
     document.body.append(this.dialog);
     this.el('#close-snapshots').addEventListener('click', () => this.dialog.close());
     this.dialog.addEventListener('close', () => {
@@ -38,7 +40,7 @@ export class SnapshotDialog {
       event.preventDefault(); void this.act(async () => {
         await this.hooks.documents.createSnapshot('manual', this.el<HTMLInputElement>('#snapshot-label').value);
         this.el<HTMLInputElement>('#snapshot-label').value = '';
-        await this.refresh(); this.status(t("快照已保存，原文件保持不变。"));
+        await this.refresh(); this.status(t("版本已保留，原文件保持不变。"));
       });
     });
     this.el('#restore-snapshot').addEventListener('click', () => { void this.restore(false); });
@@ -71,48 +73,65 @@ export class SnapshotDialog {
   }
   async open() {
     this.el<HTMLSelectElement>('#snapshot-scope').value = 'current';
+    this.el<HTMLDetailsElement>('#snapshot-manual').open = false;
+    const settings = this.hooks.settings(), protection = this.el('#snapshot-protection');
+    protection.dataset.enabled = String(settings.autoSnapshot);
+    protection.textContent = settings.autoSnapshot ? t("自动记录已开启 · 有修改时每 {0} 秒保留版本", settings.snapshotInterval) : t("自动记录已关闭；崩溃恢复仍在后台运行。可在“文稿与保存”中开启自动记录。");
     this.dialog.showModal();
     try { await this.refresh(); } catch (error) { this.error(error); }
   }
   private async refresh() {
     const request = ++this.request;
     this.selected = null; this.controls(); this.el<HTMLTextAreaElement>('#snapshot-preview').value = '';
-    this.el('#snapshot-list').replaceChildren(); this.status(t("正在读取快照…"));
+    this.el('#snapshot-list').replaceChildren(); this.status(t("正在读取版本…"));
     const tab = this.hooks.documents.active;
     const entries = await window.meki.listSnapshots(this.el<HTMLSelectElement>('#snapshot-scope').value === 'all' ? undefined : { path: tab.document.path, tabId: tab.id });
     if (request !== this.request || !this.dialog.open) return;
-    this.el('#snapshot-count').textContent = t("{0} 份快照", entries.length);
-    this.status(entries.length ? t("选择快照预览。") : t("还没有快照。可以创建一份，或继续写作，等待定期快照。"));
+    this.el('#snapshot-count').textContent = t("{0} 个版本", entries.length);
+    this.status(entries.length ? t("选择版本预览。") : this.hooks.settings().autoSnapshot ? t("还没有历史版本。继续编辑后会自动记录，无需手动创建。") : t("还没有历史版本。可在“文稿与保存”中开启自动记录，或手动保留当前版本。"));
+    let day = '', first: HTMLButtonElement | undefined;
     for (const entry of entries) {
+      const date = new Date(entry.createdAt).toLocaleDateString(getLocale(), { year: 'numeric', month: 'long', day: 'numeric' });
+      if (date !== day) {
+        const heading = document.createElement('div'); heading.className = 'snapshot-date'; heading.textContent = date;
+        this.el('#snapshot-list').append(heading); day = date;
+      }
       const button = document.createElement('button'); button.type = 'button'; button.dataset.snapshotId = entry.id;
-      const name = document.createElement('strong'); name.textContent = entry.label || t("{0}快照", kinds[entry.kind]);
-      const info = document.createElement('small'); info.textContent = `${entry.name} · ${kinds[entry.kind]} · ${new Date(entry.createdAt).toLocaleString(getLocale())}`;
+      const time = new Date(entry.createdAt).toLocaleTimeString(getLocale());
+      const name = document.createElement('strong'); name.textContent = entry.label || time;
+      const info = document.createElement('small'); info.textContent = `${entry.name} · ${kinds[entry.kind]}${entry.label ? ` · ${time}` : ''}`;
       button.title = entry.path || t("未命名文稿"); button.append(name, info);
       button.addEventListener('click', () => {
         if (this.working) return;
-        const request = ++this.request;
-        this.selected = null; this.controls(); this.el<HTMLTextAreaElement>('#snapshot-preview').value = ''; this.status(t("正在读取内容…"));
-        void window.meki.readSnapshot(entry.id).then(result => {
-          if (request !== this.request || !this.dialog.open) return;
-          this.selected = result.snapshot; this.el<HTMLTextAreaElement>('#snapshot-preview').value = result.content;
-          this.el('#snapshot-list').querySelectorAll('button').forEach(node => node.classList.toggle('active', node === button));
-          this.controls(); this.status(this.sameDocument(entry) ? t("恢复前会保留当前内容。恢复后自动保存暂停，检查后请手动保存。") : t("这是其他文稿的快照，可以打开为新文稿。"));
-        }).catch(error => { if (request === this.request) this.error(error); });
+        void this.preview(entry, button);
       });
       this.el('#snapshot-list').append(button);
+      first ??= button;
     }
+    if (first) await this.preview(entries[0], first);
+  }
+  private async preview(entry: DocumentSnapshot, button: HTMLButtonElement) {
+    const request = ++this.request;
+    this.selected = null; this.controls(); this.el<HTMLTextAreaElement>('#snapshot-preview').value = ''; this.status(t("正在读取内容…"));
+    try {
+      const result = await window.meki.readSnapshot(entry.id);
+      if (request !== this.request || !this.dialog.open) return;
+      this.selected = result.snapshot; this.el<HTMLTextAreaElement>('#snapshot-preview').value = result.content;
+      this.el('#snapshot-list').querySelectorAll('button').forEach(node => node.classList.toggle('active', node === button));
+      this.controls(); this.status(this.sameDocument(entry) ? t("恢复前会保留当前内容。恢复后自动保存暂停，检查后请手动保存。") : t("这是其他文稿的版本，可以打开为新文稿。"));
+    } catch (error) { if (request === this.request) this.error(error); }
   }
   private async restore(copy: boolean) {
     const selected = this.selected; if (!selected) return;
     await this.act(async () => {
       const result = await window.meki.readSnapshot(selected.id);
-      if (copy) await this.hooks.documents.open({ path: null, revision: null, name: t("快照 · {0}", result.snapshot.name), content: result.content }, true);
+      if (copy) await this.hooks.documents.open({ path: null, revision: null, name: t("历史版本 · {0}", result.snapshot.name), content: result.content }, true);
       else {
-        if (!this.sameDocument(result.snapshot)) throw new Error(t("文稿已切换，请重新打开快照。"));
-        await this.hooks.documents.createSnapshot('restore', t("恢复快照前"));
+        if (!this.sameDocument(result.snapshot)) throw new Error(t("文稿已切换，请重新打开版本历史。"));
+        await this.hooks.documents.createSnapshot('restore', t("恢复版本前"));
         await this.hooks.documents.restoreBuffer(result.content);
       }
-      this.dialog.close(); this.hooks.notify(copy ? t("已打开为未保存的新文稿。") : t("已恢复快照，并保留恢复前内容。检查后请手动保存。"));
+      this.dialog.close(); this.hooks.notify(copy ? t("已打开为未保存的新文稿。") : t("已恢复历史版本，并保留恢复前内容。检查后请手动保存。"));
     });
   }
 }

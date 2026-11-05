@@ -6,6 +6,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { FileStore, pathKey, validateSettings, DEFAULT_SETTINGS } = require('../electron/file-store.cjs');
 const { SnapshotStore } = require('../electron/snapshot-store.cjs');
+const { randomUUID } = require('node:crypto');
 
 async function fixture(t, limits) {
   const parent = await fs.realpath(os.tmpdir());
@@ -70,6 +71,47 @@ test('retention prunes automatic snapshots and protects named manual snapshots',
   assert.equal((await snapshots.read(latest.id)).content, 'new auto');
   await assert.rejects(snapshots.read(oldest.id), /不可用/);
   assert.equal(await fs.stat(path.join(snapshots.root, `${oldest.id}.bin`)).catch(() => null), null);
+});
+
+test('automatic history keeps dense recent edits and the newest minute, hour and day versions per document', async t => {
+  const { snapshots, input } = await fixture(t);
+  const minute = 60000, hour = 60 * minute, day = 24 * hour;
+  const now = Date.UTC(2030, 5, 15, 12);
+  const entry = (age, patch = {}) => ({ ...input, id: randomUUID(), size: 1, kind: 'auto', createdAt: now - age, ...patch });
+  const recent = [entry(1000), entry(2000)];
+  const minutes = [entry(20 * minute + 1000), entry(20 * minute + 2000), entry(21 * minute + 1000)];
+  const hours = [entry(2 * hour + 10 * minute), entry(2 * hour + 20 * minute), entry(3 * hour + 10 * minute)];
+  const days = [entry(2 * day + 2 * hour), entry(2 * day + 3 * hour), entry(3 * day)];
+  const named = entry(2 * day + 4 * hour, { kind: 'manual' });
+  const other = entry(2 * day + 5 * hour, { tabId: 'another-draft' });
+  const kept = snapshots.prune([...recent, ...minutes, ...hours, ...days, named, other]);
+  assert.deepEqual(new Set(kept.map(item => item.id)), new Set([
+    ...recent, minutes[0], minutes[2], hours[0], hours[2], days[0], days[2], named, other,
+  ].map(item => item.id)));
+});
+
+test('aged legacy indexes stay readable on restart; compaction commits only with the next version', async t => {
+  const { snapshots, store, input } = await fixture(t);
+  const created = [];
+  for (let i = 0; i < 24; i++) created.push(await snapshots.create({ ...input, content: `edit ${i}`, kind: 'auto' }));
+  assert.equal(snapshots.list().length, 24, 'history extends beyond the old 20-version limit');
+  const aged = snapshots.list().map((entry, i) => ({ ...entry, createdAt: Date.UTC(2020, 0, 1, 12) - i * 60000 }));
+  await snapshots.writeIndex(aged);
+  const reopened = new SnapshotStore(store); await reopened.init();
+  assert.equal(reopened.list().length, 24);
+  assert.equal((await reopened.read(created[0].id)).content, 'edit 0');
+  const writeIndex = reopened.writeIndex.bind(reopened);
+  reopened.writeIndex = async () => { throw new Error('compaction disk full'); };
+  await assert.rejects(reopened.create({ ...input, content: 'today', kind: 'auto' }), /disk full/);
+  assert.equal(reopened.list().length, 24);
+  assert.equal((await reopened.read(created[0].id)).content, 'edit 0');
+  reopened.writeIndex = writeIndex;
+  await reopened.create({ ...input, content: 'today', kind: 'auto' });
+  assert.equal(reopened.list().length, 2);
+  assert.equal((await reopened.read(aged[0].id)).content, 'edit 23');
+  assert.equal(await fs.stat(path.join(snapshots.root, `${aged[1].id}.bin`)).catch(() => null), null);
+  const restarted = new SnapshotStore(store); await restarted.init();
+  assert.equal(restarted.list().length, 2);
 });
 
 test('full manual quota refuses new automatic and manual snapshots without deleting existing content', async t => {

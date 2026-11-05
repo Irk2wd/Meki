@@ -49,7 +49,7 @@ document.querySelector('#app')!.innerHTML = `
   <section class="main-area">
     <header class="titlebar">
       <div class="document-location">${button('sidebar', t("显示或隐藏侧栏"), 'layout')}<span class="breadcrumb">${ht("文稿")}</span>${icon('chevron', 12)}<span id="document-name">${ht("开始写作.md")}</span><span class="dirty-dot" id="dirty-dot" hidden></span></div>
-      <div class="title-actions"><button id="toggle-autosave" class="lifecycle-button" data-action="toggle-autosave" aria-pressed="false">${ht("自动保存：关")}</button><button class="lifecycle-button" data-action="snapshots">${ht("快照")}</button><span class="save-state" id="save-state"><span class="saved-tick">✓</span> ${ht("就绪")}</span><button class="save-button" data-action="save">${icon('save', 15)}<span>${ht("保存")}</span></button></div>
+      <div class="title-actions"><button id="toggle-autosave" class="lifecycle-button" data-action="toggle-autosave" aria-pressed="false">${ht("自动保存：关")}</button><button class="lifecycle-button" data-action="snapshots">${ht("版本历史")}</button><span class="save-state" id="save-state"><span class="saved-tick">✓</span> ${ht("就绪")}</span><button class="save-button" data-action="save">${icon('save', 15)}<span>${ht("保存")}</span></button></div>
     </header>
     <div class="formatbar" aria-label="${ht("编辑工具栏")}">
       <div class="format-actions"><select id="heading-format" aria-label="${ht("段落样式")}"><option value="paragraph">${ht("正文")}</option><option value="h1">${ht("一级标题")}</option><option value="h2">${ht("二级标题")}</option><option value="h3">${ht("三级标题")}</option></select><span class="divider"></span><button class="icon-button text-icon" data-format="bold" title="${ht("粗体 Ctrl/⌘ B")}" aria-label="${ht("粗体")}"><b>B</b></button><button class="icon-button text-icon" data-format="italic" title="${ht("斜体 Ctrl/⌘ I")}" aria-label="${ht("斜体")}"><i>I</i></button><button class="icon-button" data-format="list" title="${ht("无序列表")}" aria-label="${ht("无序列表")}">${icon('list')}</button><span class="divider"></span>${button('math', t("插入数学公式"), 'formula')}${button('diagram', t("插入 Mermaid 图表"), 'diagram')}<button class="icon-button" data-format="code" title="${ht("插入代码块")}" aria-label="${ht("插入代码块")}">${icon('source')}</button>${button('image', t("插入图片"), 'image')}</div>
@@ -106,6 +106,7 @@ let busy = false;
 let closeRequested = false;
 let ready = false;
 let draftTimer: ReturnType<typeof setTimeout>;
+let draftMaxTimer: ReturnType<typeof setTimeout> | undefined;
 let outlineTimer: ReturnType<typeof setTimeout>;
 let toastTimer: ReturnType<typeof setTimeout>;
 let platform = '';
@@ -122,7 +123,7 @@ const workspaceUI = new WorkspaceUI({ document: () => current, open: location =>
 const documents = new DocumentTabs({ editor: () => editor, settings: () => settings, platform: () => platform, panes: () => panes,
   active: doc => { documentId++; outline?.reset(); current = doc; }, updated: () => { renderOutline(); renderFiles(); updateStatus(); renderExternalStatus(); },
   dispatch: (command, payload) => { void dispatch(command, payload); }, notify });
-const snapshotDialog = new SnapshotDialog({ documents, platform: () => platform, run: action => perform(action, true, true), notify });
+const snapshotDialog = new SnapshotDialog({ documents, platform: () => platform, settings: () => settings, run: action => perform(action, true, true), notify });
 const attachmentOrganizer = new AttachmentOrganizer({ document: () => current, activeId: () => documents.activeId,
   editor: () => editor, run: action => perform(action, true, true), pause: () => { documents.active.paused = 'attachments'; }, persist: persistDraft, notify });
 const imageHostingDialog = new ImageHostingDialog({ document: () => current, activeId: () => documents.activeId,
@@ -158,7 +159,7 @@ function updateStatus() {
   el('#save-state').innerHTML = savingAutomatically ? t("自动保存中…") : busy ? t("处理中…") : dirty() ? `<span class="unsaved-tick">●</span> ${ht("未保存")}` : current.path ? `<span class="saved-tick">✓</span> ${ht("已保存")}` : t("本地文稿");
   el('#toggle-autosave').textContent = t("自动保存：{0}", settings.autoSave ? t("开") : t("关"));
   el('#toggle-autosave').setAttribute('aria-pressed', String(settings.autoSave));
-  el('#toggle-autosave').title = settings.autoSave ? t("停止输入 {0} 秒后保存。点击关闭；标签栏 ••• 可设置间隔。", settings.autoSaveInterval) : t("点击开启自动保存；标签栏 ••• 可设置保存和快照间隔。");
+  el('#toggle-autosave').title = settings.autoSave ? t("停止输入 {0} 秒后保存。点击关闭；标签栏 ••• 可设置间隔。", settings.autoSaveInterval) : t("点击开启自动保存；标签栏 ••• 可设置保存和版本记录间隔。");
   el('#document-state').textContent = documents.pauseMessage() || (settings.autoSave ? current.path ? t("停止输入 {0} 秒后自动保存", settings.autoSaveInterval) : t("未命名文稿 · 请先保存到文件") : editor.mode === 'source' ? t("Markdown 源码") : t("即时预览"));
   documents.render();
   const cjk = (current.content.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu) || []).length;
@@ -169,7 +170,13 @@ function updateStatus() {
 }
 async function persistDraft() {
   clearTimeout(draftTimer);
+  clearTimeout(draftMaxTimer); draftMaxTimer = undefined;
   await documents.persist();
+}
+function scheduleDraft() {
+  const persist = () => { void persistDraft().catch(error => notify(t("草稿保存失败：{0}", error), true)); };
+  clearTimeout(draftTimer); draftTimer = setTimeout(persist, 600);
+  draftMaxTimer ??= setTimeout(persist, 5000);
 }
 function connectEditor(value: WritingEditor, visual: HTMLElement) {
   writingTools?.connect(value); formatMenu?.connect(value); return media?.connect(value, visual);
@@ -177,7 +184,7 @@ function connectEditor(value: WritingEditor, visual: HTMLElement) {
 function changed(content: string) {
   if (content === current.content) return;
   current.content = content; documents.touched(); updateStatus();
-  clearTimeout(draftTimer); draftTimer = setTimeout(() => { void persistDraft().catch(error => notify(t("草稿保存失败：{0}", error), true)); }, 600);
+  scheduleDraft();
   clearTimeout(outlineTimer); outlineTimer = setTimeout(renderOutline, 250);
 }
 function renderOutline() {
@@ -552,7 +559,7 @@ async function start() {
     changed: (tab, content) => {
       if (tab.document.content === content) return;
       if (tab === documents.active) changed(content);
-      else { tab.document.content = content; tab.editedAt = Date.now(); clearTimeout(draftTimer); draftTimer = setTimeout(() => { void persistDraft().catch(error => notify(String(error), true)); }, 600); }
+      else { tab.document.content = content; tab.editedAt = Date.now(); scheduleDraft(); }
     },
     selected: selected => { const previous = editor; editor = selected; writingTools?.switchEditor(previous); }, created: connectEditor,
     activate: id => { documents.activate(id); void persistDraft().catch(error => notify(String(error), true)); },

@@ -6,7 +6,8 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { validateDocument, validateAbsolutePath, pathKey, isWithin, atomicWrite, readBytes, digest, MAX_DOCUMENT_BYTES } = require('./file-store.cjs');
 
-const LIMITS = Object.freeze({ count: 20, documentBytes: 32 * 1024 * 1024, totalBytes: 128 * 1024 * 1024, documents: 128 });
+const LIMITS = Object.freeze({ count: 256, documentBytes: 32 * 1024 * 1024, totalBytes: 128 * 1024 * 1024, documents: 128 });
+const MINUTE = 60 * 1000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
 const MAX_INDEX_BYTES = 8 * 1024 * 1024;
 const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value);
 function validateTarget(value) {
@@ -59,7 +60,8 @@ class SnapshotStore {
           ids.add(value.id);
           return { ...target, id: value.id, name: value.name, label: labelText(value.label), kind: value.kind, createdAt: value.createdAt, size: value.size, revision: value.revision };
         }).sort((a, b) => b.createdAt - a.createdAt);
-        if (this.prune(this.entries).length !== this.entries.length) throw new Error(t("快照索引超出容量限制。"));
+        // Loading an older index must not compact it or mistake aged versions for corruption.
+        if (this.prune(this.entries, undefined, false).length !== this.entries.length) throw new Error(t("快照索引超出容量限制。"));
       }
       // Only unreferenced UUID blobs owned by this store can be cleaned up.
       const kept = new Set(this.entries.map(item => `${item.id}.bin`));
@@ -69,12 +71,25 @@ class SnapshotStore {
     } catch (error) { this.entries = []; this.error = t("快照暂不可用，已保留原数据：{0}", error.message); console.warn(this.error); }
   }
   assertHealthy() { if (this.error) throw new Error(this.error); }
-  prune(entries, protectedId) {
-    const next = [...entries].sort((a, b) => b.createdAt - a.createdAt);
+  prune(entries, protectedId, compact = true) {
+    let next = [...entries].sort((a, b) => b.createdAt - a.createdAt);
+    if (compact) {
+      const now = Math.max(Date.now(), next[0]?.createdAt || 0), buckets = new Set();
+      next = next.filter(item => {
+        if (item.kind === 'manual') return true;
+        const age = now - item.createdAt;
+        // Keep every recent edit, then the newest version in each minute, hour or day.
+        const interval = age < 10 * MINUTE ? 0 : age < HOUR ? MINUTE : age < DAY ? HOUR : DAY;
+        if (!interval) return true;
+        const key = `${owner(item)}:${interval}:${Math.floor(item.createdAt / interval)}`;
+        const keep = item.id === protectedId || !buckets.has(key);
+        buckets.add(key); return keep;
+      });
+    }
     const bytes = items => items.reduce((sum, item) => sum + item.size, 0);
     const removeOldest = candidates => {
       const item = [...candidates].reverse().find(item => item.kind !== 'manual' && item.id !== protectedId);
-      if (!item) throw new Error(t("快照空间已满，请在快照窗口删除不再需要的手动快照。"));
+      if (!item) throw new Error(t("版本历史空间已满，请删除不再需要的手动版本。"));
       next.splice(next.indexOf(item), 1);
     };
     for (const key of new Set(next.map(owner))) {

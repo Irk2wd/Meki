@@ -493,8 +493,8 @@ function registerIpc() {
     const entry = snapshots.list().find(item => item.id === id);
     if (!entry) throw new Error(t("此快照已不可用。"));
     const confirmed = TEST_MODE ? process.env.MEKI_TEST_DELETE_SNAPSHOT === 'confirm' : (await dialog.showMessageBox(mainWindow, {
-      type: 'warning', title: t("删除快照"), message: t("删除“{0}”？", entry.label || new Date(entry.createdAt).toLocaleString()),
-      detail: t("只删除此快照，当前文稿和原文件保持不变。此操作无法撤销。"), buttons: [t("取消"), t("删除快照")], defaultId: 0, cancelId: 0, noLink: true,
+      type: 'warning', title: t("删除版本"), message: t("删除“{0}”？", entry.label || new Date(entry.createdAt).toLocaleString()),
+      detail: t("只删除此历史版本，当前文稿和原文件保持不变。此操作无法撤销。"), buttons: [t("取消"), t("删除版本")], defaultId: 0, cancelId: 0, noLink: true,
     })).response === 1;
     if (confirmed) await snapshots.delete(id);
     return confirmed;
@@ -653,9 +653,9 @@ function rebuildMenu() {
     })), ...(store.metadata.recentFolders.length ? [{ type: 'separator' }] : []), item(t("管理最近文件夹…"), 'recent-folders')] },
     { type: 'separator' }, item(t("保存"), 'save', 'CmdOrCtrl+S'), item(t("另存为…"), 'saveAs', 'CmdOrCtrl+Shift+S'),
     item(t("自动保存"), 'toggle-autosave', undefined, { type: 'checkbox', checked: store.metadata.settings.autoSave }),
-    item(t("快照…"), 'snapshots'), item(t("文稿与保存设置…"), 'lifecycle-settings'),
+    item(t("版本历史…"), 'snapshots'), item(t("文稿与保存设置…"), 'lifecycle-settings'),
     { type: 'separator' }, item(t("导出 HTML…"), 'export-html'), item(t("导出 PDF…"), 'export-pdf', 'CmdOrCtrl+P'), item(t("更多格式与导出设置…"), 'export-options'), item(t("导入 Word / HTML…"), 'import-document'),
-    { type: 'separator' }, item(t("图床设置…"), 'image-hosting'), item(t("上传文稿图片…"), 'upload-document-images'), item(t("整理图片附件…"), 'organize-attachments'), item(t("本地版本历史…"), 'history'),
+    { type: 'separator' }, item(t("图床设置…"), 'image-hosting'), item(t("上传文稿图片…"), 'upload-document-images'), item(t("整理图片附件…"), 'organize-attachments'), item(t("写入前的文件版本…"), 'history'),
     item(t("关闭文稿"), 'close-tab', 'CmdOrCtrl+W'), item(t("关闭全部文稿"), 'close-all', 'CmdOrCtrl+Shift+W'),
     item(t("重新打开刚关闭文稿"), 'reopen-closed'),
     { label: t("关闭窗口"), click: () => mainWindow?.close() },
