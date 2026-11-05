@@ -42,6 +42,8 @@ export class BlockDrag {
   private grip: HTMLElement | null = null;
   private label = '';
   private indicator = document.createElement('div');
+  private indicatorShown = false;
+  private indicatorFade: Animation | null = null;
   private preview = document.createElement('div');
   private frame = 0;
   private previousTime = 0;
@@ -94,6 +96,30 @@ export class BlockDrag {
     this.frame = requestAnimationFrame(this.tick);
   }
   cancel = () => { this.finish(true); };
+  private fadeIndicator(show: boolean, restart = false, remove = false) {
+    if (show === this.indicatorShown && !restart && !remove) return;
+    const opacity = show ? 0 : this.indicator.hidden ? 0 : Number(getComputedStyle(this.indicator).opacity);
+    this.indicatorShown = show;
+    this.indicator.dataset.show = String(show);
+    this.indicatorFade?.cancel(); this.indicatorFade = null;
+    if (remove) this.indicator.classList.replace('meki-block-drop-line', 'meki-block-drop-leaving');
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches || (!show && !opacity)) {
+      this.indicator.hidden = !show;
+      if (remove) this.indicator.remove();
+      return;
+    }
+    this.indicator.hidden = false;
+    const animation = this.indicator.animate([{ opacity }, { opacity: show ? 1 : 0 }], {
+      duration: show ? 180 : 140, easing: 'cubic-bezier(.2,.65,.3,1)', fill: 'forwards',
+    });
+    this.indicatorFade = animation;
+    void animation.finished.then(() => {
+      if (this.indicatorFade !== animation) return;
+      if (!show) this.indicator.hidden = true;
+      if (remove) this.indicator.remove();
+      animation.cancel(); this.indicatorFade = null;
+    }, () => {});
+  }
   private finish(restore: boolean) {
     if (!this.active) return;
     this.active = false; cancelAnimationFrame(this.frame); this.frame = 0;
@@ -105,7 +131,7 @@ export class BlockDrag {
     this.grip = null;
     if (this.lifted) {
       this.highlight(null); this.view.dom.dataset.dragging = 'false';
-      document.body.classList.remove('meki-block-dragging'); this.indicator.remove(); this.preview.remove();
+      document.body.classList.remove('meki-block-dragging'); this.fadeIndicator(false, false, true); this.preview.remove();
     }
     if (restore && this.lifted && this.target && currentBlock(this.view.state, this.target) && this.originalSelection)
       this.view.dispatch(this.view.state.tr.setSelection(this.originalSelection));
@@ -158,13 +184,15 @@ export class BlockDrag {
     const width = this.preview.offsetWidth, height = this.preview.offsetHeight;
     this.preview.style.transform = `translate3d(${Math.max(8, Math.min(innerWidth - width - 8, this.point.x + 18))}px, ${Math.max(8, Math.min(innerHeight - height - 8, this.point.y + 16))}px, 0)`;
     this.preview.dataset.copy = String(this.point.copy);
-    if (!slot) { this.transaction = null; this.destination = -1; this.snap = null; this.indicator.hidden = true; return; }
+    if (!slot) { this.transaction = null; this.destination = -1; this.snap = null; this.fadeIndicator(false); return; }
+    const changed = slot.pos !== this.destination;
     if (slot.pos !== this.destination || this.point.copy !== this.copied) {
       this.transaction = moveBlock(this.view.state, this.target, slot.pos, this.point.copy);
       this.destination = slot.pos; this.copied = this.point.copy;
     }
-    this.indicator.hidden = !this.transaction;
+    if (!this.transaction) { this.fadeIndicator(false); return; }
     Object.assign(this.indicator.style, { left: `${slot.x}px`, top: `${slot.y}px`, width: `${slot.width}px` });
+    this.fadeIndicator(true, changed);
   }
   private slot(): DropSlot | null {
     const viewport = this.scroll.getBoundingClientRect(), editor = this.view.dom.getBoundingClientRect(), { x, y } = this.point;

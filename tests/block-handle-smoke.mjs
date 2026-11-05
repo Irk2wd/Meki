@@ -18,6 +18,19 @@ const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 const handle = '.milkdown-block-handle:has(.operation-item)', paragraphs = [1, 2, 3].map(n => `.ProseMirror > p:nth-of-type(${n})`);
 const results = [], errors = [], samples = []; let app, page;
 const pass = message => { results.push(message); console.log(`PASS ${message}`); };
+async function opacitySamples(selector, action) {
+  await page.evaluate(selector => {
+    window.blockFadeFrames = new Promise(resolve => {
+      const samples = [], start = performance.now();
+      const record = () => {
+        samples.push([...document.querySelectorAll(selector)].map(node => Number(getComputedStyle(node).opacity) * Number(getComputedStyle(node.parentElement).opacity)));
+        if (performance.now() - start < 280) requestAnimationFrame(record); else resolve(samples);
+      };
+      requestAnimationFrame(record);
+    });
+  }, selector);
+  await action(); return page.evaluate(() => window.blockFadeFrames);
+}
 async function frames(count = 2) { await page.evaluate(count => new Promise(resolve => { function tick() { if (--count <= 0) resolve(); else requestAnimationFrame(tick); } requestAnimationFrame(tick); }), count); }
 async function geometry(selector) {
   return page.locator(selector).evaluate(node => {
@@ -45,6 +58,20 @@ try {
   await page.evaluate(() => { window.blockDragEvents = []; for (const type of ['dragstart','drop','dragend']) document.addEventListener(type, event => window.blockDragEvents.push({ type, types: [...(event.dataTransfer?.types || [])] }), true); });
   for (const selector of [...paragraphs, ...paragraphs.toReversed(), ...paragraphs]) await aligned(selector);
   pass('rapid pointer movement follows each paragraph within two frames without positional lag');
+  await page.mouse.move(10, 10);
+  await page.waitForFunction(selector => getComputedStyle(document.querySelector(selector)).opacity === '0', handle);
+  const fadePoint = await geometry(paragraphs[0]);
+  const entering = await opacitySamples(`${handle} .operation-item`, () => page.mouse.move(fadePoint.x, fadePoint.y));
+  const nextPoint = await geometry(paragraphs[1]);
+  const changing = await opacitySamples(`${handle} .operation-item`, () => page.mouse.move(nextPoint.x, nextPoint.y));
+  const leaving = await opacitySamples(`${handle} .operation-item`, () => page.mouse.move(10, 10));
+  for (const [phase, values] of [['enter', entering], ['change-block', changing], ['leave', leaving]]) {
+    for (const index of [0, 1]) assert.ok(values.some(frame => frame[index] > 0 && frame[index] < 1), `${phase}: both controls must fade through intermediate opacity`);
+    samples.push({ phase, opacity: values });
+  }
+  assert.ok(entering.at(-1).every(value => value === 1) && changing.at(-1).every(value => value === 1));
+  assert.ok(leaving.at(-1).every(value => value === 0));
+  pass('plus and grip fade in, fade out and reappear gradually on a new block without delaying their position');
   for (const selector of paragraphs) await aligned(selector, true);
   const before = await geometry(paragraphs[0]), after = await geometry(paragraphs[1]);
   await page.mouse.move(before.gutter, (before.bottom + after.top) / 2); await frames();

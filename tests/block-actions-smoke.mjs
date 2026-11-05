@@ -17,6 +17,20 @@ const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: profile, MEKI_TEST
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
 const results = [], errors = []; let app, page;
 const pass = name => { results.push(name); console.log(`PASS ${name}`); };
+async function opacitySamples(selector, action) {
+  await page.evaluate(selector => {
+    window.blockFadeFrames = new Promise(resolve => {
+      const samples = [], start = performance.now();
+      const record = () => {
+        const node = document.querySelector(selector);
+        samples.push(node && !node.hidden ? Number(getComputedStyle(node).opacity) : 0);
+        if (performance.now() - start < 280) requestAnimationFrame(record); else resolve(samples);
+      };
+      requestAnimationFrame(record);
+    });
+  }, selector);
+  await action(); return page.evaluate(() => window.blockFadeFrames);
+}
 const paragraph = text => page.locator('.ProseMirror p').filter({ hasText: new RegExp('^' + text) }).first();
 const menuRoot = () => page.locator('.meki-block-menu:not(.meki-block-submenu)');
 const row = id => page.locator(`[data-block-action="${id}"]`);
@@ -147,17 +161,20 @@ try {
   pass('drag previews preserve rich text, follow the pointer within a frame and reflect Option changes without pointer movement');
 
   await dragStart(gamma); const first = await alpha.boundingBox(), midpoint = first.y + first.height / 2;
-  await page.mouse.move(first.x + 60, midpoint - 9); await frames();
+  const lineEntering = await opacitySamples('.meki-block-drop-line', () => page.mouse.move(first.x + 60, midpoint - 9));
+  assert.ok(lineEntering.some(value => value > 0 && value < 1) && lineEntering.at(-1) === 1);
   const snapped = await page.locator('.meki-block-drop-line').boundingBox();
   for (const delta of [-1, 1, -2, 2]) {
     await page.mouse.move(first.x + 60, midpoint + delta); await frames();
     assert.ok(Math.abs((await page.locator('.meki-block-drop-line').boundingBox()).y - snapped.y) < 1);
   }
-  await page.mouse.move(first.x + 60, midpoint + 9); await frames();
+  const lineChanging = await opacitySamples('.meki-block-drop-line', () => page.mouse.move(first.x + 60, midpoint + 9));
+  assert.ok(lineChanging.some(value => value > 0 && value < 1) && lineChanging.at(-1) === 1);
   assert.ok((await page.locator('.meki-block-drop-line').boundingBox()).y > snapped.y + first.height);
-  await page.keyboard.press('Escape'); await page.mouse.up();
+  const lineLeaving = await opacitySamples('.meki-block-drop-leaving', async () => { await page.keyboard.press('Escape'); await page.mouse.up(); });
+  assert.ok(lineLeaving.some(value => value > 0 && value < 1) && lineLeaving.at(-1) === 0);
   assert.equal(await order(), 'Alpha bold text.|Beta plain text.|Gamma plain text.');
-  pass('insertion guides resist midpoint jitter and switch only after a deliberate pointer movement');
+  pass('insertion guides fade at new destinations, resist midpoint jitter and fade out on cancellation');
 
   await menu(alpha);
   const openGrip = await page.locator('.milkdown-block-handle[data-show="true"] .operation-item').last().boundingBox();

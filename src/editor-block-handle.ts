@@ -67,6 +67,8 @@ export class FrameBlockService extends BlockService {
   private hintKey = new PluginKey<DecorationSet>('meki-block-hint');
   private drag: BlockDrag | null = null;
   private suppressClick = false;
+  private handle?: HTMLElement;
+  private handleFades: Animation[] = [];
   private get view() { return this.context?.get(editorViewCtx); }
   constructor(private changed: () => void = () => {}) { super(); }
   readonly plugin = $prose(() => new Plugin({ key: this.hintKey,
@@ -177,10 +179,18 @@ export class FrameBlockService extends BlockService {
       view.state.doc.forEach((node, pos) => { if (view.nodeDOM(pos) === element) active = { node, $pos: view.state.doc.resolve(pos), el: element }; });
     }
     if (!active) { this.hide(); return; }
+    const changed = this.active && this.active.$pos.pos !== active.$pos.pos;
     this.active = active; this.notify?.({ type: 'show', active });
+    if (changed && this.handle && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      this.handleFades.forEach(animation => animation.cancel());
+      this.handleFades = [...this.handle.children].map(element => element.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 180, easing: 'cubic-bezier(.2,.65,.3,1)',
+      }));
+    }
   }
 
   override addEvent = (dom: HTMLElement) => {
+    this.handle = dom;
     const add = dom.firstElementChild as HTMLElement, grip = dom.lastElementChild as HTMLElement;
     add.setAttribute('role', 'button'); add.tabIndex = 0; add.title = t('在下方插入块'); add.setAttribute('aria-label', add.title);
     grip.setAttribute('draggable', 'false'); grip.setAttribute('role', 'button'); grip.tabIndex = 0;
@@ -194,6 +204,7 @@ export class FrameBlockService extends BlockService {
     queueMicrotask(() => { dom.draggable = false; });
   };
   override removeEvent = (dom: HTMLElement) => {
+    this.handleFades.forEach(animation => animation.cancel()); this.handleFades = []; this.handle = undefined;
     dom.removeEventListener('pointerdown', this.pointerDown);
     dom.removeEventListener('dragstart', this.preventNativeDrag);
     dom.removeEventListener('click', this.click);
