@@ -100,7 +100,7 @@ try {
   remote.publicAvailable = true;
   remote.current = fixture(pair, { version: installerVersion, electron: pkg.devDependencies.electron });
   await action('check'); await status('available');
-  assert.match(await page.locator('#update-source').textContent(), /Irk2wd\/Meki/);
+  assert.equal(await page.locator('#update-source').count(), 0);
   await action('download'); await status('ready');
   assert.ok(remote.requests.every(item => !item.authorization));
   assert.ok((await fs.readFile(documentPath, 'utf8')).includes('更新前的新内容'));

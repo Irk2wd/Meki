@@ -1229,7 +1229,6 @@
   "仅在Meki中打开工作区内的相对 Markdown 链接。": "Only relative Markdown links within the workspace can be opened in Meki.",
   "无效的文件版本。": "Invalid file version.",
   "语言设置已保存。退出并重新打开应用后，所有窗口将使用所选语言。": "Language saved. Quit and reopen the app to use it in all windows.",
-  "更新来源：{0}": "Update source: {0}",
   "公开更新不接受私有仓库凭据。": "Public updates do not accept private repository credentials.",
   "GitHub 更新请求受限，请稍后重试。": "GitHub update requests are rate limited. Try again later.",
   "尚无适用于当前平台的完整正式更新。": "No complete stable update is available for this platform yet.",

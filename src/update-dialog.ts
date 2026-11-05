@@ -10,7 +10,7 @@ export class UpdateDialog {
   constructor(private apply: () => Promise<void>) {
     this.dialog.id = 'update-dialog'; this.dialog.setAttribute('aria-labelledby', 'update-title');
     this.dialog.innerHTML = `<div class="dialog-heading"><div><span class="eyebrow">${ht("MEKI · 更新")}</span><h2 id="update-title">${ht("让Meki保持新鲜")}</h2></div><button type="button" data-update="close" class="icon-button" aria-label="${ht("关闭更新窗口")}">×</button></div>
-      <p id="update-version"></p><p id="update-source"></p><p id="update-message" role="status" aria-live="polite"></p>
+      <p id="update-version"></p><p id="update-message" role="status" aria-live="polite"></p>
       <div id="update-progress-row" hidden><progress id="update-progress" max="100" value="0" aria-label="${ht("更新下载进度")}"></progress><span id="update-progress-text"></span></div>
       <details id="update-release-notes" hidden><summary>${ht("版本说明")}</summary><pre id="update-notes"></pre></details>
       <p class="update-note">${ht("轻量更新只下载程序代码。升级运行环境时才需要完整安装器；macOS 安装器打开后需拖入“应用程序”。")}</p>
@@ -32,7 +32,6 @@ export class UpdateDialog {
     this.state = state;
     const busy = this.pending || ['checking', 'downloading'].includes(state.status);
     this.element('#update-version').textContent = t("当前版本 {0}{1}", state.currentVersion, state.latestVersion ? t(" · 最新版本 {0}", state.latestVersion) : '');
-    this.element('#update-source').textContent = t("更新来源：{0}", state.repository);
     this.element('#update-message').textContent = state.message;
     this.element('#update-message').classList.toggle('error', state.status === 'error');
     this.element<HTMLButtonElement>('[data-update="check"]').disabled = busy;
