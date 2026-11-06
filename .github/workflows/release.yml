@@ -1,0 +1,71 @@
+name: Publish release
+
+on:
+  workflow_run:
+    workflows: ['Desktop CI']
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      INSTALLER_RUN: ${{ github.event.workflow_run.id }}
+      SOURCE_COMMIT: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Check out the tested release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+      - name: Require a matching version tag from main
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          from pathlib import Path
+          version = json.loads(Path('package.json').read_text())['version']
+          assert re.fullmatch(r'\d+\.\d+\.\d+', version), 'Invalid release version'
+          commit = os.environ['SOURCE_COMMIT']
+          subprocess.run(['git', 'merge-base', '--is-ancestor', commit, 'origin/main'], check=True)
+          tag = 'v' + version
+          actual = subprocess.check_output(['git', 'rev-parse', 'refs/tags/' + tag + '^{commit}'], text=True).strip()
+          assert actual == commit, 'Version tag must point to the tested main commit'
+          assert Path('docs/releases/' + version + '.md').is_file(), 'Release notes are missing'
+          Path('release').mkdir(exist_ok=True)
+          PY
+      - name: Require successful source checks for this main commit
+        run: |
+          source_run="$(gh run list --workflow checks.yml --branch main --event push --commit "$SOURCE_COMMIT" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          test -n "$source_run"
+          gh run watch "$source_run" --exit-status --interval 15
+      - name: Download the exact tested installers and evidence
+        run: |
+          gh run download "$INSTALLER_RUN" --dir release/ci-artifacts
+          gh run view "$INSTALLER_RUN" --json headSha,url,status,conclusion,jobs > release/installer-ci.json
+          git archive --format=zip --output=release/source.zip HEAD
+      - name: Verify signatures, checksums and all three installed platforms
+        run: |
+          python3 scripts/deliver-installers.py release/ci-artifacts release/publish --ci-json release/installer-ci.json --source-archive release/source.zip
+      - name: Publish only after every release file is uploaded
+        run: python3 scripts/publish-release.py release/publish
