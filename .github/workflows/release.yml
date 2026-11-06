@@ -127,6 +127,11 @@ jobs:
           PY
           gh run view "$INSTALLER_RUN" --json headSha,url,status,conclusion,jobs > release/installer-ci.json
           git archive --format=zip --output=release/source.zip HEAD
+      - name: Install locked verification dependencies
+        if: steps.release.outputs.skip_release != 'true'
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: npm ci
       - name: Verify signatures, checksums and all three installed platforms
         if: steps.release.outputs.skip_release != 'true'
         run: |
