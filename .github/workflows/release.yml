@@ -4,20 +4,27 @@ on:
   workflow_run:
     workflows: ['Desktop CI']
     types: [completed]
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release.yml
+      - scripts/publish-release.py
 
 permissions:
   contents: read
 
 concurrency:
-  group: publish-${{ github.event.workflow_run.head_sha }}
+  group: publish-release
   cancel-in-progress: false
 
 jobs:
   publish:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -29,43 +36,69 @@ jobs:
       INSTALLER_RUN: ${{ github.event.workflow_run.id }}
       SOURCE_COMMIT: ${{ github.event.workflow_run.head_sha }}
     steps:
-      - name: Check out the tested release commit
+      - name: Check out the pinned publishing tools
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.workflow_sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Set up Node.js 24
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '24'
-      - name: Require a matching version tag from main
+      - name: Resolve the tested main release and preserve publishing tools
+        id: release
         run: |
           python3 - <<'PY'
-          import json, os, re, subprocess
+          import json, os, re, shutil, subprocess
           from pathlib import Path
+          def gh(*args):
+              return json.loads(subprocess.check_output(['gh', *args], text=True))
           version = json.loads(Path('package.json').read_text())['version']
           assert re.fullmatch(r'\d+\.\d+\.\d+', version), 'Invalid release version'
-          commit = os.environ['SOURCE_COMMIT']
-          subprocess.run(['git', 'merge-base', '--is-ancestor', commit, 'origin/main'], check=True)
           tag = 'v' + version
+          existing = subprocess.run(['gh', 'release', 'view', tag, '--json', 'isDraft'], capture_output=True, text=True)
+          if existing.returncode == 0 and not json.loads(existing.stdout)['isDraft']:
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                  output.write('already_published=true\n')
+              print(tag + ' is already published; no files will be changed.')
+              raise SystemExit(0)
           actual = subprocess.check_output(['git', 'rev-parse', 'refs/tags/' + tag + '^{commit}'], text=True).strip()
+          commit = os.environ['SOURCE_COMMIT'] or actual
           assert actual == commit, 'Version tag must point to the tested main commit'
+          subprocess.run(['git', 'merge-base', '--is-ancestor', commit, 'origin/main'], check=True)
+          run = os.environ['INSTALLER_RUN']
+          if not run:
+              runs = gh('run', 'list', '--workflow', 'ci.yml', '--event', 'push', '--branch', tag,
+                        '--commit', commit, '--status', 'success', '--limit', '1', '--json', 'databaseId')
+              assert runs, 'No successful tagged installer validation exists'
+              run = str(runs[0]['databaseId'])
+          tested = gh('run', 'view', run, '--json', 'headSha,event,headBranch,status,conclusion')
+          assert tested == dict(headSha=commit, event='push', headBranch=tag, status='completed', conclusion='success'), 'Installer run does not match the release tag'
+          shutil.copy2('scripts/publish-release.py', Path(os.environ['RUNNER_TEMP']) / 'meki-publish-release.py')
+          subprocess.run(['git', 'checkout', '--detach', commit], check=True)
+          assert json.loads(Path('package.json').read_text())['version'] == version, 'Tagged package version differs'
           assert Path('docs/releases/' + version + '.md').is_file(), 'Release notes are missing'
           Path('release').mkdir(exist_ok=True)
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('SOURCE_COMMIT=' + commit + '\nINSTALLER_RUN=' + run + '\n')
           PY
       - name: Require successful source checks for this main commit
+        if: steps.release.outputs.already_published != 'true'
         run: |
           source_run="$(gh run list --workflow checks.yml --branch main --event push --commit "$SOURCE_COMMIT" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
           test -n "$source_run"
           gh run watch "$source_run" --exit-status --interval 15
       - name: Download the exact tested installers and evidence
+        if: steps.release.outputs.already_published != 'true'
         run: |
           gh run download "$INSTALLER_RUN" --dir release/ci-artifacts
           gh run view "$INSTALLER_RUN" --json headSha,url,status,conclusion,jobs > release/installer-ci.json
           git archive --format=zip --output=release/source.zip HEAD
       - name: Verify signatures, checksums and all three installed platforms
+        if: steps.release.outputs.already_published != 'true'
         run: |
           python3 scripts/deliver-installers.py release/ci-artifacts release/publish --ci-json release/installer-ci.json --source-archive release/source.zip
       - name: Publish only after every release file is uploaded
-        run: python3 scripts/publish-release.py release/publish
+        if: steps.release.outputs.already_published != 'true'
+        run: python3 "$RUNNER_TEMP/meki-publish-release.py" release/publish

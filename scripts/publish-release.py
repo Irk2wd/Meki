@@ -6,7 +6,8 @@ import re
 import subprocess
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+# The release workflow runs this pinned publishing tool from the tested source checkout.
+ROOT = pathlib.Path.cwd().resolve()
 
 
 def gh(*args, check=True):
@@ -55,7 +56,8 @@ gh('release', 'edit', tag, '--title', 'Meki ' + version, '--notes-file', str(not
 gh('release', 'upload', tag, *(str(file) for file in files), '--clobber')
 
 repository = gh('repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner').stdout.strip()
-release = json.loads(gh('api', 'repos/' + repository + '/releases/tags/' + tag).stdout)
+release = json.loads(gh('api', '--paginate', 'repos/' + repository + '/releases?per_page=100',
+                        '--jq', '.[] | select(.tag_name == "' + tag + '")').stdout)
 require(release['draft'] and not release['prerelease'], 'Release must remain a draft during upload')
 assets = release['assets']
 require(len(assets) == len(files) and {asset['name'] for asset in assets} == set(checksums), 'Release asset inventory differs from the verified delivery')
