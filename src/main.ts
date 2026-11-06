@@ -10,6 +10,7 @@ import { MediaController } from './media-controller';
 import { OutlinePanel } from './outline-panel';
 import { FormatMenu } from './format-menu';
 import { Shortcuts } from './shortcuts';
+import { SidebarSettings } from './sidebar-settings';
 import { AttachmentOrganizer } from './attachment-organizer';
 import { UpdateDialog } from './update-dialog';
 import { AboutDialog } from './about-dialog';
@@ -45,7 +46,7 @@ document.querySelector('#app')!.innerHTML = `
     <div class="sidebar-tabs" role="tablist" aria-label="${ht("导航方式")}"><button role="tab" data-tab="files" aria-selected="false">${ht("文件")}</button><button role="tab" class="active" data-tab="outline" aria-selected="true">${ht("大纲")}</button></div>
     <div id="files-panel" hidden><div class="file-filter">${icon('search', 15)}<input id="file-filter" placeholder="${ht("搜索文件")}" aria-label="${ht("搜索本地文件")}"></div><div id="file-list"></div></div>
     <nav id="outline-panel" aria-label="${ht("文档大纲")}"><div id="outline-list"></div></nav>
-    <div class="sidebar-bottom"><span class="local-dot"></span><span>${ht("纯文本，留在你手中")}</span><button type="button" class="update-entry" data-action="updates">${ht("检查更新")}</button>${button('help', t("使用指南与快捷键"), 'help')}</div>
+    <div class="sidebar-bottom"><button type="button" id="sidebar-settings-button" class="sidebar-settings-button" aria-haspopup="menu" aria-expanded="false" aria-controls="sidebar-settings-menu">${icon('settings', 16)}<span>${ht("设置")}</span></button>${button('updates', t("检查更新"), 'refresh', 'update-entry sidebar-footer-icon')}${button('help', t("使用指南与快捷键"), 'help', 'sidebar-footer-icon')}</div>
   </aside>
   <section class="main-area">
     <header class="titlebar">
@@ -125,6 +126,11 @@ const documents = new DocumentTabs({ editor: () => editor, settings: () => setti
   active: doc => { documentId++; outline?.reset(); current = doc; }, updated: () => { renderOutline(); renderFiles(); updateStatus(); renderExternalStatus(); },
   dispatch: (command, payload) => { void dispatch(command, payload); }, notify });
 const snapshotDialog = new SnapshotDialog({ documents, platform: () => platform, settings: () => settings, run: action => perform(action, true, true), notify });
+const sidebarSettings = new SidebarSettings({
+  blocked: () => !ready || busy,
+  closeOthers: () => { closePopovers(); el('#lifecycle-settings').hidden = true; el('#window-panel').hidden = true; },
+  open: action => dispatch(action),
+});
 const attachmentOrganizer = new AttachmentOrganizer({ document: () => current, activeId: () => documents.activeId,
   editor: () => editor, run: action => perform(action, true, true), pause: () => { documents.active.paused = 'attachments'; }, persist: persistDraft, notify });
 const imageHostingDialog = new ImageHostingDialog({ document: () => current, activeId: () => documents.activeId,
@@ -291,7 +297,7 @@ function changeSettings(patch: Partial<Settings>) {
   settings = { ...settings, ...patch }; applySettings();
   void window.meki.updateSettings(patch).catch(error => notify(String(error), true));
 }
-function closePopovers() { el('#style-panel').hidden = true; el('#export-panel').hidden = true; }
+function closePopovers() { el('#style-panel').hidden = true; el('#export-panel').hidden = true; sidebarSettings.close(); }
 function switchMode(mode: 'visual' | 'source') {
   if (editor.mode === mode) return; editor.flush(); editor.setMode(mode, current.content);
   document.querySelectorAll<HTMLElement>('[data-mode]').forEach(button => { const active = button.dataset.mode === mode; button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active)); });

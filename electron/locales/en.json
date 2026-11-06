@@ -1309,5 +1309,6 @@
   "关闭此版本提醒": "Dismiss this version notification",
   "有新版本可用，查看说明后再决定更新。": "A new version is available. Read what’s new and update when you’re ready.",
   "查看更新": "View update",
-  "Meki {0} 已发布": "Meki {0} is available"
+  "Meki {0} 已发布": "Meki {0} is available",
+  "设置": "Settings"
 }
