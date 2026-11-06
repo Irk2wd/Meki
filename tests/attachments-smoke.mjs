@@ -1,3 +1,4 @@
+import { readSession } from './recovery-fixture.cjs';
 import { _electron as electron } from 'playwright';
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
@@ -28,7 +29,7 @@ async function open(file) { await app.evaluate((_electron, file) => { process.en
 async function tab(file) { await page.locator('.document-tab [role="tab"]').evaluateAll((nodes, file) => nodes.find(node => node.title === file).click(), file); await idle(); }
 async function source() { await page.locator('[data-mode="source"]').click(); return page.locator('#source-editor .cm-content'); }
 async function poll(check, timeout = 12000) { const deadline = Date.now() + timeout; while (Date.now() < deadline) { const value = await check(); if (value) return value; await new Promise(resolve => setTimeout(resolve, 80)); } throw Error('Timed out waiting for attachment state'); }
-async function savedSession() { try { return JSON.parse(await fs.readFile(path.join(profile, 'session.json'), 'utf8')); } catch { return null; } }
+async function savedSession() { try { return await readSession(profile); } catch { return null; } }
 async function content(file, predicate) { return poll(async () => { const item = (await savedSession())?.documents.find(item => item.path === file); return item && predicate(item.content) ? item.content : null; }); }
 async function organizer(native = false) {
   if (native) await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.find(item => item.label === '文件').submenu.items.find(item => item.label === '整理图片附件…').click());

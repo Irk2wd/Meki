@@ -76,12 +76,13 @@ class LifecycleStore {
     return this.session;
   }
 
-  async saveSession(input) {
+  async saveSession(input, cleanExit = false) {
+    if (typeof cleanExit !== 'boolean') throw new TypeError('Invalid session close state.');
     const session = validateSession(input);
-    return this.store.locked('session', () => this.writeSession(session));
+    return this.store.locked('session', () => this.writeSession(session, cleanExit));
   }
 
-  async writeSession(session) {
+  async writeSession(session, cleanExit = false) {
     if (this.sessionBackupPending) {
       // Never overwrite an unreadable recovery file until an exclusive, durable copy exists.
       const stat = await fs.lstat(this.sessionPath);
@@ -94,7 +95,7 @@ class LifecycleStore {
       } catch (error) { throw new Error(t("无法备份损坏的会话，原文件未被覆盖：{0}", error.message)); }
       this.sessionBackupPending = false;
     }
-    const next = { ...session, cleanExit: false };
+    const next = { ...session, cleanExit };
     await atomicWrite(this.sessionPath, Buffer.from(JSON.stringify({ ...next, version: 1 }), 'utf8'));
     this.session = next;
   }

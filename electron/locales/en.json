@@ -1294,5 +1294,13 @@
   "还没有历史版本。继续编辑后会自动记录，无需手动创建。": "No versions yet. Keep editing and history will be recorded automatically.",
   "这是其他文稿的版本，可以打开为新文稿。": "This version belongs to another document. You can open it as a new document.",
   "选择版本预览。": "Select a version to preview.",
-  "版本历史空间已满，请删除不再需要的手动版本。": "Version history is full. Delete manual versions you no longer need."
+  "版本历史空间已满，请删除不再需要的手动版本。": "Version history is full. Delete manual versions you no longer need.",
+  "恢复记录目录必须是普通本地目录。": "The recovery directory must be a regular local directory.",
+  "恢复记录必须是普通文件。": "Recovery records must be regular files.",
+  "恢复内容引用无效。": "Invalid recovery content reference.",
+  "恢复内容文件缺失。": "A recovery content file is missing.",
+  "恢复内容校验失败。": "Recovery content verification failed.",
+  "无法识别恢复记录格式。": "Unrecognized recovery record format.",
+  "恢复记录内容超过容量限制。": "Recovery contents exceed the storage limit.",
+  "恢复记录索引超过容量限制。": "The recovery catalog exceeds the storage limit."
 }

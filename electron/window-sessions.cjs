@@ -4,11 +4,10 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { validateSession, LifecycleStore } = require('./lifecycle-store.cjs');
-const { validateAbsolutePath, pathKey, isWithin, atomicWrite, readBytes } = require('./file-store.cjs');
+const { validateAbsolutePath, pathKey, isWithin, atomicWrite, readBytes, digest } = require('./file-store.cjs');
+const { RecoveryStore, MAX_WINDOWS, MAX_BYTES } = require('./recovery-store.cjs');
 
 const { reconcileLayout } = require('./pane-layout.mjs');
-const MAX_WINDOWS = 8;
-const MAX_BYTES = 128 * 1024 * 1024;
 const validId = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(value);
 function validateWindows(value) {
   if (!Array.isArray(value) || value.length > MAX_WINDOWS) throw new Error(t("最多打开 8 个编辑窗口。"));
@@ -36,49 +35,80 @@ function validateWindows(value) {
 class WindowSessions {
   constructor(store, history) {
     this.store = store; this.history = history;
-    this.filename = path.join(store.userData, 'windows-v1.json');
-    this.records = []; this.corrupt = false; this.warning = '';
+    this.recovery = new RecoveryStore(store.userData); this.filename = this.recovery.filename;
+    this.legacyFilename = path.join(store.userData, 'windows-v1.json');
+    this.records = []; this.corrupt = false; this.legacyCorrupt = false; this.warning = '';
   }
-  async checkFile() {
-    const stat = await fs.lstat(this.filename).catch(error => { if (error.code !== 'ENOENT') throw error; return null; });
+  async checkFile(filename = this.legacyFilename) {
+    const stat = await fs.lstat(filename).catch(error => { if (error.code !== 'ENOENT') throw error; return null; });
     if (stat && (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1)) throw new Error(t("窗口会话文件不是普通文件，已保留原路径。"));
+    return stat;
   }
   async init() {
-    await this.checkFile();
+    await this.recovery.init();
+    await this.recovery.checkedFile(this.filename);
+    const legacy = await this.checkFile();
+    let restored = false;
     try {
-      const data = JSON.parse((await readBytes(this.filename, MAX_BYTES * 6 + 1024 * 1024)).bytes.toString('utf8'));
-      if (data.version !== 1) throw new Error(t("无法识别窗口会话版本。"));
-      this.records = validateWindows(data.windows);
+      const records = await this.recovery.read();
+      if (records) { this.records = validateWindows(records); restored = true; }
     } catch (error) {
-      if (error.code !== 'ENOENT') { this.corrupt = true; this.warning = t("窗口恢复记录损坏，已保留原数据，并尝试恢复主窗口。"); }
+      this.corrupt = true; this.warning = t("窗口恢复记录损坏，已保留原数据，并尝试恢复主窗口。");
+    }
+    if (legacy) {
+      try {
+        const bytes = (await readBytes(this.legacyFilename, MAX_BYTES * 6 + 1024 * 1024)).bytes, data = JSON.parse(bytes.toString('utf8'));
+        if (data.version !== 1) throw new Error(t("无法识别窗口会话版本。"));
+        // Our compatibility exports are marked. Older writers omit that marker;
+        // import each distinct legacy state once, without relying on clock accuracy.
+        const revision = digest(bytes), exported = typeof data.recoveryRevision === 'string' && /^[a-f0-9]{64}$/.test(data.recoveryRevision);
+        if (!restored || (!exported && revision !== this.recovery.importedLegacy)) {
+          this.records = validateWindows(data.windows); this.recovery.importedLegacy = revision;
+        }
+        restored = true;
+      } catch (error) {
+        this.legacyCorrupt = true;
+        if (!restored) this.warning = t("窗口恢复记录损坏，已保留原数据，并尝试恢复主窗口。");
+      }
+    }
+    if (!restored) {
       this.records = [{ id: 'main', session: this.history.session, bounds: null, workspaceRoot: this.store.metadata.workspaceRoot || null }];
     }
   }
   get(id) { const record = this.records.find(item => item.id === id); if (!record) throw new Error(t("此窗口已关闭。")); return record; }
   owner(filePath) { return this.records.find(record => record.session?.documents.some(doc => doc.path && pathKey(doc.path) === pathKey(filePath))); }
   async commit(input) {
-    const records = validateWindows(input); await this.checkFile();
+    const records = validateWindows(input);
     if (this.corrupt) {
-      const backup = path.join(this.store.userData, `windows-corrupt-${randomUUID()}.json`);
-      await fs.copyFile(this.filename, backup, fs.constants.COPYFILE_EXCL);
-      const handle = await fs.open(backup, 'r+'); try { await handle.sync(); } finally { await handle.close(); }
+      await this.recovery.backup();
       this.corrupt = false;
     }
-    await atomicWrite(this.filename, Buffer.from(JSON.stringify({ version: 1, windows: records })));
+    await this.recovery.write(records);
     this.records = records;
-    // Keep a legacy primary-window recovery file for rollback to older application code.
-    const primary = records.find(record => record.id === 'main') || records[0];
-    const session = primary?.session || { documents: [], activeId: null };
-    try {
-      await this.history.saveSession(session);
-      if (session.cleanExit) await this.history.markClean();
-    } catch (error) {
-      // The authoritative commit succeeded; a failed compatibility copy must not undo a transfer.
-      this.warning = t("窗口会话已保存，但旧版兼容恢复副本未能更新。");
-      console.warn(this.warning, error.message);
-    }
   }
-  async change(action) { return this.store.locked('windows', async () => this.commit(await action(this.records))); }
+  async checkpoint() {
+    // Older code needs a full copy only at a normal close/update, never on each edit.
+    await this.checkFile();
+    if (this.legacyCorrupt) {
+      const backup = path.join(this.store.userData, `windows-corrupt-${randomUUID()}.json`);
+      await fs.copyFile(this.legacyFilename, backup, fs.constants.COPYFILE_EXCL);
+      const handle = await fs.open(backup, 'r+'); try { await handle.sync(); } finally { await handle.close(); }
+      this.legacyCorrupt = false;
+    }
+    await atomicWrite(this.legacyFilename, Buffer.from(JSON.stringify({ version: 1, recoveryRevision: this.recovery.revision, windows: this.records })));
+    const primary = this.records.find(record => record.id === 'main') || this.records[0];
+    const session = primary?.session || { documents: [], activeId: null };
+    await this.history.saveSession(session, session.cleanExit === true);
+  }
+  async change(action, checkpoint = false) {
+    return this.store.locked('windows', async () => {
+      await this.commit(await action(this.records));
+      if (checkpoint) await this.checkpoint().catch(error => {
+        // The current recovery catalog is durable even if an older-version export fails.
+        this.warning = t("窗口会话已保存，但旧版兼容恢复副本未能更新。"); console.warn(this.warning, error.message);
+      });
+    });
+  }
   async save(id, session) {
     session = { ...validateSession(session), cleanExit: false };
     await this.change(records => { this.get(id); return records.map(record => record.id === id ? { ...record, session } : record); });
@@ -89,7 +119,7 @@ class WindowSessions {
   async update(id, patch) { await this.change(records => { this.get(id); return records.map(record => record.id === id ? { ...record, ...patch } : record); }); }
   async remove(id) { await this.change(records => records.filter(record => record.id !== id)); }
   async clean(ids) {
-    await this.change(records => records.map(record => ids.includes(record.id) && record.session ? { ...record, session: { ...record.session, cleanExit: true } } : record));
+    await this.change(records => records.map(record => ids.includes(record.id) && record.session ? { ...record, session: { ...record.session, cleanExit: true } } : record), true);
   }
   async transfer(from, to, tabId) {
     await this.change(records => {
@@ -103,7 +133,7 @@ class WindowSessions {
   }
   async finishClose(staged, remove = []) {
     await this.change(records => records.filter(record => !remove.includes(record.id)).map(record => staged.has(record.id)
-      ? { ...record, session: { ...staged.get(record.id), cleanExit: true } } : record));
+      ? { ...record, session: { ...staged.get(record.id), cleanExit: true } } : record), true);
   }
   async rollbackTransfer(from, to, originalLayout) {
     await this.change(records => {

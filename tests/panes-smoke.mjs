@@ -1,3 +1,4 @@
+import { readWindows } from './recovery-fixture.cjs';
 import { _electron as electron } from 'playwright';
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
@@ -13,7 +14,7 @@ const mod = process.platform === 'darwin' ? 'Meta' : 'Control', end = process.pl
 let app, page; const results = [], errors = [];
 const pass = name => { results.push(name); console.log(`PASS ${name}`); };
 async function poll(check, description) { const limit = Date.now() + 20000; while (Date.now() < limit) { if (await check()) return; await new Promise(resolve => setTimeout(resolve, 60)); } throw Error(`Timed out: ${description}`); }
-async function session() { return JSON.parse(await fs.readFile(path.join(profile, 'windows-v1.json'), 'utf8')).windows[0].session; }
+async function session() { return (await readWindows(profile))[0].session; }
 async function setting(name, value) { await app.evaluate((_electron, { name, value }) => { process.env[name] = value; }, { name, value }); }
 async function idle() { await page.waitForFunction(() => !document.body.classList.contains('is-busy')); }
 async function focus() { await (await app.browserWindow(page)).evaluate(win => { win.show(); win.focus(); }); await page.waitForFunction(() => document.hasFocus()); }
@@ -105,7 +106,7 @@ try {
   await app.evaluate((_electron, files) => {
     const fs = process.getBuiltinModule('node:fs/promises'); globalThis.paneTestRename = fs.rename; globalThis.paneActivationStarted = false;
     fs.rename = async (...args) => {
-      if (String(args[1]).endsWith('windows-v1.json')) {
+      if (String(args[1]).endsWith('windows.json')) {
         const session = JSON.parse(await fs.readFile(args[0], 'utf8')).windows[0].session;
         const alpha = session.documents.find(doc => doc.path === files.Alpha), beta = session.documents.find(doc => doc.path === files.Beta);
         if (alpha && beta && session.activeId === alpha.id && !globalThis.paneActivationStarted) {
@@ -173,7 +174,7 @@ try {
 
   // Deny the authoritative session write to exercise rollback of a failed dock.
   const previousLayout = JSON.stringify((await session()).layout);
-  await app.evaluate(() => { const fs = process.getBuiltinModule('node:fs/promises'); globalThis.paneTestRename = fs.rename; fs.rename = async (...args) => { if (String(args[1]).endsWith('windows-v1.json')) throw Error('pane-test-write-failure'); return globalThis.paneTestRename(...args); }; });
+  await app.evaluate(() => { const fs = process.getBuiltinModule('node:fs/promises'); globalThis.paneTestRename = fs.rename; fs.rename = async (...args) => { if (String(args[1]).endsWith('windows.json')) throw Error('pane-test-write-failure'); return globalThis.paneTestRename(...args); }; });
   const two = page.locator('.editor-pane'); await drag('Beta', await bodyPoint(two.first(), 'top')); await page.mouse.up();
   await page.locator('#toast').filter({ hasText: 'pane-test-write-failure' }).waitFor();
   assert.equal(await page.locator('.editor-pane').count(), 2); assert.equal(JSON.stringify((await session()).layout), previousLayout);
@@ -190,7 +191,7 @@ try {
   const created = app.waitForEvent('window');
   await drag('Beta', { x: -45, y: 200 }, false); await page.mouse.up();
   const detached = await created; await detached.waitForSelector('#shell[data-ready="true"]'); await idle();
-  const movedWindows = JSON.parse(await fs.readFile(path.join(profile, 'windows-v1.json'), 'utf8')).windows;
+  const movedWindows = await readWindows(profile);
   const movedDoc = movedWindows.flatMap(record => record.session.documents).find(doc => doc.path === files.Beta);
   assert.ok(movedDoc.content.includes('Dirty Beta')); assert.equal(movedDoc.id, beta.id);
   assert.equal(movedWindows.filter(record => record.session.documents.some(doc => doc.path === files.Beta)).length, 1);

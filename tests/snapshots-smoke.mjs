@@ -1,3 +1,4 @@
+import { readSession } from './recovery-fixture.cjs';
 import { _electron as electron } from 'playwright';
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
@@ -44,7 +45,7 @@ async function settings(patch) {
   }
   await page.locator('.tab-settings').click();
 }
-async function session() { return JSON.parse(await fs.readFile(path.join(profile, 'session.json'), 'utf8')); }
+async function session() { return await readSession(profile); }
 async function active() { const data = await session(); return data.documents.find(doc => doc.id === data.activeId); }
 async function snapshots() { return page.evaluate(() => window.meki.listSnapshots()); }
 async function openSnapshots() { await action('snapshots'); await poll(async () => !((await page.locator('#snapshot-status').innerText()).includes('正在读取'))); }
@@ -119,7 +120,11 @@ try {
   // Windows can immediately re-focus the sole visible window after blur(); hiding it causes a real focus loss.
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); });
   await page.waitForFunction(() => document.hasFocus());
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].hide());
+  await app.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0], focused = window.isFocused(); window.hide();
+    // Background macOS test processes have no native focus to lose.
+    if (!focused) window.emit('blur');
+  });
   await poll(async () => (await fs.readFile(file, 'utf8')).includes('离开窗口保存'), 6000); await idle();
   await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].show(); BrowserWindow.getAllWindows()[0].focus(); });
   await settings({ autoSaveInterval: 2, autoSaveOnBlur: false });

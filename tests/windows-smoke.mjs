@@ -1,3 +1,4 @@
+import { readWindows } from './recovery-fixture.cjs';
 import { _electron as electron } from 'playwright';
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
@@ -18,7 +19,14 @@ const tracked = new Set();
 function pass(message) { results.push(message); console.log(`PASS ${message}`); }
 async function poll(check, timeout = 20000) { const deadline = Date.now() + timeout; while (Date.now() < deadline) { if (await check()) return; await new Promise(resolve => setTimeout(resolve, 100)); } throw Error('Timed out waiting for multi-window state'); }
 async function ready(page) { page.setDefaultTimeout(15000); if (!tracked.has(page)) { tracked.add(page); page.on('pageerror', error => errors.push(error.message)); } await page.waitForSelector('#shell[data-ready="true"]'); return page; }
-async function native(page, action) { const win = await app.browserWindow(page); return win.evaluate((win, action) => { if (action === 'focus') { win.show(); win.focus(); } else if (action === 'close') win.close(); else return win.getBounds(); }, action); }
+async function native(page, action) {
+  const win = await app.browserWindow(page);
+  if (action !== 'focus') return win.evaluate((win, action) => action === 'close' ? win.close() : win.getBounds(), action);
+  const id = await win.evaluate(win => { win.show(); win.focus(); return win.id; });
+  // Direct MenuItem.click() does not activate a background macOS test process.
+  // Deliver its focus event when the OS leaves every test window inactive.
+  await app.evaluate(({ BrowserWindow }, id) => { if (!BrowserWindow.getFocusedWindow()) BrowserWindow.fromId(id).emit('focus'); }, id);
+}
 async function idle(page) { await page.waitForFunction(() => !document.body.classList.contains('is-busy')); }
 async function action(page, name) {
   await idle(page);
@@ -37,7 +45,7 @@ async function source(page) { await page.locator('[data-mode="source"]').click()
 async function append(page, value) { await native(page, 'focus'); const editor = await source(page); await editor.click(); await page.keyboard.press(end); await page.keyboard.insertText(value); }
 async function text(page) { return page.locator('#source-editor .cm-line').evaluateAll(lines => lines.map(line => line.textContent).join('\n')); }
 async function tab(page, file) { await page.locator('.document-tab [role="tab"]').evaluateAll((nodes, file) => nodes.find(node => node.title === file).click(), file); await idle(page); }
-async function catalog() { return JSON.parse(await fs.readFile(path.join(profile, 'windows-v1.json'), 'utf8')).windows; }
+async function catalog() { return await readWindows(profile); }
 async function windowId(page) { return page.evaluate(async () => (await window.meki.boot()).windowId); }
 async function active(page) { const id = await windowId(page), record = (await catalog()).find(record => record.id === id); return record.session.documents.find(doc => doc.id === record.session.activeId); }
 async function newWindow(page, command = 'new-window') { const created = app.waitForEvent('window'); await action(page, command); return ready(await created); }
@@ -157,6 +165,7 @@ try {
 
   const filePage = await findPageByPath(a), draftWindow = pair.find(page => page !== filePage);
   await append(filePage, '\nNative menu targets this window'); await setting('MEKI_TEST_SAVE_PATH', path.join(run, 'unexpected.md')); await native(filePage, 'focus');
+  await filePage.waitForFunction(() => document.hasFocus());
   await app.evaluate(({ Menu }) => { Menu.getApplicationMenu().items.find(item => item.label === '文件').submenu.items.find(item => item.label === '保存').click(); });
   await poll(async () => (await fs.readFile(a, 'utf8')).includes('Native menu targets this window'));
   assert.equal((await active(draftWindow)).path, null); assert.equal(await fs.stat(path.join(run, 'unexpected.md')).catch(() => null), null);

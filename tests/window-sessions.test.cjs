@@ -7,6 +7,7 @@ const os = require('node:os');
 const { FileStore, pathKey } = require('../electron/file-store.cjs');
 const { LifecycleStore } = require('../electron/lifecycle-store.cjs');
 const { WindowSessions, validateWindows, MAX_WINDOWS } = require('../electron/window-sessions.cjs');
+const { readWindows } = require('./recovery-fixture.cjs');
 
 const entry = (id, content = id, file = null) => ({ id, name: `${id}.md`, path: file, content, revision: null, dirty: true, mode: 'source', paused: null });
 const session = (...documents) => ({ documents, activeId: documents[0]?.id || null });
@@ -27,6 +28,8 @@ test('window sessions migrate legacy dirty documents and keep a compatible prima
   assert.equal(restored.length, 1); assert.equal(restored[0].session.documents[0].paused, 'recovered');
   assert.equal(restored[0].session.documents[0].content, history.session.documents[0].content);
   await windows.save('main', session(entry('old', 'new text')));
+  assert.equal(history.session.documents[0].content, '\uFEFF---\r\ntitle: 旧稿\r\n---\r\n');
+  await windows.clean(['main']);
   assert.equal(JSON.parse(await fs.readFile(history.sessionPath, 'utf8')).documents[0].content, 'new text');
 });
 
@@ -85,10 +88,11 @@ test('a failed authoritative write preserves the original catalog and in-memory 
   assert.equal(windows.get('main').session.documents[0].id, 'move'); assert.equal(windows.get(target).session, null);
 });
 
-test('a compatibility-copy failure does not turn a committed transfer into an apparent failure', async t => {
+test('a failed legacy checkpoint leaves the authoritative windows and transferred documents recoverable', async t => {
   const { windows, history, store } = await fixture(t); const target = await windows.add(); await windows.save('main', session(entry('move')));
   history.saveSession = async () => { throw new Error('legacy copy unavailable'); };
   await windows.transfer('main', target, 'move');
+  await windows.clean(['main']);
   assert.equal(windows.get(target).session.documents[0].id, 'move'); assert.match(windows.warning, /兼容/);
   const reopened = new WindowSessions(store, history); await reopened.init(); assert.equal(reopened.get(target).session.documents[0].id, 'move');
 });
@@ -97,8 +101,8 @@ test('quit staging leaves originals recoverable until all windows approve and co
   const { windows } = await fixture(t); const second = await windows.add();
   await windows.save('main', session(entry('keep'))); await windows.save(second, session(entry('other')));
   const staged = new Map([['main', session()], [second, session()]]);
-  const before = JSON.parse(await fs.readFile(windows.filename, 'utf8'));
-  assert.equal(before.windows[0].session.documents[0].content, 'keep');
+  const before = await readWindows(windows.store.userData);
+  assert.equal(before[0].session.documents[0].content, 'keep');
   await windows.finishClose(staged);
   assert.ok(windows.records.every(record => record.session.cleanExit && !record.session.documents.length));
 });
@@ -120,8 +124,8 @@ test('corrupt catalogs are backed up before replacement and linked catalogs are 
   await history.saveSession(session(entry('legacy')));
   await fs.writeFile(windows.filename, '{broken');
   const repaired = new WindowSessions(store, history); await repaired.init(); await repaired.startup(false);
-  const backup = (await fs.readdir(store.userData)).find(file => file.startsWith('windows-corrupt-'));
-  assert.equal(await fs.readFile(path.join(store.userData, backup), 'utf8'), '{broken');
+  const backup = (await fs.readdir(store.userData)).find(file => file.startsWith('recovery-corrupt-'));
+  assert.equal(await fs.readFile(path.join(store.userData, backup, 'windows.json'), 'utf8'), '{broken');
   assert.equal(repaired.get('main').session.documents[0].id, 'legacy');
   await fs.unlink(windows.filename); const outside = path.join(root, 'external.json'); await fs.writeFile(outside, '{}'); await fs.link(outside, windows.filename);
   await assert.rejects(new WindowSessions(store, history).init(), /普通文件/); assert.equal(await fs.readFile(outside, 'utf8'), '{}');

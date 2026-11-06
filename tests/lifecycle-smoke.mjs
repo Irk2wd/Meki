@@ -1,3 +1,4 @@
+import { readWindows, readSession } from './recovery-fixture.cjs';
 import { _electron as electron } from 'playwright';
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
@@ -135,7 +136,7 @@ try {
   assert.equal(await page.locator('#source-editor .cm-line').evaluateAll(lines => lines.map(line => line.textContent).join('\n')), restored);
   assert.equal(await page.locator('#dirty-dot').isVisible(), true); assert.match(await page.locator('#document-state').innerText(), /手动保存/);
   await page.waitForTimeout(11000); assert.deepEqual(await fs.readFile(b), diskB);
-  const historical = JSON.parse(await fs.readFile(path.join(profile, 'session.json'), 'utf8')).documents.find(doc => doc.path === b);
+  const historical = (await readSession(profile)).documents.find(doc => doc.path === b);
   const blocked = await page.evaluate(doc => window.meki.autoSaveDocument({ ...doc, tabId: doc.id }), historical);
   assert.equal(blocked.status, 'paused'); assert.deepEqual(await fs.readFile(b), diskB);
   await action('save'); assert.equal(await fs.readFile(b, 'utf8'), restored);
@@ -150,7 +151,7 @@ try {
   await setting('MEKI_TEST_TRASH', 'confirm'); await menu(moved, 'trash');
   assert.equal(await fs.stat(moved).catch(() => null), null); assert.equal(await page.locator('.document-tab .tab-dirty.visible').count(), 2);
   assert.equal(await page.locator('#document-name').getAttribute('title'), '尚未保存到文件');
-  const session = JSON.parse(await fs.readFile(path.join(profile, 'session.json'), 'utf8'));
+  const session = (await readSession(profile));
   assert.ok(session.documents.every(doc => doc.path === null && doc.dirty));
   pass('workspace parent rename migrates every tab and history; trash preserves all open buffers as unsaved documents');
 
@@ -165,7 +166,7 @@ try {
   while (Date.now() < typingUntil) {
     await page.keyboard.insertText('x');
     await page.waitForTimeout(180);
-    const saved = JSON.parse(await fs.readFile(path.join(profile, 'windows-v1.json'), 'utf8'));
+    const saved = { windows: await readWindows(profile) };
     const content = saved.windows.flatMap(record => record.session?.documents || []).find(doc => doc.content.includes('Continuous recovery '))?.content || '';
     if (content.includes('Continuous recovery x')) persistedDuringTyping = content;
   }

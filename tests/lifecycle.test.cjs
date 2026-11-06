@@ -70,6 +70,17 @@ test('ordered session writes and workspace rename/trash retain every unsaved buf
   assert.equal(lifecycle.session.documents[0].path, null); assert.equal(lifecycle.session.documents[0].revision, null); assert.equal(lifecycle.session.documents[0].dirty, true);
 });
 
+test('a clean compatibility checkpoint records its final close state in one atomic write', async t => {
+  const { lifecycle, entry } = await fixture(t), rename = fs.rename;
+  let writes = 0;
+  fs.rename = async (from, to) => { if (to === lifecycle.sessionPath) writes++; return rename(from, to); };
+  t.after(() => { fs.rename = rename; });
+  await lifecycle.saveSession({ documents: [entry], activeId: entry.id }, true);
+  assert.equal(writes, 1);
+  assert.equal(JSON.parse(await fs.readFile(lifecycle.sessionPath, 'utf8')).cleanExit, true);
+  await assert.rejects(lifecycle.saveSession({ documents: [entry], activeId: entry.id }, 'true'), /close state/);
+});
+
 test('unreadable sessions are backed up byte-for-byte before replacement; backup failure retains the original', async t => {
   const { store, entry } = await fixture(t);
   const sessionPath = path.join(store.userData, 'session.json'), corrupted = Buffer.from('{"documents":["damaged but recoverable α');

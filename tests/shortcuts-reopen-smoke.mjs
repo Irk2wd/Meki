@@ -1,3 +1,4 @@
+import { readWindows } from './recovery-fixture.cjs';
 import { _electron as electron } from 'playwright';
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
@@ -18,7 +19,7 @@ async function focus(target = page) { await (await app.browserWindow(target)).ev
 async function idle(target = page) { await target.waitForFunction(() => !document.body.classList.contains('is-busy')); }
 async function action(name, target = page) { await idle(target); await target.locator(name === 'close-tab' ? '.document-tab.active .close-document-tab' : `[data-action="${name}"]`).first().evaluate(node => node.click()); }
 async function setting(name, value) { await app.evaluate((_electron, { name, value }) => { process.env[name] = value; }, { name, value }); }
-async function active(target = page) { const id = await target.evaluate(async () => (await window.meki.boot()).windowId); const records = JSON.parse(await fs.readFile(path.join(env.MEKI_USER_DATA, 'windows-v1.json'), 'utf8')).windows; const session = records.find(item => item.id === id)?.session; return session?.documents.find(item => item.id === session.activeId); }
+async function active(target = page) { const id = await target.evaluate(async () => (await window.meki.boot()).windowId); const records = await readWindows(env.MEKI_USER_DATA); const session = records.find(item => item.id === id)?.session; return session?.documents.find(item => item.id === session.activeId); }
 async function launch() { app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? [] : [root], env, timeout: 30000 }); page = await ready(await app.firstWindow()); await focus(); return page; }
 async function stop() { if (app) { await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await app.close().catch(() => {}); app = null; } }
 async function tabs(target = page) { return target.locator('.document-tab').count(); }
@@ -163,7 +164,7 @@ try {
   await closeTab(); assert.equal(await page.locator(`.document-tab [role="tab"][title="${faultFile.replaceAll('\\', '\\\\')}"]`).count(), 0);
   const claimant = await newWindow(); await open(faultFile, claimant); assert.equal((await active(claimant)).path, faultFile);
   await closeTab(claimant); await focus(); await reopen(); assert.equal((await active()).path, faultFile);
-  const records = JSON.parse(await fs.readFile(path.join(env.MEKI_USER_DATA, 'windows-v1.json'), 'utf8')).windows;
+  const records = await readWindows(env.MEKI_USER_DATA);
   assert.equal(records.flatMap(record => record.session?.documents || []).filter(doc => doc.path === faultFile).length, 1);
   assert.equal((await active(claimant)).path, null); await fs.rmdir(legacyDraft);
   pass('legacy-draft cleanup failure cannot roll back committed close/reopen UI or desynchronize single-file ownership');

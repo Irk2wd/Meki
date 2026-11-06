@@ -1,3 +1,4 @@
+import { readSession } from './recovery-fixture.cjs';
 import { _electron as electron } from 'playwright';
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
@@ -37,7 +38,7 @@ const mod = process.platform === 'darwin' ? 'Meta' : 'Control', redo = process.p
 let app, page;
 const pass = name => { results.push(name); console.log(`PASS ${name}`); };
 async function poll(check) { const deadline = Date.now() + 15000; while (Date.now() < deadline) { const value = await check(); if (value) return value; await new Promise(resolve => setTimeout(resolve, 60)); } throw new Error('Timed out waiting for image operation'); }
-async function session() { try { return JSON.parse(await fs.readFile(path.join(profile, 'windows-v1.json'), 'utf8')).windows[0].session; } catch { return null; } }
+async function session() { try { return await readSession(profile); } catch { return null; } }
 async function content(predicate) { return poll(async () => { const value = (await session())?.documents.find(item => item.path === doc)?.content; return value !== undefined && predicate(value) ? value : null; }); }
 async function idle() { await page.waitForFunction(() => !document.body.classList.contains('is-busy')); }
 async function action(name) { await page.locator(`[data-action="${name}"]`).first().evaluate(button => button.click()); }
@@ -75,7 +76,7 @@ try {
   await action('image-hosting'); assert.equal(await page.locator('#image-directory').inputValue(), 'images/${filename}'); await page.locator('[data-host="close"]').click();
   pass('image directory preference is persisted without enabling automatic uploads');
 
-  // The compatibility copy can fail independently of the authoritative session.
+  // Editing must not rewrite the full compatibility copy.
   await app.evaluate(() => {
     const fs = process.getBuiltinModule('node:fs/promises'); globalThis.imageTestRename = fs.rename; globalThis.imageLegacyFailures = 0;
     fs.rename = async (...args) => {
@@ -91,12 +92,12 @@ try {
   assert.deepEqual(await fs.readFile(path.join(run, 'images/copies/副本.png')), png);
   assert.deepEqual(await fs.readFile(picture), png); assert.equal(await fs.readFile(doc, 'utf8'), original);
   assert.equal((await session()).documents.find(item => item.path === doc).paused, 'attachments');
-  assert.ok(await app.evaluate(() => globalThis.imageLegacyFailures > 0));
+  assert.equal(await app.evaluate(() => globalThis.imageLegacyFailures), 0);
   await app.evaluate(() => { process.getBuiltinModule('node:fs/promises').rename = globalThis.imageTestRename; delete globalThis.imageTestRename; delete globalThis.imageLegacyFailures; });
   await undo(); await content(text => !text.includes('images/copies/'));
   await page.keyboard.press(redo); copied = await content(text => text.includes('images/copies/'));
   assert.equal((copied.match(/images\/copies\//g) || []).length, 2);
-  pass('right-click named copy durably updates matching references despite a failed legacy copy, preserves originals and supports undo/redo');
+  pass('right-click named copy durably updates matching references without writing a legacy copy, preserves originals and supports undo/redo');
 
   await imageAction('其他', 'upload'); await page.locator('#image-upload-dialog').waitFor({ state: 'visible' });
   assert.match(await page.locator('#image-upload-summary').innerText(), /1 张不同图片/);

@@ -1,3 +1,4 @@
+import { readSession } from './recovery-fixture.cjs';
 import { _electron as electron } from 'playwright';
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
@@ -39,7 +40,7 @@ const mod = process.platform === 'darwin' ? 'Meta' : 'Control', end = process.pl
 let app, page; const results = [], errors = [];
 const pass = name => { results.push(name); console.log(`PASS ${name}`); };
 async function poll(check) { const deadline = Date.now() + 15000; while (Date.now() < deadline) { const result = await check(); if (result) return result; await new Promise(resolve => setTimeout(resolve, 60)); } throw new Error('Timed out waiting for image hosting result'); }
-async function session() { try { return JSON.parse(await fs.readFile(path.join(profile, 'session.json'), 'utf8')); } catch { return null; } }
+async function session() { try { return await readSession(profile); } catch { return null; } }
 async function content(file, predicate) { return poll(async () => { const value = (await session())?.documents.find(item => item.path === file)?.content; return value !== undefined && predicate(value) ? value : null; }); }
 async function idle() { await page.waitForFunction(() => !document.body.classList.contains('is-busy')); }
 async function action(name) { await page.locator(`[data-action="${name}"]`).first().evaluate(button => button.click()); }

@@ -1,3 +1,4 @@
+import { readWindows } from './recovery-fixture.cjs';
 import { _electron as electron } from 'playwright';
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
@@ -25,7 +26,7 @@ async function launch(args = []) {
 async function stop() { if (!app) return; await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await app.close().catch(() => {}); app = null; }
 async function action(name, target = page) { await target.waitForFunction(() => !document.body.classList.contains('is-busy')); await target.locator(`[data-action="${name}"]`).first().evaluate(node => node.click()); }
 async function buffer() { return page.locator('#source-editor .cm-line').evaluateAll(lines => lines.map(line => line.textContent).join('\n')); }
-async function session() { return JSON.parse(await fs.readFile(path.join(profile, 'windows-v1.json'), 'utf8')); }
+async function session() { return { windows: await readWindows(profile) }; }
 async function nativeLabels() { return app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.map(item => item.label)); }
 async function language(value, target = page) {
   if (!await target.locator('#style-panel').isVisible()) await action('style', target);

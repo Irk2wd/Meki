@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
+import { readWindows } from './recovery-fixture.cjs';
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -180,7 +181,11 @@ try {
   record('empty YAML survives visual editing');
   await rich.locator(':scope > p').last().click(); await page.keyboard.press(documentEndKey); await page.keyboard.insertText('未保存恢复内容');
   await page.waitForFunction(() => document.querySelector('.ProseMirror')?.textContent.includes('未保存恢复内容'));
-  await pollFile(path.join(env.MEKI_USER_DATA, 'windows-v1.json'), bytes => JSON.parse(bytes.toString('utf8')).windows.some(window => window.session.documents.some(document => document.dirty && document.content.includes('未保存恢复内容'))));
+  const recoveryDeadline = Date.now() + 10000;
+  while (!(await readWindows(env.MEKI_USER_DATA)).some(window => window.session?.documents.some(document => document.dirty && document.content.includes('未保存恢复内容')))) {
+    assert.ok(Date.now() < recoveryDeadline, 'edited text reached the durable recovery store');
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
   await exit();
   page = await launch();
   assert.equal(await page.locator('#recovery-banner').isVisible(), true);
