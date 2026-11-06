@@ -71,10 +71,15 @@ document.querySelector('#app')!.innerHTML = `
   <label class="setting-row">${ht("字体")}<select id="font-family"><option value="serif">${ht("人文衬线")}</option><option value="sans">${ht("清晰无衬线")}</option></select></label>
   <label class="setting-row">${ht("本机字体")}<input id="custom-font" placeholder="${ht("使用默认字体")}" maxlength="128" aria-label="${ht("本机字体名称")}"></label>
   <div class="setting-row"><label for="font-size">${ht("字号")}</label><input id="font-size" type="range" min="14" max="24" step="1"><output id="font-size-value">18</output></div>
-  <label class="setting-row">${ht("正文宽度")}<select id="line-width"><option value="640">${ht("紧凑 · 640")}</option><option value="760">${ht("适中 · 760")}</option><option value="900">${ht("舒展 · 900")}</option></select></label>
+  <label class="setting-row">${ht("正文宽度")}<select id="line-width"><option value="640">${ht("紧凑 · 640")}</option><option value="760">${ht("适中 · 760")}</option><option value="900">${ht("舒展 · 900")}</option><option value="1040">${ht("宽版 · 1040")}</option><option value="1200">${ht("超宽 · 1200")}</option></select></label>
   <label class="setting-row">${ht("公式编号")}<select id="math-numbering"><option value="none">${ht("仅手动编号")}</option><option value="ams">${ht("AMS 环境自动编号")}</option><option value="all">${ht("所有独立公式自动编号")}</option></select></label>
   <label class="setting-row">${ht("物理公式宏")}<input id="math-physics" type="checkbox" aria-label="${ht("启用物理公式宏")}"></label>
   <button class="theme-edit-button" data-action="custom-theme">${ht("自定义正文 CSS")} <span>${ht("编辑或导入 →")}</span></button>
+  <details class="layout-settings">
+    <summary>${ht("高级布局")}</summary>
+    <label class="setting-row"><span>${ht("取消正文宽度上限")}</span><input id="unlimited-width" type="checkbox" aria-describedby="unlimited-width-note"></label>
+    <p class="setting-note" id="unlimited-width-note">${ht("使用窗口可用宽度并保留留白。仅影响编辑区域，不改变导出宽度。")}</p>
+  </details>
   <p class="setting-note">${ht("排版设置同时用于编辑与导出。自定义字体需在阅读设备上安装。")}</p>
 </div>
 <div class="popover export-panel" id="export-panel" hidden><span class="menu-label">${ht("导出当前文稿")}</span><button data-action="export-options">${icon('export')}<span>${ht("格式与导出设置…")}<small>${ht("PDF 纸张、PNG、Word、EPUB、无样式 HTML")}</small></span></button><button data-action="export-html">${icon('source')}<span>${ht("快速导出 HTML")}<small>${ht("包含排版、公式、图表与本地图片")}</small></span></button><button data-action="export-pdf">${icon('page')}<span>${ht("快速导出 PDF")}<small>${ht("A4 纵向 · 默认边距")}</small></span></button><button data-action="import-document">${icon('open')}<span>${ht("导入 Word / HTML…")}<small>${ht("转换为新 Markdown 文稿，原文件保留")}</small></span></button><button data-action="saveAs">${icon('save')}<span>${ht("Markdown 另存为")}<small>${ht("可在任何文本编辑器中打开")}</small></span></button></div>
@@ -274,6 +279,7 @@ function applySettings() {
   document.documentElement.dataset.font = settings.font;
   document.documentElement.style.setProperty('--writing-size', `${settings.fontSize}px`);
   document.documentElement.style.setProperty('--line-width', `${settings.lineWidth}px`);
+  document.body.classList.toggle('unlimited-width', settings.unlimitedWidth);
   document.body.classList.toggle('focus-mode', settings.focus);
   document.body.classList.toggle('sidebar-hidden', !settings.sidebar);
   el<HTMLSelectElement>('#font-family').value = settings.font;
@@ -283,6 +289,8 @@ function applySettings() {
   el<HTMLInputElement>('#font-size').value = String(settings.fontSize);
   el('#font-size-value').textContent = String(settings.fontSize);
   el<HTMLSelectElement>('#line-width').value = String(settings.lineWidth);
+  el<HTMLSelectElement>('#line-width').disabled = settings.unlimitedWidth;
+  el<HTMLInputElement>('#unlimited-width').checked = settings.unlimitedWidth;
   el('#font-status').textContent = `${settings.fontSize} px`;
   document.querySelectorAll<HTMLButtonElement>('button[data-theme]').forEach(button => { const selected = button.dataset.theme === settings.theme; button.classList.toggle('active', selected); button.setAttribute('aria-pressed', String(selected)); });
   document.querySelector('[data-action="focus"]')?.classList.toggle('active', settings.focus);
@@ -542,6 +550,7 @@ el<HTMLInputElement>('#custom-font').addEventListener('change', event => {
 el<HTMLSelectElement>('#math-numbering').addEventListener('change', event => changeSettings({ mathNumbering: (event.target as HTMLSelectElement).value as Settings['mathNumbering'] }));
 el<HTMLInputElement>('#math-physics').addEventListener('change', event => changeSettings({ mathPhysics: (event.target as HTMLInputElement).checked }));
 el<HTMLSelectElement>('#line-width').addEventListener('change', event => changeSettings({ lineWidth: Number((event.target as HTMLSelectElement).value) }));
+el<HTMLInputElement>('#unlimited-width').addEventListener('change', event => changeSettings({ unlimitedWidth: (event.target as HTMLInputElement).checked }));
 el<HTMLSelectElement>('#heading-format').addEventListener('change', event => { editor.format((event.target as HTMLSelectElement).value); });
 el('#math-input').addEventListener('input', updateMathPreview);
 el('#math-kind').addEventListener('change', updateMathPreview);

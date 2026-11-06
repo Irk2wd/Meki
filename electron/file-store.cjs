@@ -22,7 +22,7 @@ const DOCUMENT_EXTENSIONS = new Set(['.md', '.markdown', '.mdown', '.mkd', '.mkd
 const DEFAULT_SETTINGS = Object.freeze({
   locale: 'zh-CN',
   shortcuts: Object.freeze({}),
-  theme: 'paper', font: 'serif', fontSize: 18, lineWidth: 760, focus: false, sidebar: true,
+  theme: 'paper', font: 'serif', fontSize: 18, lineWidth: 1040, unlimitedWidth: false, focus: false, sidebar: true,
   customCss: '', fontFamily: '', mathNumbering: 'none', mathPhysics: false,
   typewriter: false, paragraphFocus: false, spellcheck: false,
   typingAutoPair: 'default', typingMarkdownPairs: false, typingSmartQuotes: false, typingSmartDashes: false,
@@ -112,7 +112,7 @@ function validateSettings(patch, base = DEFAULT_SETTINGS) {
       : ['typingMarkdownPairs', 'typingSmartQuotes', 'typingSmartDashes'].includes(key) ? typeof value === 'boolean'
       : key === 'autoSaveInterval' ? Number.isInteger(value) && value >= 2 && value <= 600
       : key === 'snapshotInterval' ? Number.isInteger(value) && value >= 10 && value <= 600
-      : ['autoSaveOnBlur', 'autoSnapshot'].includes(key) ? typeof value === 'boolean'
+      : ['autoSaveOnBlur', 'autoSnapshot', 'unlimitedWidth'].includes(key) ? typeof value === 'boolean'
       : key === 'picgoPort' ? Number.isInteger(value) && value >= 1 && value <= 65535
       : key === 'imageAutoUpload' ? typeof value === 'boolean'
       : key === 'imageDirectoryBase' ? ['document', 'workspace'].includes(value)

@@ -16,6 +16,7 @@ export interface Settings {
   font: 'serif' | 'sans';
   fontSize: number;
   lineWidth: number;
+  unlimitedWidth: boolean;
   focus: boolean;
   sidebar: boolean;
   customCss: string;

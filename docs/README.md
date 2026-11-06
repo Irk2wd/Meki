@@ -10,6 +10,6 @@
 | [Markdown 兼容性](markdown-compatibility.md) | 支持的语法、原文保留与视觉编辑的转换边界。 |
 | [PicGo 图床](image-hosting.md) | 连接 PicGo、上传图片、设置附件目录与单图操作。 |
 | [应用内更新](updates.md#检查与安装) | 检查版本、下载、重启及轻量更新。 |
-| [1.1.0 版本说明](releases/1.1.0.md) | 当前版本的新功能、体验改进与升级说明。 |
+| [1.1.1 版本说明](releases/1.1.1.md) | 当前版本的新功能、体验改进与升级说明。 |
 
 第三方组件的许可信息见 [许可说明](../licenses/README.md)。安装包的可用平台与安装说明，以 [GitHub Releases](https://github.com/Irk2wd/Meki/releases) 中的实际发布为准。

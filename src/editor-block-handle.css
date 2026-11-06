@@ -1,5 +1,3 @@
-/* Keep room for both controls, including at narrow window widths. */
-.document-scroll .editor-host { padding-left: 60px; }
 .milkdown .milkdown-block-handle {
   opacity: 0;
   transition: opacity 180ms cubic-bezier(.2,.65,.3,1);

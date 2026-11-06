@@ -7,6 +7,10 @@ html[lang="en"] .open-button span { white-space:nowrap; }
 .theme-edit-button span { color:var(--soft); font-size:10px; }
 .theme-edit-button:hover { background:none; color:var(--accent); }
 .style-panel .setting-note { border:0; padding:0; margin:15px 0 0; }
+.layout-settings { border-top:1px solid var(--border); margin-top:18px; padding-top:14px; }
+.layout-settings summary { cursor:pointer; color:var(--soft); font-size:11px; }
+.layout-settings .setting-row { justify-content:space-between; margin-top:14px; }
+.layout-settings .setting-note { margin-top:10px; }
 #theme-dialog { width:min(670px,92vw); }
 #theme-dialog .dialog-heading { margin-bottom:14px; }
 .theme-help { color:var(--soft); font-size:11px; line-height:1.9; margin:0 0 18px; }

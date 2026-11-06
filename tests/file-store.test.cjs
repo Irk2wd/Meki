@@ -202,6 +202,20 @@ test('rapid independent settings changes retain both updates', async (t) => {
   assert.equal(reopened.metadata.settings.fontSize, 21);
 });
 
+test('unlimited editor width defaults off, persists, and retains the limited width preference', async (t) => {
+  const { userData, store } = await fixture(t);
+  assert.equal(store.metadata.settings.unlimitedWidth, false);
+  await store.updateSettings({ lineWidth: 900, unlimitedWidth: true });
+  const reopened = new FileStore(userData);
+  await reopened.init();
+  assert.equal(reopened.metadata.settings.unlimitedWidth, true);
+  assert.equal(reopened.metadata.settings.lineWidth, 900);
+  const settings = await reopened.updateSettings({ unlimitedWidth: false });
+  assert.equal(settings.unlimitedWidth, false);
+  assert.equal(settings.lineWidth, 900);
+  for (const value of [1, 'true', null]) assert.throws(() => validateSettings({ unlimitedWidth: value }), /Invalid setting/);
+});
+
 test('0.1 profiles receive new defaults without changing their existing appearance', async (t) => {
   const { userData } = await fixture(t);
   const legacySettings = { theme: 'linen', font: 'sans', fontSize: 22, lineWidth: 900, focus: true, sidebar: false };

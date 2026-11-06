@@ -20,5 +20,8 @@
 .pane-drag-label { position:fixed; pointer-events:none; z-index:181; border:1px solid var(--border); border-radius:6px; padding:8px 12px; background:var(--surface); color:var(--text); box-shadow:var(--shadow); font:12px var(--ui); }
 .dragging-tab,.resizing-panes { user-select:none; }
 .dragging-tab * { cursor:grabbing!important; }
-@container (max-width:560px) { .editor-host { padding:26px 25px 70px 45px; } .document-scroll .editor-host { padding-left:45px; } }
+/* Size gutters per pane, retaining room for the plus and drag controls. */
+@container (max-width:900px) { .editor-pane .editor-host { --editor-gutter-start:56px; --editor-gutter-end:36px; } }
+@container (max-width:560px) { .editor-pane .editor-host { --editor-gutter-end:25px; padding-top:26px; padding-bottom:70px; } }
+@media screen { .unlimited-width .editor-host,.unlimited-width .source-editor .cm-editor { max-width:none; } }
 @media print { #editor-workspace,.editor-layout,.editor-pane,.pane-body,.editor-split { display:block!important; height:auto!important; overflow:visible!important; } .pane-tabs,.pane-divider,.editor-pane:not(.active-pane) { display:none!important; } }

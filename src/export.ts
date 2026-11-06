@@ -11,7 +11,7 @@ import { codeDefaults } from './code-options';
 import { typingDefaults } from './typing-rules';
 import { highlightExportCode } from './code-highlight';
 
-const defaults: Settings = { locale: 'zh-CN', theme: 'paper', font: 'serif', fontSize: 18, lineWidth: 780, focus: false, sidebar: true, customCss: '', fontFamily: '', mathNumbering: 'none', mathPhysics: false, typewriter: false, paragraphFocus: false, spellcheck: false, autoSave: false, autoSaveInterval: 30, autoSaveOnBlur: true, autoSnapshot: true, snapshotInterval: 60, reopenSession: true, codeLineNumbers: true, headingNumbering: false, picgoPort: 36677, imageAutoUpload: false, imageDirectoryBase: 'document', imageDirectory: '${filename}.assets', ...codeDefaults, ...typingDefaults };
+const defaults: Settings = { locale: 'zh-CN', theme: 'paper', font: 'serif', fontSize: 18, lineWidth: 1040, unlimitedWidth: false, focus: false, sidebar: true, customCss: '', fontFamily: '', mathNumbering: 'none', mathPhysics: false, typewriter: false, paragraphFocus: false, spellcheck: false, autoSave: false, autoSaveInterval: 30, autoSaveOnBlur: true, autoSnapshot: true, snapshotInterval: 60, reopenSession: true, codeLineNumbers: true, headingNumbering: false, picgoPort: 36677, imageAutoUpload: false, imageDirectoryBase: 'document', imageDirectory: '${filename}.assets', ...codeDefaults, ...typingDefaults };
 
 export async function exportHTML(markdown: string, name: string, documentPath: string | null, settings: Settings = defaults, wordMath = false) {
   const parsed = renderMarkdown(markdown, settings);

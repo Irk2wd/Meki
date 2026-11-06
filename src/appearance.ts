@@ -68,7 +68,7 @@ export function writingFont(settings: Pick<Settings, 'font' | 'fontFamily'>): st
   return family && /^[\p{L}\p{N} _.-]{1,128}$/u.test(family) ? `${JSON.stringify(family)},${fallback}` : fallback;
 }
 
-export const appearanceDefaults = { theme: 'paper', font: 'serif', fontSize: 18, lineWidth: 760, customCss: '', fontFamily: '' } as const;
+export const appearanceDefaults = { theme: 'paper', font: 'serif', fontSize: 18, lineWidth: 1040, customCss: '', fontFamily: '' } as const;
 type Appearance = Pick<Settings, 'theme' | 'font' | 'fontSize' | 'lineWidth' | 'customCss' | 'fontFamily'> & Partial<CodeOptions>;
 
 /** Shared document appearance used by the editor, standalone HTML and printed PDF. */
