@@ -11,6 +11,6 @@
 
 .brand { gap:8px }
 .brand .brand-mark { width:32px; height:32px; display:grid; place-items:center; border-radius:9px }
-.brand-mark svg { width:26px; height:26px }
+.brand-mark svg { width:28px; height:28px }
 .brand-wordmark { display:block; width:66px; height:25px; flex-shrink:0; color:var(--text) }
 .brand-wordmark svg { display:block; width:100%; height:100% }
