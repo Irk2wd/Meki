@@ -63,6 +63,65 @@ test('public release download stages verified code without activating it or send
   assert.equal(runtime.readState().current, null, 'validation alone must not activate an update');
 });
 
+test('automatic checks run after every startup, repeat on schedule, stay quiet on failure and never download payloads', async t => {
+  const { runtime, remote, pair } = await connected(t);
+  let now = 1000000;
+  const queued = [], timers = { setTimeout: (callback, delay) => { const timer = { callback, delay }; queued.push(timer); return timer; }, clearTimeout: () => {} };
+  const network = new GithubUpdates({ testOrigin: remote.origin });
+  const service = new UpdateService({ runtime, network, clock: () => now, timers });
+  service.startAutomatic({ delay: 15, interval: 600 });
+  assert.equal(remote.requests.length, 0); assert.equal(queued.at(-1).delay, 15);
+  await service.checkAutomatically();
+  assert.equal(service.snapshot().status, 'available'); assert.equal(service.snapshot().notificationVersion, remote.current.manifest.version);
+  const count = remote.requests.length;
+  assert.equal(remote.requests.some(request => request.path.endsWith('/assets/2')), false);
+  await service.checkAutomatically(); assert.equal(remote.requests.length, count);
+  remote.current = fixture(pair, { version: '0.12.1' });
+  const reopened = new UpdateService({ runtime, network, clock: () => now, timers });
+  reopened.startAutomatic({ delay: 15, interval: 600 }); await reopened.checkAutomatically();
+  assert.ok(remote.requests.length > count, 'every launch checks again even if the previous launch just checked');
+  assert.equal(reopened.snapshot().notificationVersion, '0.12.1');
+  const restartedCount = remote.requests.length;
+  await reopened.checkAutomatically(); assert.equal(remote.requests.length, restartedCount, 'periodic checks still wait for the interval');
+  now += 601; remote.errorStatus = 503;
+  await reopened.checkAutomatically();
+  assert.equal(reopened.snapshot().status, 'error'); assert.equal(reopened.snapshot().notificationVersion, null);
+  service.stopAutomatic(); reopened.stopAutomatic();
+});
+
+test('notification dismissal and opt-out persist, while a later release can notify again', async t => {
+  const { service, runtime, remote, pair } = await connected(t);
+  await service.check(); const first = service.snapshot().latestVersion;
+  service.dismissNotification('invalid'); assert.equal(service.snapshot().notificationVersion, first);
+  service.dismissNotification(first); assert.equal(service.snapshot().notificationVersion, null);
+  const reopened = new UpdateService({ runtime, network: new GithubUpdates({ testOrigin: remote.origin }) });
+  await reopened.check(); assert.equal(reopened.snapshot().notificationVersion, null);
+  remote.current = fixture(pair, { version: '0.12.9' });
+  await reopened.check(); assert.equal(reopened.snapshot().notificationVersion, '0.12.9');
+  reopened.setAutomatic(false); assert.equal(reopened.snapshot().notificationVersion, null);
+  const disabled = new UpdateService({ runtime, network: new GithubUpdates({ testOrigin: remote.origin }) });
+  assert.equal(disabled.snapshot().automatic, false);
+  const count = remote.requests.length;
+  disabled.startAutomatic(); await disabled.checkAutomatically(); assert.equal(remote.requests.length, count);
+  await disabled.check(); assert.equal(disabled.snapshot().status, 'available', 'manual checks still work after opting out');
+  assert.equal(disabled.snapshot().notificationVersion, null);
+  assert.throws(() => disabled.setAutomatic('true'), /设置无效/); disabled.stopAutomatic();
+});
+
+test('automatic polling never replaces a busy download or a verified ready update', async t => {
+  const { service, remote } = await connected(t);
+  await service.check(); service.startAutomatic({ delay: 10000, interval: 1 });
+  t.after(() => service.stopAutomatic());
+  remote.holdDownloads = true;
+  const downloading = service.download();
+  await service.checkAutomatically(); assert.equal(service.snapshot().status, 'downloading');
+  service.cancel(); await downloading; remote.holdDownloads = false;
+  await service.download();
+  const readyCount = remote.requests.length;
+  await service.checkAutomatically(); assert.equal(service.snapshot().status, 'ready'); assert.equal(remote.requests.length, readyCount);
+  assert.equal(remote.requests.filter(request => request.path.endsWith('/releases/latest')).length, 1);
+});
+
 test('untrusted redirects are rejected before following them', async t => {
   const { service, remote } = await connected(t); remote.redirect = 'https://example.invalid/token-leak';
   const state = await service.check(); assert.equal(state.status, 'error'); assert.match(state.message, /下载地址/);

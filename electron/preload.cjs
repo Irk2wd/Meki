@@ -7,6 +7,8 @@ const invoke = (method, ...args) => ipcRenderer.invoke(`meki:${method}`, ...args
 contextBridge.exposeInMainWorld('meki', Object.freeze({
   updateState: () => invoke('update-state'),
   checkUpdate: () => invoke('check-update'),
+  setAutomaticUpdates: enabled => invoke('set-automatic-updates', enabled),
+  dismissUpdateNotification: version => invoke('dismiss-update-notification', version),
   downloadUpdate: () => invoke('download-update'),
   cancelUpdate: () => invoke('cancel-update'),
   applyUpdate: () => invoke('apply-update'),

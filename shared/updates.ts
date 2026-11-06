@@ -9,4 +9,6 @@ export interface UpdateState {
   downloaded: number;
   total: number;
   message: string;
+  automatic: boolean;
+  notificationVersion: string | null;
 }

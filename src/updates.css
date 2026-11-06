@@ -13,3 +13,14 @@
 #update-notes{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.8 var(--ui);max-height:190px;overflow:auto}
 .sidebar-bottom .update-entry{font-size:10px;color:var(--soft);margin-left:auto;white-space:nowrap}
 .sidebar-bottom .update-entry+.icon-button{margin-left:0}
+.update-automatic { display:flex; align-items:center; gap:8px; margin:18px 0 0; color:var(--soft); font-size:12px }
+.update-automatic input { margin:0 }
+#update-notice { position:fixed; z-index:90; right:18px; bottom:48px; width:300px; max-width:calc(100vw - 32px); padding:14px 16px; border:1px solid var(--border); border-radius:11px; background:var(--surface); color:var(--text); box-shadow:var(--shadow); font:12px/1.6 var(--ui); animation:update-notice-enter .18s ease-out both }
+.update-notice-heading { display:flex; align-items:flex-start; gap:12px; justify-content:space-between }
+.update-notice-heading strong { min-width:0; font-size:13px; font-weight:600; overflow-wrap:anywhere }
+.update-notice-heading button { flex-shrink:0; width:24px; height:24px; margin:-4px -7px 0 0; padding:0; border-radius:5px; font-size:18px; color:var(--soft); line-height:24px }
+#update-notice p { margin:6px 0 12px; color:var(--soft); font-size:11px }
+#update-notice > button { padding:6px 12px; font-size:11px }
+@keyframes update-notice-enter { from { opacity:0; transform:translateY(5px) } to { opacity:1; transform:translateY(0) } }
+@media (prefers-reduced-motion:reduce) { #update-notice { animation:none } }
+@media print { #update-notice { display:none!important } }

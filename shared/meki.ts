@@ -94,6 +94,8 @@ export interface BootState {
 export interface MekiAPI {
   updateState(): Promise<UpdateState>;
   checkUpdate(): Promise<UpdateState>;
+  setAutomaticUpdates(enabled: boolean): Promise<UpdateState>;
+  dismissUpdateNotification(version: string): Promise<UpdateState>;
   downloadUpdate(): Promise<UpdateState>;
   cancelUpdate(): Promise<UpdateState>;
   applyUpdate(): Promise<void>;

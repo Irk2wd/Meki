@@ -1302,5 +1302,12 @@
   "恢复内容校验失败。": "Recovery content verification failed.",
   "无法识别恢复记录格式。": "Unrecognized recovery record format.",
   "恢复记录内容超过容量限制。": "Recovery contents exceed the storage limit.",
-  "恢复记录索引超过容量限制。": "The recovery catalog exceeds the storage limit."
+  "恢复记录索引超过容量限制。": "The recovery catalog exceeds the storage limit.",
+  "自动更新提醒设置无效。": "Invalid automatic update notification setting.",
+  "自动检查更新并提醒": "Check for updates automatically and notify me",
+  "启动后检查一次，此后每 6 小时检查。不会自动下载或安装。": "Checks once after startup, then every 6 hours. Updates are never downloaded or installed automatically.",
+  "关闭此版本提醒": "Dismiss this version notification",
+  "有新版本可用，查看说明后再决定更新。": "A new version is available. Read what’s new and update when you’re ready.",
+  "查看更新": "View update",
+  "Meki {0} 已发布": "Meki {0} is available"
 }

@@ -375,6 +375,8 @@ function registerIpc() {
   const updater = () => { if (!updates) throw new Error(t("更新缓存不可用，请检查应用数据目录。")); return updates; };
   register('update-state', () => updater().snapshot());
   register('check-update', () => updater().check());
+  register('set-automatic-updates', enabled => updater().setAutomatic(enabled));
+  register('dismiss-update-notification', version => updater().dismissNotification(version));
   register('download-update', () => updater().download());
   register('cancel-update', () => updater().cancel());
   register('apply-update', async () => {
