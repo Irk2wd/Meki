@@ -60,7 +60,7 @@ jobs:
           existing = subprocess.run(['gh', 'release', 'view', tag, '--json', 'isDraft'], capture_output=True, text=True)
           if existing.returncode == 0 and not json.loads(existing.stdout)['isDraft']:
               with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-                  output.write('already_published=true\n')
+                  output.write('skip_release=true\n')
               print(tag + ' is already published; no files will be changed.')
               raise SystemExit(0)
           actual = subprocess.check_output(['git', 'rev-parse', 'refs/tags/' + tag + '^{commit}'], text=True).strip()
@@ -71,7 +71,11 @@ jobs:
           if not run:
               runs = gh('run', 'list', '--workflow', 'ci.yml', '--event', 'push', '--branch', tag,
                         '--commit', commit, '--status', 'success', '--limit', '1', '--json', 'databaseId')
-              assert runs, 'No successful tagged installer validation exists'
+              if not runs:
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                      output.write('skip_release=true\n')
+                  print('Waiting for successful tagged installer validation before publishing.')
+                  raise SystemExit(0)
               run = str(runs[0]['databaseId'])
           tested = gh('run', 'view', run, '--json', 'headSha,event,headBranch,status,conclusion')
           assert tested == dict(headSha=commit, event='push', headBranch=tag, status='completed', conclusion='success'), 'Installer run does not match the release tag'
@@ -84,21 +88,49 @@ jobs:
               output.write('SOURCE_COMMIT=' + commit + '\nINSTALLER_RUN=' + run + '\n')
           PY
       - name: Require successful source checks for this main commit
-        if: steps.release.outputs.already_published != 'true'
+        if: steps.release.outputs.skip_release != 'true'
         run: |
           source_run="$(gh run list --workflow checks.yml --branch main --event push --commit "$SOURCE_COMMIT" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
           test -n "$source_run"
           gh run watch "$source_run" --exit-status --interval 15
       - name: Download the exact tested installers and evidence
-        if: steps.release.outputs.already_published != 'true'
+        if: steps.release.outputs.skip_release != 'true'
         run: |
-          gh run download "$INSTALLER_RUN" --dir release/ci-artifacts
+          python3 - <<'PY'
+          import hashlib, json, os, stat, subprocess, zipfile
+          from pathlib import Path, PurePosixPath
+          repository, run, commit = os.environ['GH_REPO'], os.environ['INSTALLER_RUN'], os.environ['SOURCE_COMMIT']
+          pages = json.loads(subprocess.check_output(['gh', 'api', '--paginate', '--slurp',
+              f'repos/{repository}/actions/runs/{run}/artifacts?per_page=100'], text=True))
+          artifacts = [artifact for page in pages for artifact in page['artifacts'] if not artifact['expired']]
+          names = ['installer-windows', 'installer-macos', 'installer-evidence-win32-x64',
+                   'installer-evidence-darwin-arm64', 'installer-evidence-darwin-x64']
+          output = Path('release/ci-artifacts')
+          output.mkdir(parents=True, exist_ok=True)
+          for name in names:
+              matching = [artifact for artifact in artifacts if artifact['name'] == name]
+              assert matching, 'Missing release artifact: ' + name
+              artifact = max(matching, key=lambda item: (item['created_at'], item['id']))
+              assert artifact['workflow_run']['id'] == int(run) and artifact['workflow_run']['head_sha'] == commit, 'Artifact source differs from the tested commit'
+              archive = output / (name + '.zip')
+              with archive.open('wb') as stream:
+                  subprocess.run(['gh', 'api', f'repos/{repository}/actions/artifacts/{artifact["id"]}/zip'], stdout=stream, check=True)
+              with archive.open('rb') as stream:
+                  assert artifact['digest'] == 'sha256:' + hashlib.file_digest(stream, 'sha256').hexdigest(), 'Artifact digest mismatch'
+              with zipfile.ZipFile(archive) as contents:
+                  for entry in contents.infolist():
+                      path = PurePosixPath(entry.filename)
+                      assert not path.is_absolute() and '..' not in path.parts and '\\' not in entry.filename and not stat.S_ISLNK(entry.external_attr >> 16), 'Unsafe artifact entry'
+                  contents.extractall(output / name)
+              archive.unlink()
+              print(f'Verified latest {name}: artifact {artifact["id"]}, created {artifact["created_at"]}')
+          PY
           gh run view "$INSTALLER_RUN" --json headSha,url,status,conclusion,jobs > release/installer-ci.json
           git archive --format=zip --output=release/source.zip HEAD
       - name: Verify signatures, checksums and all three installed platforms
-        if: steps.release.outputs.already_published != 'true'
+        if: steps.release.outputs.skip_release != 'true'
         run: |
           python3 scripts/deliver-installers.py release/ci-artifacts release/publish --ci-json release/installer-ci.json --source-archive release/source.zip
       - name: Publish only after every release file is uploaded
-        if: steps.release.outputs.already_published != 'true'
+        if: steps.release.outputs.skip_release != 'true'
         run: python3 "$RUNNER_TEMP/meki-publish-release.py" release/publish
