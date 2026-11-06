@@ -38,7 +38,7 @@ const button = (action: string, label: string, glyph: string, cls = '') => `<but
 document.querySelector('#app')!.innerHTML = `
 <div class="shell" id="shell">
   <aside class="sidebar" aria-label="${ht("文档导航")}">
-    <div class="brand"><button type="button" class="brand-mark" data-action="about" title="${ht("关于 Meki")}" aria-label="${ht("关于 Meki")}">${logo}</button><span>Meki</span></div>
+    <div class="brand"><button type="button" class="brand-mark" data-action="about" title="${ht("关于 Meki")}" aria-label="${ht("关于 Meki")}">${logo}</button><span class="brand-wordmark">Meki</span></div>
     <div class="file-actions"><button class="open-button" data-action="open">${icon('folder')}<span>${ht("打开文稿")}</span><kbd id="open-shortcut">Ctrl O</kbd></button>${button('new', t("新建文稿"), 'plus')}</div>
     <button class="workspace-label" data-action="recent-folders" aria-haspopup="dialog" aria-label="${ht("切换工作区或管理最近文件夹")}"><span id="workspace-name">${ht("个人写作空间")}</span>${icon('down', 14)}</button>
     <div class="sidebar-tabs" role="tablist" aria-label="${ht("导航方式")}"><button role="tab" data-tab="files" aria-selected="false">${ht("文件")}</button><button role="tab" class="active" data-tab="outline" aria-selected="true">${ht("大纲")}</button></div>
