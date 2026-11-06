@@ -112,7 +112,10 @@ export class EditorActions {
           if (name === 'quote' || name === 'alert') return `> ${line || t("引用文字")}`;
           return `${name === 'task' ? '- [ ]' : name === 'ordered' ? `${index + 1}.` : '-'} ${line || t("列表项")}`;
         }).join('\n');
-        this.sourceInsert(name === 'alert' ? `\n\n> [!NOTE]\n${body}\n\n` : body, start, end); return true;
+        const next = name === 'alert' ? `\n\n> [!NOTE]\n${body}\n\n` : body;
+        if (next !== doc.sliceString(start, end)) this.sourceInsert(next, start, end);
+        else this.source().focus();
+        return true;
       }
       const snippets: Record<string, string> = {
         toc: '\n\n[TOC]\n\n',

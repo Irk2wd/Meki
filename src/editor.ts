@@ -8,9 +8,8 @@ import { tableBlockView } from '@milkdown/kit/component/table-block';
 import { blockService } from '@milkdown/kit/plugin/block';
 import { remarkGFMPlugin, strikethroughInputRule, addRowAfterCommand } from '@milkdown/kit/preset/gfm';
 import { callCommand, insert, replaceAll } from '@milkdown/kit/utils';
-import { toggleStrongCommand, toggleEmphasisCommand, wrapInHeadingCommand, wrapInBulletListCommand, createCodeBlockCommand } from '@milkdown/kit/preset/commonmark';
+import { toggleStrongCommand, toggleEmphasisCommand, wrapInBulletListCommand, createCodeBlockCommand } from '@milkdown/kit/preset/commonmark';
 import { type EditorState as RichState } from '@milkdown/kit/prose/state';
-import { setBlockType } from '@milkdown/kit/prose/commands';
 import { closeHistory } from '@milkdown/kit/prose/history';
 import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
@@ -251,12 +250,21 @@ export class WritingEditor {
       const snippets: Record<string, string> = { bold: `**${selected || t("粗体")}**`, italic: `*${selected || t("斜体")}*`, code: `\n\`\`\`${this.code.language()}\n${selected}\n\`\`\`\n` };
       this.insertMarkdown(snippets[command] || ''); return;
     }
+    if (/^h[1-6]$/.test(command) || command === 'paragraph') {
+      this.crepe.editor.action(ctx => {
+        const view = ctx.get(editorViewCtx), heading = command !== 'paragraph', tr = view.state.tr;
+        const type = view.state.schema.nodes[heading ? 'heading' : 'paragraph'];
+        for (const { $from, $to } of view.state.selection.ranges) {
+          tr.setBlockType($from.pos, $to.pos, type, heading ? node => ({ ...node.attrs, level: Number(command[1]) }) : null);
+        }
+        if (tr.docChanged) { view.dispatch(closeHistory(tr).scrollIntoView()); view.dispatch(closeHistory(view.state.tr)); }
+      });
+      this.focus(); return;
+    }
     if (command === 'bold') this.crepe.editor.action(callCommand(toggleStrongCommand.key));
     if (command === 'italic') this.crepe.editor.action(callCommand(toggleEmphasisCommand.key));
-    if (/^h[1-6]$/.test(command)) this.crepe.editor.action(callCommand(wrapInHeadingCommand.key, Number(command[1])));
     if (command === 'list') this.crepe.editor.action(callCommand(wrapInBulletListCommand.key));
     if (command === 'code') this.crepe.editor.action(callCommand(createCodeBlockCommand.key, this.code.language()));
-    if (command === 'paragraph') this.crepe.editor.action(ctx => { const view = ctx.get(editorViewCtx); setBlockType(view.state.schema.nodes.paragraph)(view.state, view.dispatch); });
     this.focus();
   }
   goToHeading(index: number, sourceOffset: number) {

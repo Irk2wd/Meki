@@ -23,11 +23,27 @@ test('custom chords normalize modifiers, disable defaults and reject collisions 
   for (const invalid of ['', 'N', 'Alt+N', 'Mod+Mod+N', 'Mod+Escape', 'Mod+ArrowLeft', 'Super+N', '<script>', 1, [], {}]) assert.throws(() => normalizeBinding(invalid));
 });
 test('ordinary edit commands, platform system shortcuts, zoom and unsupported navigation chords are protected', () => {
-  for (const key of ['Mod+A', 'Mod+B', 'Mod+C', 'Mod+V', 'Mod+X', 'Mod+Z', 'Mod+Y', 'Mod+Shift+Z', 'Mod+Q', 'Mod+R', 'F11', 'Alt+F4', 'Mod+Minus', 'Mod+Equal', 'Mod+0', 'Mod+Shift+I', 'Mod+Alt+1', 'Mod+BracketLeft']) {
+  for (const key of ['Mod+A', 'Mod+B', 'Mod+C', 'Mod+V', 'Mod+X', 'Mod+Z', 'Mod+Y', 'Mod+Shift+Z', 'Mod+Q', 'Mod+R', 'F11', 'Alt+F4', 'Mod+Minus', 'Mod+Equal', 'Mod+Shift+0', 'Mod+Shift+I', 'Mod+Alt+1', 'Mod+7', 'Mod+BracketLeft']) {
     assert.equal(reservedBinding(key, 'win32'), true, key); assert.throws(() => validateBindings({ math: key }, 'win32'), /保留/);
   }
   assert.equal(reservedBinding('Mod+H', 'darwin'), true); assert.equal(reservedBinding('Mod+H', 'win32'), false);
   assert.throws(() => validateBindings({ math: 'Mod+H' }, 'darwin'), /保留/);
+});
+test('paragraph and six heading shortcuts share platform mappings and participate in customization and conflict checks', () => {
+  for (const platform of ['win32', 'darwin']) {
+    for (let level = 0; level <= 6; level++) {
+      const command = level ? `format-h${level}` : 'format-paragraph', binding = `Mod+${level}`;
+      assert.equal(defaultBinding(command, platform), binding);
+      assert.equal(commandFor({ code: `Digit${level}`, ctrlKey: platform === 'win32', metaKey: platform === 'darwin' }, {}, platform), command);
+      assert.equal(commandFor({ code: `Digit${level}`, control: platform === 'win32', meta: platform === 'darwin' }, {}, platform), command);
+      assert.doesNotThrow(() => validateBindings({ [command]: binding }, platform));
+      assert.throws(() => validateBindings({ math: binding }, platform), /冲突/);
+      assert.equal(commandFor({ code: `Digit${level}`, ctrlKey: platform === 'win32', metaKey: platform === 'darwin' }, { [command]: null }, platform), null);
+    }
+    assert.doesNotThrow(() => validateBindings({ 'format-h1': null, math: 'Mod+1' }, platform));
+    assert.equal(commandFor({ code: 'KeyJ', ctrlKey: platform === 'win32', metaKey: platform === 'darwin' }, { 'format-h1': 'Mod+J' }, platform), 'format-h1');
+    assert.equal(commandFor({ code: 'Digit0', shiftKey: true, ctrlKey: platform === 'win32', metaKey: platform === 'darwin' }, {}, platform), null);
+  }
 });
 test('renderer and Electron keyboard shapes resolve identically, with platform modifiers and exact combinations', () => {
   assert.equal(commandFor({ code: 'KeyS', ctrlKey: true }, {}, 'win32'), 'save');

@@ -388,6 +388,10 @@ async function dispatch(action: string, payload?: unknown) {
   if (action === 'quick-open' || action === 'workspace-search') { closePopovers(); workspaceUI.showPicker(action === 'quick-open' ? 'quick' : 'search'); return; }
   if (action === 'dismiss-external') { documents.active.acknowledged = `${documents.active.status?.state}:${documents.active.status?.revision}`; externalBanner.hidden = true; return; }
   if (action === 'lifecycle-settings') { closePopovers(); documents.toggleSettings(); return; }
+  if (/^format-(?:paragraph|h[1-6])$/.test(action)) {
+    if (document.querySelector('dialog[open]') || document.activeElement?.matches('input,textarea')) return;
+    closePopovers(); editor.format(action.slice(7)); el<HTMLSelectElement>('#heading-format').value = action.slice(7); return;
+  }
   if (action.startsWith('edit-')) { formatMenu?.execute(action.slice(5)); return; }
   if (action === 'style' || action === 'export') { const node = el(`#${action}-panel`); const show = node.hidden; closePopovers(); node.hidden = !show; return; }
   closePopovers();
