@@ -10,6 +10,7 @@
 @media print{html,body,#app,.shell,.main-area,.document-scroll{height:auto!important;overflow:visible!important;display:block!important;background:var(--bg)!important;color:var(--text)!important}.sidebar,.titlebar,.formatbar,.statusbar,.recovery-banner,.find-panel,.popover,.toast,dialog,.source-editor{display:none!important}.editor-host{display:block!important;max-width:none!important;padding:0!important;margin:0!important}.milkdown{background:var(--bg)!important;color:var(--text)!important}.milkdown .ProseMirror{padding:0!important}.milkdown .milkdown-block-handle,.milkdown .milkdown-toolbar,.milkdown .milkdown-image-block .operation,.milkdown .language-picker{display:none!important}.milkdown .ProseMirror pre,.milkdown .ProseMirror blockquote,.milkdown .ProseMirror tr{break-inside:avoid}.milkdown .ProseMirror h1,.milkdown .ProseMirror h2,.milkdown .ProseMirror h3{break-after:avoid}@page{size:A4;margin:20mm 19mm}}
 
 .brand { gap:8px }
+.platform-darwin .brand { padding-top:47px; padding-bottom:8px }
 .brand .brand-mark { width:32px; height:32px; display:grid; place-items:center; border-radius:9px }
 .brand-mark svg { width:28px; height:28px }
 .brand-wordmark { display:block; width:66px; height:25px; flex-shrink:0; color:var(--text) }
