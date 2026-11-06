@@ -21,6 +21,11 @@ export async function checkAssetProvenance(sourceRoot = root) {
   if (manifest.schema !== 1 || manifest.generator !== 'scripts/icons.mjs' || !Array.isArray(manifest.assets) || manifest.assets.length > 100) return [{ path: 'assets/provenance.json', rule: 'asset-provenance-invalid' }];
   const generator = await fs.readFile(path.join(sourceRoot, manifest.generator)).catch(() => null);
   if (!generator || digest(generator) !== manifest.generatorSha256) issues.push({ path: manifest.generator, rule: 'asset-generator-changed' });
+  if (manifest.source?.path !== 'src/brand-mark.svg' || !/^[a-f0-9]{64}$/.test(manifest.source.sha256)) issues.push({ path: 'assets/provenance.json', rule: 'asset-provenance-invalid' });
+  else {
+    const file = path.join(sourceRoot, manifest.source.path), stat = await fs.lstat(file).catch(() => null);
+    if (!stat?.isFile() || stat.isSymbolicLink() || digest(await fs.readFile(file)) !== manifest.source.sha256) issues.push({ path: manifest.source.path, rule: 'asset-source-changed' });
+  }
   const registered = new Set();
   for (const asset of manifest.assets) {
     if (!asset || typeof asset.path !== 'string' || !/^assets\/[a-z0-9-]+\.(?:svg|png|ico|icns)$/.test(asset.path) || registered.has(asset.path) || asset.origin !== manifest.generator || asset.license !== 'MIT') { issues.push({ path: 'assets/provenance.json', rule: 'asset-provenance-invalid' }); continue; }

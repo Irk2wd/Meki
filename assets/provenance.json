@@ -1,35 +1,39 @@
 {
   "schema": 1,
   "generator": "scripts/icons.mjs",
-  "generatorSha256": "d55be0b01ff53d9c2f88f87b0daee110ed20cdc8405db45cb2817836e54f6d9e",
+  "generatorSha256": "856e7c61edb732029edc92b75e079aa221743b16c0f9186fe0e90ccecd99091c",
+  "source": {
+    "path": "src/brand-mark.svg",
+    "sha256": "5febffd8061ce4db9e4feb9f53ff97792044ef789ce533efae3cdec093117932"
+  },
   "assets": [
     {
       "path": "assets/icon.icns",
-      "sha256": "754a6ca1d912fcd1ae1e9c7b96dbaeb9e9d57aa372ea334897657566a8dc4124",
+      "sha256": "93e251f74e5ca47ca73dfc9548227beb7c567f4a3c4765e25e0bb924c32e026a",
       "license": "MIT",
       "origin": "scripts/icons.mjs"
     },
     {
       "path": "assets/icon.ico",
-      "sha256": "4a62c41626f928c59e8119fd2aa17beb7afd81fa542fddc07806bd087fd3a991",
+      "sha256": "293f3fec80609a912846095143fcf3f00b2c053bbc022148b5864e1a50aca771",
       "license": "MIT",
       "origin": "scripts/icons.mjs"
     },
     {
       "path": "assets/icon.png",
-      "sha256": "23d9828983428a3e5892f00347f738fb1de4f7d4d5577e80db8f206c81357b51",
+      "sha256": "d99775adf25e3389048307160cd3ea7275044290bb11485b7c6e99b815dbf6ac",
       "license": "MIT",
       "origin": "scripts/icons.mjs"
     },
     {
       "path": "assets/icon.svg",
-      "sha256": "c5f0f527a63024b951b4341f6d2b589e1952baa4ceec3d0efd21c5e2fcbcce99",
+      "sha256": "8074bcc963c5ce1646b0448537563b870f56861e7dbeec05f56e2be3a46d0714",
       "license": "MIT",
       "origin": "scripts/icons.mjs"
     },
     {
       "path": "assets/installer-background.png",
-      "sha256": "6fc661052effe73a32f2336a7296d5592bf41e272cd14f6de42b3173097404fa",
+      "sha256": "8667248f43eb4780377b6e3d7ab313202f5ce2817b22bea184a947bbea9d228b",
       "license": "MIT",
       "origin": "scripts/icons.mjs"
     }

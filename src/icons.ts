@@ -1,3 +1,5 @@
+import brandMark from './brand-mark.svg?raw';
+
 const paths: Record<string, string> = {
   page: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
   folder: '<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
@@ -29,4 +31,4 @@ const paths: Record<string, string> = {
 export function icon(name: string, size = 18) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.page}</svg>`;
 }
-export const logo = '<svg width="31" height="31" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><rect x=".5" y=".5" width="31" height="31" rx="6.5" fill="#24342e" stroke="#5d7869" stroke-opacity=".6"/><path d="M7 24V8h4l5 6.5L21 8h4v16h-4V14l-5 6.5L11 14v10Z" fill="#edf4ef"/></svg>';
+export const logo = brandMark;

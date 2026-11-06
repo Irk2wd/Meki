@@ -1,11 +1,15 @@
 import sharp from 'sharp';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const assets = path.join(root, 'assets');
 await fs.mkdir(assets, { recursive: true });
-const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect x="64" y="64" width="896" height="896" rx="236" fill="#416b5b"/><path d="M288 752V374l224 224 224-224v378M288 278l224 224 224-224" fill="none" stroke="#fffdf4" stroke-width="50" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const source = 'src/brand-mark.svg';
+const mark = await fs.readFile(path.join(root, source));
+// Share the sidebar artwork, with transparent padding for desktop icon spacing.
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><g transform="translate(64 64) scale(28)">${mark.toString('utf8').trim()}</g></svg>`;
 await fs.writeFile(path.join(assets, 'icon.svg'), svg);
 const png = async size => sharp(Buffer.from(svg)).resize(size, size).png().toBuffer();
 await fs.writeFile(path.join(assets, 'icon.png'), await png(512));
@@ -27,7 +31,21 @@ const icnsParts = await Promise.all([[128, 'ic07'], [256, 'ic08'], [512, 'ic09']
 }));
 const header = Buffer.alloc(8); header.write('icns'); header.writeUInt32BE(8 + icnsParts.reduce((n, b) => n + b.length, 0), 4);
 await fs.writeFile(path.join(assets, 'icon.icns'), Buffer.concat([header, ...icnsParts]));
-console.log('Generated original Meki icons.');
 // Original DMG artwork. Finder supplies the app and Applications icons above it.
 const background = '<svg xmlns="http://www.w3.org/2000/svg" width="540" height="380" viewBox="0 0 540 380"><rect width="540" height="380" fill="#faf9f4"/><text x="270" y="64" text-anchor="middle" font-family="Arial,sans-serif" font-size="30" fill="#294b3e">Meki</text><text x="270" y="96" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" fill="#68746c">A quiet place to write.</text><path d="M238 200h64m-13-13 13 13-13 13" fill="none" stroke="#416b5b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><text x="270" y="320" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#416b5b">Drag Meki to Applications</text></svg>';
 await fs.writeFile(path.join(assets, 'installer-background.png'), await sharp(Buffer.from(background)).png().toBuffer());
+
+const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+const generated = ['icon.icns', 'icon.ico', 'icon.png', 'icon.svg', 'installer-background.png'];
+const manifest = {
+  schema: 1,
+  generator: 'scripts/icons.mjs',
+  generatorSha256: digest(await fs.readFile(fileURLToPath(import.meta.url))),
+  source: { path: source, sha256: digest(mark) },
+  assets: await Promise.all(generated.map(async name => ({
+    path: `assets/${name}`, sha256: digest(await fs.readFile(path.join(assets, name))),
+    license: 'MIT', origin: 'scripts/icons.mjs',
+  }))),
+};
+await fs.writeFile(path.join(assets, 'provenance.json'), JSON.stringify(manifest, null, 2) + '\n');
+console.log('Generated original Meki icons and provenance.');
