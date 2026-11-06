@@ -12,6 +12,7 @@ const { WindowManager } = require('./window-manager.cjs');
 const { UpdateService } = require('./update-service.cjs');
 const { GithubUpdates } = require('./update-network.cjs');
 const { configureApp } = require('./app-identity.cjs');
+const { syncDockIcon } = require('./app-icon.cjs');
 const bootstrap = globalThis[Symbol.for('meki.bootstrap')];
 const TEST_MODE = process.env.MEKI_TEST === '1';
 let manager, updates, reopening;
@@ -51,6 +52,7 @@ else {
   argumentsFrom(process.argv);
   app.on('second-instance', (_event, argv) => { argumentsFrom(argv); if (initialized) void reopen(); });
   app.whenReady().then(async () => {
+    try { syncDockIcon(app); } catch (error) { console.warn('Meki could not refresh the Dock icon:', error.message); }
     const store = new FileStore(app.getPath('userData')); await store.init();
     setLocale(store.metadata.settings.locale);
     const history = new LifecycleStore(store); await history.init();

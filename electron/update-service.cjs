@@ -85,7 +85,7 @@ class UpdateService {
       this.candidate = { envelope, manifest, kind, download, network };
       return this.set({ status: 'available', latestVersion: info.version, notes: info.notes, releaseUrl: info.url, kind, total: file.size,
         notificationVersion: this.state.automatic && this.preferences.dismissedVersion !== info.version ? info.version : null,
-        message: kind === 'payload' ? t("有新版本。只下载程序代码，安装后重启生效。") : t("此版本升级了运行环境，需要下载安装器。") });
+        message: kind === 'payload' ? t("有新版本。只下载程序代码，安装后重启生效。") : t("此版本更新了运行环境或应用图标，需要下载安装器。") });
     } catch (error) { return this.set({ status: controller.signal.aborted ? 'idle' : 'error', message: controller.signal.aborted ? t("已取消检查。") : error.message }); }
     finally { this.controller = null; this.lastChecked = this.clock(); }
   }

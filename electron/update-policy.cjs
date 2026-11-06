@@ -3,7 +3,8 @@ const { t } = require('./i18n.mjs');
 
 const crypto = require('node:crypto');
 const { APP_ID, REPOSITORY, UPDATE_PREFIX, installerName } = require('./app-identity.cjs');
-const BOOTSTRAP_VERSION = 2;
+// Older updaters cannot compare installed icons, so they must use a full installer.
+const BOOTSTRAP_VERSION = 3;
 const MAX_PAYLOAD = 512 * 1024 * 1024;
 const MAX_DOWNLOAD = 2 * 1024 * 1024 * 1024;
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -40,11 +41,14 @@ function verifyManifest(envelope, key, expected = {}) {
     expected.version && manifest.version !== expected.version || expected.platform && manifest.platform !== expected.platform) throw new Error(t("更新清单与应用版本或平台不符。"));
   fileInfo(manifest.payload, files.payload, MAX_PAYLOAD);
   fileInfo(manifest.installer, files.installer, MAX_DOWNLOAD);
+  if ((manifest.bootstrap >= 3 || manifest.nativeIcon !== undefined) &&
+      (typeof manifest.nativeIcon !== 'string' || !hashPattern.test(manifest.nativeIcon))) throw new Error(t("应用图标校验信息无效。"));
   if (!hashPattern.test(manifest.asarSha256) || !Number.isSafeInteger(manifest.asarSize) || manifest.asarSize < 1 || manifest.asarSize > MAX_PAYLOAD) throw new Error(t("程序更新大小无效。"));
   return manifest;
 }
-function compatible(manifest, { electron, arch, bootstrap = BOOTSTRAP_VERSION }) {
+function compatible(manifest, { electron, arch, bootstrap = BOOTSTRAP_VERSION, nativeIcon }) {
   return manifest.bootstrap <= bootstrap && manifest.electron === electron &&
+    (manifest.nativeIcon === undefined || manifest.nativeIcon === nativeIcon) &&
     (manifest.platform === 'darwin' ? ['x64', 'arm64'].includes(arch) : arch === 'x64');
 }
 function releaseInfo(release, repository = REPOSITORY) {

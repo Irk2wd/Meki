@@ -5,7 +5,7 @@ const { t } = require('./i18n.mjs');
 const fs = process.versions.electron ? require('original-fs') : require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { hashPattern, verifyManifest, compatible, newer } = require('./update-policy.cjs');
+const { hashPattern, verifyManifest, compatible, newer, BOOTSTRAP_VERSION } = require('./update-policy.cjs');
 
 function regular(file, limit) {
   const stat = fs.lstatSync(file);
@@ -32,8 +32,8 @@ function directory(folder) {
 }
 
 class UpdateRuntime {
-  constructor({ userData, baseVersion, electron, platform, arch, key }) {
-    Object.assign(this, { baseVersion, electron, platform, arch, key });
+  constructor({ userData, baseVersion, electron, platform, arch, key, nativeIcon = null, bootstrap = BOOTSTRAP_VERSION }) {
+    Object.assign(this, { baseVersion, electron, platform, arch, key, nativeIcon, bootstrap });
     this.version = baseVersion; this.current = null; this.message = '';
     this.root = path.join(userData, 'updates-v1'); directory(this.root);
     this.payloads = path.join(this.root, 'payloads'); directory(this.payloads);
@@ -54,7 +54,7 @@ class UpdateRuntime {
   validate(id) {
     const files = this.paths(id); regular(files.manifest, 65536);
     const manifest = verifyManifest(JSON.parse(fs.readFileSync(files.manifest, 'utf8')), this.key, { platform: this.platform });
-    if (manifest.asarSha256 !== id || !compatible(manifest, this)) throw new Error(t("此轻量更新需要另一个运行环境。"));
+    if (manifest.asarSha256 !== id || !compatible(manifest, this)) throw new Error(t("此轻量更新需要更新运行环境或应用图标，请使用完整安装器。"));
     if (regular(files.archive, manifest.asarSize).size !== manifest.asarSize || hashFile(files.archive) !== id) throw new Error(t("程序更新校验失败。"));
     return { manifest, archive: files.archive };
   }

@@ -2,15 +2,18 @@
 const crypto = require('node:crypto');
 const zlib = require('node:zlib');
 const http = require('node:http');
+const path = require('node:path');
 const { names, digest, BOOTSTRAP_VERSION } = require('../electron/update-policy.cjs');
+const { nativeIconHash } = require('../electron/app-icon.cjs');
 
 function keys() {
   const pair = crypto.generateKeyPairSync('ed25519');
   return { privateKey: pair.privateKey, publicKey: pair.publicKey.export({ type: 'spki', format: 'pem' }) };
 }
-function fixture(pair, { version = '0.12.0', platform = process.platform, electron = '45.0.0', payload = Buffer.from('synthetic application'), bootstrap = BOOTSTRAP_VERSION } = {}) {
+function fixture(pair, { version = '0.12.0', platform = process.platform, electron = '45.0.0', payload = Buffer.from('synthetic application'), bootstrap = BOOTSTRAP_VERSION,
+  nativeIcon = nativeIconHash(path.resolve(__dirname, '..'), platform) } = {}) {
   const files = names(version, platform), compressed = zlib.gzipSync(payload), installer = Buffer.from('synthetic installer; never execute');
-  const manifest = { appId: 'io.meki.editor', version, bootstrap, electron, platform, arch: platform === 'darwin' ? 'universal' : 'x64',
+  const manifest = { appId: 'io.meki.editor', version, bootstrap, electron, platform, arch: platform === 'darwin' ? 'universal' : 'x64', nativeIcon,
     asarSize: payload.length, asarSha256: digest(payload), payload: { name: files.payload, size: compressed.length, sha256: digest(compressed) },
     installer: { name: files.installer, size: installer.length, sha256: digest(installer) } };
   const body = Buffer.from(JSON.stringify(manifest)), envelope = { schema: 1, body: body.toString('base64'), signature: crypto.sign(null, body, pair.privateKey).toString('base64') };

@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { UpdateRuntime } = require('./update-runtime.cjs');
 const { configureApp } = require('./app-identity.cjs');
+const { nativeIconHash } = require('./app-icon.cjs');
 const base = path.resolve(__dirname, '..');
 configureApp(app);
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -14,7 +15,8 @@ else {
   let runtime, archive;
   try {
     runtime = new UpdateRuntime({ userData: app.getPath('userData'), baseVersion: require('../package.json').version,
-      electron: process.versions.electron, platform: process.platform, arch: process.arch, key });
+      electron: process.versions.electron, platform: process.platform, arch: process.arch, key,
+      nativeIcon: nativeIconHash(base, process.platform) });
     archive = runtime.selectStartup();
   } catch { runtime = null; archive = null; console.warn('Meki update cache is unavailable; starting the installed application.'); }
   globalThis[Symbol.for('meki.bootstrap')] = { runtime, hasLock: true };

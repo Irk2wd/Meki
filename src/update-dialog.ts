@@ -15,7 +15,7 @@ export class UpdateDialog {
       <p id="update-version"></p><p id="update-message" role="status" aria-live="polite"></p>
       <div id="update-progress-row" hidden><progress id="update-progress" max="100" value="0" aria-label="${ht("更新下载进度")}"></progress><span id="update-progress-text"></span></div>
       <details id="update-release-notes" hidden><summary>${ht("版本说明")}</summary><pre id="update-notes"></pre></details>
-      <p class="update-note">${ht("轻量更新只下载程序代码。升级运行环境时才需要完整安装器；macOS 安装器打开后需拖入“应用程序”。")}</p>
+      <p class="update-note">${ht("轻量更新只下载程序代码。更新运行环境或应用图标时需要完整安装器；macOS 安装器打开后需拖入“应用程序”。")}</p>
       <label class="update-automatic"><input type="checkbox" id="automatic-updates">${ht("自动检查更新并提醒")}</label>
       <p class="update-note">${ht("启动后检查一次，此后每 6 小时检查。不会自动下载或安装。")}</p>
       <div class="update-actions"><button type="button" data-update="check">${ht("检查更新")}</button><button type="button" data-update="cancel" hidden>${ht("取消下载")}</button><button type="button" data-update="download" class="primary-button" hidden>${ht("下载更新")}</button><button type="button" data-update="apply" class="primary-button" hidden>${ht("重启并更新")}</button></div>`;

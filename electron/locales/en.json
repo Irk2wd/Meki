@@ -1315,5 +1315,9 @@
   "有新版本可用，查看说明后再决定更新。": "A new version is available. Read what’s new and update when you’re ready.",
   "查看更新": "View update",
   "Meki {0} 已发布": "Meki {0} is available",
-  "设置": "Settings"
+  "设置": "Settings",
+  "应用图标校验信息无效。": "Invalid application icon verification information.",
+  "此轻量更新需要更新运行环境或应用图标，请使用完整安装器。": "This code update requires a new runtime or application icon. Please use the full installer.",
+  "此版本更新了运行环境或应用图标，需要下载安装器。": "This version updates the runtime or application icon and requires the full installer.",
+  "轻量更新只下载程序代码。更新运行环境或应用图标时需要完整安装器；macOS 安装器打开后需拖入“应用程序”。": "Lightweight updates download application code only. A full installer is required when updating the runtime or application icon. On macOS, drag Meki into Applications after opening the installer."
 }

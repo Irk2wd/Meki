@@ -4,10 +4,12 @@ import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
+import { extractFile } from '@electron/asar';
 import policy from '../electron/update-policy.cjs';
 import files from '../electron/update-runtime.cjs';
 import publicKey from '../electron/update-key.cjs';
 import identity from '../electron/app-identity.cjs';
+import icons from '../electron/app-icon.cjs';
 
 export async function createUpdateAssets({ directory, asar, installer, version, platform, electron, signingKey, verificationKey = publicKey }) {
   if (!signingKey) throw new Error('MEKI_UPDATE_SIGN_KEY is required for release update assets.');
@@ -15,8 +17,9 @@ export async function createUpdateAssets({ directory, asar, installer, version, 
   if (crypto.createPublicKey(key).export({ type: 'spki', format: 'pem' }) !== verificationKey) throw new Error('Release signing key does not match the application verification key.');
   const names = policy.names(version, platform), payload = path.join(directory, names.payload);
   if (path.resolve(installer) !== path.resolve(directory, names.installer)) throw new Error('Unexpected installer name or directory.');
+  const nativeIcon = policy.digest(extractFile(asar, `assets/${icons.nativeIconName(platform)}`));
   await pipeline(fs.createReadStream(asar), zlib.createGzip({ level: 9 }), fs.createWriteStream(payload, { flags: 'wx' }));
-  const manifest = { appId: identity.APP_ID, version, bootstrap: policy.BOOTSTRAP_VERSION, electron, platform, arch: platform === 'win32' ? 'x64' : 'universal',
+  const manifest = { appId: identity.APP_ID, version, bootstrap: policy.BOOTSTRAP_VERSION, electron, platform, arch: platform === 'win32' ? 'x64' : 'universal', nativeIcon,
     asarSha256: files.hashFile(asar), asarSize: fs.statSync(asar).size,
     payload: { name: names.payload, size: fs.statSync(payload).size, sha256: files.hashFile(payload) },
     installer: { name: names.installer, size: fs.statSync(installer).size, sha256: files.hashFile(installer) } };

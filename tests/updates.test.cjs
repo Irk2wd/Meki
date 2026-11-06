@@ -9,6 +9,7 @@ const policy = require('../electron/update-policy.cjs');
 const { UpdateRuntime, atomicJson } = require('../electron/update-runtime.cjs');
 const { UpdateService } = require('../electron/update-service.cjs');
 const { GithubUpdates } = require('../electron/update-network.cjs');
+const { nativeIconHash, nativeIconName } = require('../electron/app-icon.cjs');
 
 function setup(t, pair, overrides = {}) {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'meki-update-test-'));
@@ -18,7 +19,8 @@ function setup(t, pair, overrides = {}) {
     assert.ok(path.basename(target).startsWith('meki-update-test-'));
     fs.rmSync(target, { recursive: true, force: true });
   });
-  return new UpdateRuntime({ userData: folder, baseVersion: '0.11.3', electron: '45.0.0', platform: process.platform, arch: process.arch, key: pair.publicKey, ...overrides });
+  return new UpdateRuntime({ userData: folder, baseVersion: '0.11.3', electron: '45.0.0', platform: process.platform, arch: process.arch, key: pair.publicKey,
+    nativeIcon: nativeIconHash(path.resolve(__dirname, '..'), process.platform), ...overrides });
 }
 async function connected(t, overrides = {}) {
   const pair = keys(), update = fixture(pair, overrides), runtime = setup(t, pair), remote = await server(update);
@@ -29,6 +31,13 @@ async function connected(t, overrides = {}) {
 function store(runtime, update) {
   const files = runtime.paths(update.manifest.asarSha256);
   fs.writeFileSync(files.archive, update.payload); atomicJson(files.manifest, update.envelope);
+}
+async function applicationArchive(directory, platform) {
+  const source = path.join(directory, `application-${platform}`), asar = `${source}.asar`, icon = Buffer.from(`synthetic ${platform} application icon`);
+  fs.mkdirSync(path.join(source, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(source, 'assets', nativeIconName(platform)), icon);
+  await require('@electron/asar').createPackage(source, asar);
+  return { asar, bytes: fs.readFileSync(asar), nativeIcon: policy.digest(icon) };
 }
 
 test('release versions are ordered numerically; drafts, prereleases and malformed assets are rejected', () => {
@@ -48,6 +57,48 @@ test('signed manifests bind the code, installer, platform and release; substitut
   assert.throws(() => policy.verifyManifest(changed, pair.publicKey));
   assert.throws(() => policy.verifyManifest(update.envelope, pair.publicKey, { platform: process.platform === 'win32' ? 'darwin' : 'win32' }));
   assert.throws(() => policy.verifyManifest(update.envelope, pair.publicKey, { version: '0.13.0' }));
+});
+
+test('signed manifests require a valid native icon hash for new bootstraps while keeping legacy updates readable', () => {
+  const pair = keys();
+  for (const nativeIcon of [undefined, null, '', '../icon.icns', 'a'.repeat(63)]) {
+    const update = fixture(pair, { nativeIcon: nativeIcon === undefined ? null : nativeIcon });
+    if (nativeIcon === undefined) {
+      delete update.manifest.nativeIcon;
+      const body = Buffer.from(JSON.stringify(update.manifest));
+      update.envelope.body = body.toString('base64');
+      update.envelope.signature = require('node:crypto').sign(null, body, pair.privateKey).toString('base64');
+    }
+    assert.throws(() => policy.verifyManifest(update.envelope, pair.publicKey), /图标/);
+  }
+  const legacy = fixture(pair, { bootstrap: 2 });
+  delete legacy.manifest.nativeIcon;
+  const body = Buffer.from(JSON.stringify(legacy.manifest));
+  legacy.envelope.body = body.toString('base64');
+  legacy.envelope.signature = require('node:crypto').sign(null, body, pair.privateKey).toString('base64');
+  assert.equal(policy.verifyManifest(legacy.envelope, pair.publicKey).bootstrap, 2);
+  assert.equal(policy.compatible(legacy.manifest, { electron: legacy.manifest.electron, arch: process.arch }), true);
+});
+
+test('changed native icons and older installed bootstraps select the verified installer on both platforms', async t => {
+  for (const platform of ['darwin', 'win32']) {
+    const pair = keys(), update = fixture(pair, { platform }), remote = await server(update);
+    t.after(() => remote.close());
+    const network = new GithubUpdates({ testOrigin: remote.origin });
+    for (const overrides of [{ nativeIcon: policy.digest(Buffer.from('old icon')) }, { nativeIcon: update.manifest.nativeIcon, bootstrap: 2 }]) {
+      const runtime = setup(t, pair, { platform, arch: 'x64', ...overrides });
+      const service = new UpdateService({ runtime, network });
+      const state = await service.check();
+      assert.equal(state.kind, 'installer'); assert.match(state.message, /图标/);
+      assert.equal((await service.download()).status, 'ready');
+      assert.equal(service.prepareApply().kind, 'installer');
+      assert.equal(runtime.readState().current, null);
+      store(runtime, update); assert.throws(() => runtime.activate(update.manifest.asarSha256), /完整安装器/);
+    }
+    const runtime = setup(t, pair, { platform, arch: 'x64', nativeIcon: update.manifest.nativeIcon });
+    assert.equal((await new UpdateService({ runtime, network }).check()).kind, 'payload', 'unchanged icons retain lightweight updates');
+    assert.equal(remote.requests.some(request => request.path.endsWith('/assets/2')), false);
+  }
 });
 
 test('public release download stages verified code without activating it or sending credentials', async t => {
@@ -275,15 +326,16 @@ test('healthy startup keeps the current and rollback archives and prunes only ob
 test('release asset generation verifies the key, exact installer and archive, and rejects substituted artifacts', async t => {
   const { createUpdateAssets, verifyUpdateAssets } = await import('../scripts/update-assets.mjs');
   const pair = keys(), runtime = setup(t, pair), source = fixture(pair);
-  const asar = path.join(runtime.root, 'synthetic.asar'), installer = path.join(runtime.root, source.manifest.installer.name);
-  fs.writeFileSync(asar, source.payload); fs.writeFileSync(installer, source.installer);
+  const { asar, bytes, nativeIcon } = await applicationArchive(runtime.root, process.platform), installer = path.join(runtime.root, source.manifest.installer.name);
+  fs.writeFileSync(installer, source.installer);
   const options = { directory: runtime.root, asar, installer, version: '0.12.0', platform: process.platform, electron: '45.0.0',
     signingKey: pair.privateKey.export({ type: 'pkcs8', format: 'pem' }), verificationKey: pair.publicKey };
   await assert.rejects(() => createUpdateAssets({ ...options, verificationKey: keys().publicKey }), /does not match/);
   const updateAssets = await createUpdateAssets(options);
-  const build = { version: '0.12.0', platform: process.platform === 'win32' ? 'windows' : 'macos', asarSha256: policy.digest(source.payload),
+  const build = { version: '0.12.0', platform: process.platform === 'win32' ? 'windows' : 'macos', asarSha256: policy.digest(bytes),
     installer: path.basename(installer), sha256: policy.digest(source.installer), updateAssets };
-  assert.equal((await verifyUpdateAssets(build, runtime.root, pair.publicKey)).asarSha256, build.asarSha256);
+  const signed = await verifyUpdateAssets(build, runtime.root, pair.publicKey);
+  assert.equal(signed.asarSha256, build.asarSha256); assert.equal(signed.nativeIcon, nativeIcon);
   await assert.rejects(() => verifyUpdateAssets({ ...build, updateAssets: [updateAssets[0], updateAssets[0]] }, runtime.root, pair.publicKey), /Missing/);
   fs.appendFileSync(installer, 'changed'); await assert.rejects(() => verifyUpdateAssets(build, runtime.root, pair.publicKey));
   fs.writeFileSync(installer, source.installer);
@@ -296,16 +348,16 @@ test('each platform publishes one canonical Meki installer referenced by its sig
   const { installerName } = require('../electron/app-identity.cjs');
   for (const platform of ['win32', 'darwin']) {
     const pair = keys(), runtime = setup(t, pair), source = fixture(pair, { version: '1.0.0', platform });
-    const asar = path.join(runtime.root, 'application.asar'), installer = path.join(runtime.root, installerName('1.0.0', platform));
-    fs.writeFileSync(asar, source.payload); fs.writeFileSync(installer, source.installer);
+    const { asar, bytes, nativeIcon } = await applicationArchive(runtime.root, platform), installer = path.join(runtime.root, installerName('1.0.0', platform));
+    fs.writeFileSync(installer, source.installer);
     const updateAssets = await createUpdateAssets({ directory: runtime.root, asar, installer, version: '1.0.0', platform, electron: '45.0.0',
       signingKey: pair.privateKey.export({ type: 'pkcs8', format: 'pem' }), verificationKey: pair.publicKey });
     const canonical = policy.names('1.0.0', platform).installer;
     assert.equal(path.basename(installer), canonical);
     const build = { version: '1.0.0', platform: platform === 'win32' ? 'windows' : 'macos', installer: path.basename(installer),
-      sha256: policy.digest(source.installer), asarSha256: policy.digest(source.payload), updateAssets };
+      sha256: policy.digest(source.installer), asarSha256: policy.digest(bytes), updateAssets };
     const signed = await verifyUpdateAssets(build, runtime.root, pair.publicKey);
-    assert.equal(signed.installer.name, canonical); assert.equal(signed.appId, 'io.meki.editor');
+    assert.equal(signed.installer.name, canonical); assert.equal(signed.appId, 'io.meki.editor'); assert.equal(signed.nativeIcon, nativeIcon);
     const generated = fs.readdirSync(runtime.root).filter(name => name.endsWith('.exe') || name.endsWith('.dmg'));
     assert.deepEqual(generated, [canonical]);
     await assert.rejects(verifyUpdateAssets({ ...build, installer: 'unexpected.exe' }, runtime.root, pair.publicKey), /installer name/);
