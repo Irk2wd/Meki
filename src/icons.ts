@@ -29,4 +29,4 @@ const paths: Record<string, string> = {
 export function icon(name: string, size = 18) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.page}</svg>`;
 }
-export const logo = '<svg width="31" height="31" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><rect x=".5" y=".5" width="31" height="31" rx="7.5" fill="#24342e" stroke="#5d7869" stroke-opacity=".6"/><path d="M7.5 21V9l8.5 8.5L24.5 9v12" stroke="#edf4ef" stroke-width="2.8" stroke-linejoin="bevel"/><path d="M17.5 25h7" stroke="#8fceab" stroke-width="2.5"/></svg>';
+export const logo = '<svg width="31" height="31" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><rect x=".5" y=".5" width="31" height="31" rx="6.5" fill="#24342e" stroke="#5d7869" stroke-opacity=".6"/><path d="M7 24V8h4l5 6.5L21 8h4v16h-4V14l-5 6.5L11 14v10Z" fill="#edf4ef"/></svg>';
