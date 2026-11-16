@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld('meki', Object.freeze({
   workspaceOperation: (input) => invoke('workspace-operation', input),
   searchWorkspace: (query, caseSensitive) => invoke('search-workspace', query, caseSensitive),
   workspacePathAction: (action, filePath) => invoke('workspace-path-action', action, filePath),
+  documentPathAction: (action, filePath) => invoke('document-path-action', action, filePath),
   resolveDocumentLink: (href, documentPath) => invoke('resolve-document-link', href, documentPath),
   checkDocument: (filePath, revision) => invoke('check-document', filePath, revision),
   saveDraft: (draft) => invoke('save-draft', draft),

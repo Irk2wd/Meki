@@ -4,6 +4,7 @@ import type { DocumentTab } from './document-tabs';
 import type { Settings } from '../shared/meki';
 import { groups, reconcileLayout, dockTab, mergeGroup, type PaneLayout, type PaneSplit, type PaneEdge } from '../electron/pane-layout.mjs';
 import './pane-workspace.css';
+import { configureTabStrip, revealActiveTab } from './tab-strip';
 
 interface View { tab: DocumentTab; scroll: HTMLElement; visual: HTMLElement; source: HTMLElement; editor: WritingEditor; loaded: boolean; cleanup?: () => void }
 interface Hooks {
@@ -26,6 +27,7 @@ export class PaneWorkspace {
   private signature = '';
   private cancelGesture?: () => void;
   private suppressClick = false;
+  private tabResize = new ResizeObserver(entries => { for (const entry of entries) revealActiveTab(entry.target as HTMLElement); });
   constructor(private hooks: Hooks) {
     this.root.id = 'editor-workspace'; this.canvas.className = 'editor-layout'; this.parking.hidden = true;
     this.root.append(this.canvas);
@@ -94,6 +96,7 @@ export class PaneWorkspace {
     const signature = JSON.stringify(shape(this.layout));
     if (signature !== this.signature) {
       for (const view of this.views.values()) if (view.scroll.parentElement !== this.parking) this.parking.append(view.scroll);
+      this.tabResize.disconnect();
       this.panes.clear(); this.canvas.replaceChildren(this.build(this.layout, '')); this.signature = signature;
     }
     const minimum = this.minimum(this.layout); this.canvas.style.minWidth = `${minimum.width}px`; this.canvas.style.minHeight = `${minimum.height}px`;
@@ -104,12 +107,14 @@ export class PaneWorkspace {
       const pane = this.panes.get(group.id)!, body = pane.querySelector('.pane-body')!;
       pane.classList.toggle('active-pane', group === active);
       const header = pane.querySelector<HTMLElement>('.pane-tabs')!; header.hidden = all.length === 1;
+      const strip = header.querySelector<HTMLElement>('.pane-tab-list')!;
       const html = group.tabs.map(id => {
         const tab = tabs.find(tab => tab.id === id)!;
         return `<div class="document-tab ${id === group.activeId ? 'active' : ''}"><button type="button" role="tab" aria-selected="${id === group.activeId}" data-document-id="${id}" title="${escape(tab.document.path || tab.document.name)}"><span class="tab-dirty ${tab.document.content !== tab.savedContent ? 'visible' : ''}">●</span><span>${escape(tab.document.name)}</span></button><button type="button" data-document-id="${id}" data-close-tab="true" class="close-document-tab" aria-label="${ht("关闭 {0}", escape(tab.document.name))}">×</button></div>`;
-      }).join('') + `<button type="button" class="pane-merge" data-merge-pane="${group.id}" title="${ht("收起分栏，将文稿移到相邻栏")}" aria-label="${ht("收起分栏")}">⇤</button>`;
+      }).join('');
       const content = all.length > 1 ? html : '';
-      if (header.innerHTML !== content) header.innerHTML = content;
+      if (strip.innerHTML !== content) strip.innerHTML = content;
+      revealActiveTab(strip);
       const view = this.views.get(group.activeId);
       for (const child of [...body.children]) if (child !== view?.scroll) this.parking.append(child);
       if (view && view.scroll.parentElement !== body) body.append(view.scroll);
@@ -123,7 +128,9 @@ export class PaneWorkspace {
   private build(node: PaneLayout, path: string): HTMLElement {
     if (node.type === 'group') {
       const pane = document.createElement('section'); pane.className = 'editor-pane'; pane.dataset.groupId = node.id;
-      pane.innerHTML = `<div class="pane-tabs" role="tablist" aria-label="${ht("分栏文稿")}"></div><div class="pane-body"></div>`;
+      pane.innerHTML = `<div class="pane-tabs"><div class="pane-tab-list" role="tablist" aria-label="${ht("分栏文稿")}"></div><button type="button" class="pane-merge" data-merge-pane="${node.id}" title="${ht("收起分栏，将文稿移到相邻栏")}" aria-label="${ht("收起分栏")}">⇤</button></div><div class="pane-body"></div>`;
+      const strip = pane.querySelector<HTMLElement>('.pane-tab-list')!;
+      configureTabStrip(strip); this.tabResize.observe(strip);
       this.panes.set(node.id, pane); return pane;
     }
     const split = document.createElement('div'); split.className = `editor-split ${node.axis}`; split.dataset.splitPath = path;

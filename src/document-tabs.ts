@@ -5,6 +5,7 @@ import { ClosedDocuments, type ClosedDocument } from '../electron/closed-documen
 import './document-tabs.css';
 import type { PaneWorkspace, DockRequest } from './pane-workspace';
 import { groups, reconcileLayout, type PaneLayout } from '../electron/pane-layout.mjs';
+import { configureTabStrip, revealActiveTab } from './tab-strip';
 
 export interface DocumentTab {
   id: string; document: DocumentFile; savedContent: string; snapshot?: EditorSnapshot;
@@ -37,6 +38,9 @@ export class DocumentTabs {
     this.bar = document.createElement('div'); this.bar.className = 'document-tabs'; this.bar.setAttribute('aria-label', t("打开的文稿"));
     this.bar.innerHTML = `<div class="document-tab-list" role="tablist" aria-label="${ht("文稿标签")}"></div><button type="button" data-action="new" class="tab-add" aria-label="${ht("新建文稿标签")}" title="${ht("新建文稿")}">＋</button><button type="button" data-action="reopen-closed" class="tab-windows" aria-label="${ht("重新打开刚关闭文稿")}" disabled>${ht("重开")}</button><button type="button" data-action="window-menu" class="tab-windows" aria-label="${ht("窗口操作")}" title="${ht("新建、移动文稿与并排窗口")}">${ht("窗口")}</button><button type="button" data-action="lifecycle-settings" class="tab-settings" aria-label="${ht("文稿与保存设置")}" title="${ht("文稿与保存")}">•••</button>`;
     document.querySelector('.titlebar')!.after(this.bar);
+    const strip = this.bar.querySelector<HTMLElement>('.document-tab-list')!;
+    configureTabStrip(strip);
+    new ResizeObserver(() => revealActiveTab(strip)).observe(strip);
     this.windowPanel = document.createElement('div'); this.windowPanel.className = 'popover window-panel'; this.windowPanel.id = 'window-panel'; this.windowPanel.hidden = true;
     this.windowPanel.innerHTML = `<div class="popover-title">${ht("窗口")}</div><button type="button" data-action="new-window">${ht("新建窗口")} <span>Ctrl / ⌘ Shift N</span></button><button type="button" data-action="detach-document">${ht("将当前文稿移至新窗口")}</button><button type="button" data-action="tile-windows">${ht("左右并排")}</button>`;
     document.body.append(this.windowPanel);
@@ -181,7 +185,7 @@ export class DocumentTabs {
     document.querySelector<HTMLElement>('#recovery-banner')!.hidden = !this.active?.recovered;
     const status = this.active?.paused ? pauseLabels[this.active.paused] : '';
     this.bar.title = status;
-    if (this.active) this.bar.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    revealActiveTab(list);
   }
   pauseMessage() { return this.active?.paused ? pauseLabels[this.active.paused] : ''; }
   touched() { if (this.active) this.active.editedAt = Date.now(); }

@@ -129,6 +129,7 @@ export interface MekiAPI {
   workspaceOperation(input: WorkspaceRequest): Promise<WorkspaceResult | null>;
   searchWorkspace(query: string, caseSensitive?: boolean): Promise<WorkspaceSearch>;
   workspacePathAction(action: 'reveal' | 'copy-path', path: string): Promise<void>;
+  documentPathAction(action: 'reveal' | 'copy-path', path: string): Promise<void>;
   resolveDocumentLink(href: string, documentPath: string): Promise<{ path: string; anchor: string }>;
   checkDocument(path: string, revision: string | null): Promise<DocumentStatus>;
   saveDraft(draft: Draft | null): Promise<void>;

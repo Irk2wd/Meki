@@ -4,6 +4,7 @@ import { WorkspaceUI, type OpenLocation } from './workspace-ui';
 import { WritingEditor } from './editor';
 import { WritingTools } from './writing-tools';
 import { DocumentTabs } from './document-tabs';
+import { DocumentMenu } from './document-menu';
 import { PaneWorkspace, type DockRequest } from './pane-workspace';
 import { SnapshotDialog } from './snapshots';
 import { MediaController } from './media-controller';
@@ -50,7 +51,7 @@ document.querySelector('#app')!.innerHTML = `
   </aside>
   <section class="main-area">
     <header class="titlebar">
-      <div class="document-location">${button('sidebar', t("显示或隐藏侧栏"), 'layout')}<span class="breadcrumb">${ht("文稿")}</span>${icon('chevron', 12)}<span id="document-name">${ht("开始写作.md")}</span><span class="dirty-dot" id="dirty-dot" hidden></span></div>
+      <div class="document-location">${button('sidebar', t("显示或隐藏侧栏"), 'layout')}<span class="breadcrumb">${ht("文稿")}</span>${icon('chevron', 12)}<span id="document-name" tabindex="0">${ht("开始写作.md")}</span><span class="dirty-dot" id="dirty-dot" hidden></span></div>
       <div class="title-actions"><button id="toggle-autosave" class="lifecycle-button" data-action="toggle-autosave" aria-pressed="false">${ht("自动保存：关")}</button><button class="lifecycle-button" data-action="snapshots">${ht("版本历史")}</button><span class="save-state" id="save-state"><span class="saved-tick">✓</span> ${ht("就绪")}</span><button class="save-button" data-action="save">${icon('save', 15)}<span>${ht("保存")}</span></button></div>
     </header>
     <div class="formatbar" aria-label="${ht("编辑工具栏")}">
@@ -126,10 +127,12 @@ const externalBanner = document.createElement('div');
 externalBanner.id = 'external-banner'; externalBanner.className = 'external-banner'; externalBanner.hidden = true;
 externalBanner.innerHTML = `<span id="external-message"></span><button data-action="reload-document">${ht("重新载入")}</button><button data-action="saveAs">${ht("另存为")}</button><button data-action="dismiss-external">${ht("保留当前内容")}</button>`;
 el('#recovery-banner').after(externalBanner);
-const workspaceUI = new WorkspaceUI({ document: () => current, open: location => dispatch('workspace-open', location), operation: request => dispatch('workspace-operation', request), choose: () => dispatch('folder'), openFolder: path => perform(() => openRecentFolder(path), false, true), refresh: () => dispatch('refresh'), notify });
+const workspaceUI = new WorkspaceUI({ platform: () => platform, document: () => current, open: location => dispatch('workspace-open', location), operation: request => dispatch('workspace-operation', request), choose: () => dispatch('folder'), openFolder: path => perform(() => openRecentFolder(path), false, true), refresh: () => dispatch('refresh'), notify });
 const documents = new DocumentTabs({ editor: () => editor, settings: () => settings, platform: () => platform, panes: () => panes,
   active: doc => { documentId++; outline?.reset(); current = doc; }, updated: () => { renderOutline(); renderFiles(); updateStatus(); renderExternalStatus(); },
   dispatch: (command, payload) => { void dispatch(command, payload); }, notify });
+new DocumentMenu({ current: () => current, document: id => documents.tabs.find(tab => tab.id === id)?.document,
+  platform: () => platform, blocked: () => !ready || busy || Boolean(document.querySelector('dialog[open]')), notify });
 const snapshotDialog = new SnapshotDialog({ documents, platform: () => platform, settings: () => settings, run: action => perform(action, true, true), notify });
 const sidebarSettings = new SidebarSettings({
   blocked: () => !ready || busy,

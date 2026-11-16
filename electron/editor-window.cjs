@@ -538,6 +538,23 @@ function registerIpc() {
     }
     else if (!TEST_MODE) shell.showItemInFolder(entry.path);
   });
+  register('document-path-action', async (action, filePath) => {
+    if (!['reveal', 'copy-path'].includes(action)) throw new Error(t("无效的文稿位置操作。"));
+    filePath = validateAbsolutePath(filePath);
+    if (!isDocumentPath(filePath) || (!authorizedDocuments.has(pathKey(filePath)) &&
+        !store.metadata.recentFiles.some(file => pathKey(file.path) === pathKey(filePath)))) {
+      throw new Error(t("请先打开此文稿，或从最近文稿列表中选择。"));
+    }
+    if (action === 'copy-path') {
+      if (TEST_MODE) process.env.MEKI_TEST_COPIED_PATH = filePath;
+      else clipboard.writeText(filePath);
+      return;
+    }
+    try { if (!(await fs.promises.stat(filePath)).isFile()) throw new Error('Not a file'); }
+    catch { throw new Error(t("文稿文件已不存在，请检查路径或重新保存。")); }
+    if (TEST_MODE) process.env.MEKI_TEST_REVEALED_PATH = filePath;
+    else shell.showItemInFolder(filePath);
+  });
   register('resolve-document-link', async (href, documentPath) => {
     requireAuthorized(documentPath);
     const boundary = workspaceStore && isWithin(documentPath, workspaceStore.root) ? workspaceStore : await WorkspaceStore.open(path.dirname(documentPath));

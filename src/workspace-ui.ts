@@ -1,6 +1,7 @@
 import { ht, t } from '../electron/i18n.mjs';
 import type { DocumentFile, RecentFile, RecentFolder, RecentFolderChange, SearchMatch, Workspace, WorkspaceEntry, WorkspaceRequest } from '../shared/meki';
 import { icon } from './icons';
+import { revealFileLabel } from './file-location';
 import { navigationRows, retainNavigationPath, navigationKey, type NavigationRow } from './workspace-navigation';
 import './workspace.css';
 
@@ -8,6 +9,7 @@ const escape = (text: string) => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', 
 const base = (name: string) => name.split(/[\\/]/).filter(Boolean).pop() || name;
 export interface OpenLocation { path: string; anchor?: string; line?: number; column?: number }
 interface Hooks {
+  platform(): string;
   document(): DocumentFile;
   open(location: OpenLocation): Promise<void>;
   operation(request: WorkspaceRequest): Promise<void>;
@@ -59,7 +61,7 @@ export class WorkspaceUI {
     this.panel.addEventListener('click', event => { event.stopPropagation(); void this.click(event).catch(error => hooks.notify(String(error), true)); });
     this.panel.addEventListener('contextmenu', event => {
       const row = (event.target as Element).closest<HTMLElement>('[data-ws-path]');
-      if (row && this.workspace) { event.preventDefault(); this.showMenu(row.dataset.wsPath!, event.clientX, event.clientY); }
+      if (row) { event.preventDefault(); this.showMenu(row.dataset.wsPath!, event.clientX, event.clientY); }
     });
     this.panel.querySelector('#file-list')!.addEventListener('keydown', event => this.treeKey(event as KeyboardEvent));
     this.panel.querySelector('#file-list')!.addEventListener('focusin', event => {
@@ -167,7 +169,6 @@ export class WorkspaceUI {
     if (!row || event.altKey || event.ctrlKey || event.metaKey) return;
     const path = row.dataset.wsPath!;
     if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
-      if (!this.workspace) return;
       event.preventDefault(); const box = row.getBoundingClientRect(); this.showMenu(path, box.right, box.bottom); this.menu.querySelector<HTMLButtonElement>('button')?.focus(); return;
     }
     if (!['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End', 'Enter', ' ', 'F2'].includes(event.key)) return;
@@ -196,17 +197,21 @@ export class WorkspaceUI {
     if (action === 'choose') await this.hooks.choose();
   }
   private showMenu(path: string, x: number, y: number) {
-    if (!this.workspace) { void this.hooks.choose(); return; }
+    if (!this.workspace && !this.recent.some(file => file.path === path)) { void this.hooks.choose(); return; }
     this.contextPath = path; this.selectRow(path, false);
-    const directory = path === this.workspace.root || this.workspace.tree?.find(entry => entry.path === path)?.kind === 'directory';
-    const items = [...(directory ? [['create-file',t("新建文稿")],['create-folder',t("新建文件夹")]] : [['open',t("打开")]]), ...(path !== this.workspace.root ? [['rename',t("重命名")],['copy',t("复制…")],['move',t("移动…")]] : []), ['reveal',t("在系统中显示")], ['copy-path',t("复制完整路径")], ...(path !== this.workspace.root ? [['trash',t("移入回收站…")]] : [['choose',t("切换工作区…")]])];
+    const directory = this.workspace && (path === this.workspace.root || this.workspace.tree?.find(entry => entry.path === path)?.kind === 'directory');
+    const items = [...(directory ? [['create-file',t("新建文稿")],['create-folder',t("新建文件夹")]] : [['open',t("打开")]]), ...(this.workspace && path !== this.workspace.root ? [['rename',t("重命名")],['copy',t("复制…")],['move',t("移动…")]] : []), ['reveal',revealFileLabel(this.hooks.platform())], ['copy-path',t("复制完整路径")], ...(this.workspace ? path !== this.workspace.root ? [['trash',t("移入回收站…")]] : [['choose',t("切换工作区…")]] : [])];
     this.menu.innerHTML = items.map(([action,label])=>`<button role="menuitem" data-ws-menu="${action}" class="${action==='trash'?'danger':''}">${label}</button>`).join('');
     this.menu.hidden = false; this.menu.style.left = `${Math.max(8,Math.min(x,innerWidth-185))}px`; this.menu.style.top = `${Math.max(8,Math.min(y,innerHeight-this.menu.offsetHeight-8))}px`;
   }
   private async menuAction(action: string) {
     if (action === 'open') return this.hooks.open({path:this.contextPath});
     if (action === 'choose') return this.hooks.choose();
-    if (action === 'reveal' || action === 'copy-path') { await window.meki.workspacePathAction(action,this.contextPath); if(action==='copy-path') this.hooks.notify(t("已复制完整路径")); return; }
+    if (action === 'reveal' || action === 'copy-path') {
+      if (this.workspace) await window.meki.workspacePathAction(action,this.contextPath);
+      else await window.meki.documentPathAction(action,this.contextPath);
+      if(action==='copy-path') this.hooks.notify(t("已复制完整路径")); return;
+    }
     if (action === 'trash') return this.hooks.operation({action,path:this.contextPath});
     this.showOperation({action:action as WorkspaceRequest['action'],path:this.contextPath});
   }
