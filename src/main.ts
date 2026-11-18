@@ -44,8 +44,14 @@ document.querySelector('#app')!.innerHTML = `
 <div class="shell" id="shell">
   <aside class="sidebar" aria-label="${ht("文档导航")}">
     <div class="brand"><button type="button" class="brand-mark" data-action="about" title="${ht("关于 {0}", productName)}" aria-label="${ht("关于 {0}", productName)}">${logo}</button><span class="brand-wordmark" role="img" aria-label="${productName}">${brandWordmark}</span></div>
+    <nav id="research-sidebar" hidden aria-label="${ht("项目导航")}"></nav>
     <div class="file-actions"><button class="open-button" data-action="open">${icon('folder')}<span>${ht("打开文稿")}</span><kbd id="open-shortcut">Ctrl O</kbd></button>${button('new', t("新建文稿"), 'plus')}</div>
-    <button class="workspace-label" data-action="recent-folders" aria-haspopup="dialog" aria-label="${ht("切换工作区或管理最近文件夹")}"><span id="workspace-name">${ht("个人写作空间")}</span>${icon('down', 14)}</button>
+    <div class="workspace-selector">
+      <button type="button" id="workspace-switch" class="workspace-switch" aria-haspopup="menu" aria-expanded="false" aria-controls="workspace-switch-menu" title="${ht("切换工作区")}">
+        ${icon('folder', 16)}<span><small>${ht("工作区")}</small><strong id="workspace-name">${ht("个人写作空间")}</strong></span>${icon('select', 14)}
+      </button>
+      <div id="workspace-switch-menu" class="popover workspace-switch-menu" role="menu" aria-label="${ht("切换工作区")}" tabindex="-1" hidden></div>
+    </div>
     <button type="button" class="research-entry-button" data-action="research" aria-pressed="false">${icon('diagram', 16)}${ht("研究项目")}</button>
     <div class="sidebar-tabs" role="tablist" aria-label="${ht("导航方式")}"><button role="tab" data-tab="files" aria-selected="false">${ht("文件")}</button><button role="tab" class="active" data-tab="outline" aria-selected="true">${ht("大纲")}</button></div>
     <div id="files-panel" hidden><div class="file-filter">${icon('search', 15)}<input id="file-filter" placeholder="${ht("搜索文件")}" aria-label="${ht("搜索本地文件")}"></div><div id="file-list"></div></div>
@@ -53,6 +59,19 @@ document.querySelector('#app')!.innerHTML = `
     <div class="sidebar-bottom"><button type="button" id="sidebar-settings-button" class="sidebar-settings-button" aria-haspopup="menu" aria-expanded="false" aria-controls="sidebar-settings-menu">${icon('settings', 16)}<span>${ht("设置")}</span></button>${button('updates', t("检查更新"), 'refresh', 'update-entry sidebar-footer-icon')}${button('help', t("使用指南与快捷键"), 'help', 'sidebar-footer-icon')}</div>
   </aside>
   <section class="main-area">
+    <div class="research-reader-scrim" aria-hidden="true"></div>
+    <section id="document-surface">
+    <header class="research-reader-header">
+      <div class="research-reader-identity">
+        ${button('research-reader-back', ht("返回研究列表"), 'back')}
+        <div class="research-reader-heading"><span id="research-reader-context"></span><h2 id="research-reader-title" tabindex="-1"></h2></div>
+      </div>
+      <div class="research-reader-actions">
+        <button type="button" class="secondary-button" data-action="research-edit-body" aria-pressed="false">${icon('edit', 15)}<span>${ht("编辑正文")}</span></button>
+        ${button('research-close-reader', ht("关闭正文侧栏"), 'close')}
+      </div>
+    </header>
+    <div id="research-reader-related" hidden></div>
     <header class="titlebar">
       <div class="document-location">${button('sidebar', t("显示或隐藏侧栏"), 'layout')}<span class="breadcrumb">${ht("文稿")}</span>${icon('chevron', 12)}<span id="document-name" tabindex="0">${ht("开始写作.md")}</span><span class="dirty-dot" id="dirty-dot" hidden></span></div>
       <div class="title-actions"><button id="toggle-autosave" class="lifecycle-button" data-action="toggle-autosave" aria-pressed="false">${ht("自动保存：关")}</button><button class="lifecycle-button" data-action="snapshots">${ht("版本历史")}</button><span class="save-state" id="save-state"><span class="saved-tick">✓</span> ${ht("就绪")}</span><button class="save-button" data-action="save">${icon('save', 15)}<span>${ht("保存")}</span></button></div>
@@ -65,6 +84,7 @@ document.querySelector('#app')!.innerHTML = `
     <div id="find-panel" class="find-panel" hidden>${icon('search', 16)}<input id="find-query" placeholder="${ht("查找文稿中的文字")}" aria-label="${ht("查找文字")}"><span id="find-count"></span>${button('find-prev', t("上一个匹配"), 'back')}${button('find-next', t("下一个匹配"), 'chevron')}${button('find-close', t("关闭查找"), 'close')}</div>
     <main class="document-scroll" id="document-scroll"><div id="loading" class="loading">${ht("正在准备你的写作空间…")}</div><div id="visual-editor" class="editor-host" aria-label="${ht("即时预览编辑区")}"></div><div id="source-editor" hidden></div></main>
     <footer class="statusbar"><span id="document-state">${ht("本地 Markdown")}</span><span class="footer-right"><span id="word-count">${ht("0 字")}</span><span class="footer-separator">·</span><span id="reading-time">${ht("1 分钟阅读")}</span><button data-action="style" id="font-status">18 px</button><span class="encoding">UTF-8</span></span></footer>
+    </section>
   </section>
 </div>
 <div class="popover style-panel" id="style-panel" hidden>
@@ -124,27 +144,38 @@ let platform = '';
 let syncingWorkspace = false;
 let composing = false;
 let savingAutomatically = false;
+let researchEditing = false;
+interface ResearchReaderStep { tabId: string; scroll: number; editing: boolean }
+const researchReaderHistory: ResearchReaderStep[] = [];
+let researchRelatedMarkup = '';
 let lifecycleSettingsQueue: Promise<void> = Promise.resolve();
 let lifecycleSettingsPending = 0;
 const externalBanner = document.createElement('div');
 externalBanner.id = 'external-banner'; externalBanner.className = 'external-banner'; externalBanner.hidden = true;
 externalBanner.innerHTML = `<span id="external-message"></span><button data-action="reload-document">${ht("重新载入")}</button><button data-action="saveAs">${ht("另存为")}</button><button data-action="dismiss-external">${ht("保留当前内容")}</button>`;
 el('#recovery-banner').after(externalBanner);
-const workspaceUI = new WorkspaceUI({ platform: () => platform, document: () => current, open: location => dispatch('workspace-open', location), operation: request => dispatch('workspace-operation', request), choose: () => dispatch('folder'), openFolder: path => perform(() => openRecentFolder(path), false, true), refresh: () => dispatch('refresh'), notify });
+const workspaceUI = new WorkspaceUI({ platform: () => platform, document: () => current, open: location => dispatch('workspace-open', location), operation: request => dispatch('workspace-operation', request), choose: () => dispatch('folder'), openFolder: path => perform(() => openRecentFolder(path), false, true), refresh: () => dispatch('refresh'), blocked: () => !ready || busy || Boolean(document.querySelector('dialog[open]')), closePopovers, notify });
 const documents = new DocumentTabs({ editor: () => editor, settings: () => settings, platform: () => platform, panes: () => panes,
   active: doc => { documentId++; outline?.reset(); current = doc; }, updated: () => { renderOutline(); renderFiles(); updateStatus(); renderExternalStatus(); },
   dispatch: (command, payload) => { void dispatch(command, payload); }, notify });
-const researchUI = new ResearchWorkspace(el('.main-area'), {
+const researchUI = new ResearchWorkspace(el('.main-area'), el('#research-sidebar'), {
   root: () => workspace?.root, blocked: () => !ready || busy,
-  open: (root, id) => perform(async () => {
-    const document = await window.meki.openResearchRecord(root, id);
-    if (!document) return;
-    const existing = documents.findPath(document.path!);
-    const reload = existing && !documents.dirty(existing) && existing.document.revision !== document.revision;
-    await loadDocument(document);
-    if (reload) await documents.reload(document);
-    editor.focus();
+  open: (root, id, origin, edit) => perform(async () => {
+    const previous = captureResearchStep();
+    if (previous && dirty()) await persistDraft();
+    const doc = await window.meki.openResearchRecord(root, id);
+    if (!doc) return;
+    await loadResearchDocument(doc);
+    const followed = rememberResearchStep(previous);
+    researchUI.openReader(origin);
+    setResearchEditing(Boolean(edit) || dirty());
+    if (edit) editor.focus();
+    else el('#research-reader-title').focus({ preventScroll: true });
+    if (followed) animateResearchDocument(1);
   }, true),
+  closeReader: closeResearchReader,
+  openProject: path => openResearchProject(path),
+  notify,
 });
 new DocumentMenu({ current: () => current, document: id => documents.tabs.find(tab => tab.id === id)?.document,
   platform: () => platform, blocked: () => !ready || busy || Boolean(document.querySelector('dialog[open]')), notify });
@@ -185,6 +216,22 @@ function updateStatus() {
   if (!ready) return;
   el('#document-name').textContent = current.name;
   el('#document-name').title = current.path || t("尚未保存到文件");
+  if (researchUI.readerOpen) {
+    const label = researchUI.readerLabel(current.path);
+    el('#research-reader-title').textContent = label?.title || current.name;
+    el('#research-reader-context').textContent = [label?.context || t("资料"), dirty() ? t("未保存") : ''].filter(Boolean).join(' · ');
+    const back = el<HTMLButtonElement>('[data-action="research-reader-back"]');
+    const backLabel = previousResearchStep() ? t("返回上一份文档") : t("返回研究列表");
+    back.setAttribute('aria-label', backLabel);
+    back.title = backLabel;
+  }
+  const related = researchUI.readerOpen ? researchUI.readerRelated(current.path) : '';
+  if (related !== researchRelatedMarkup) {
+    researchRelatedMarkup = related;
+    const panel = el('#research-reader-related');
+    panel.innerHTML = related;
+    panel.hidden = !related;
+  }
   el('#dirty-dot').hidden = !dirty();
   el('#save-state').innerHTML = savingAutomatically ? t("自动保存中…") : busy ? t("处理中…") : dirty() ? `<span class="unsaved-tick">●</span> ${ht("未保存")}` : current.path ? `<span class="saved-tick">✓</span> ${ht("已保存")}` : t("本地文稿");
   el('#toggle-autosave').textContent = t("自动保存：{0}", settings.autoSave ? t("开") : t("关"));
@@ -242,6 +289,7 @@ async function synchronizeWorkspace() {
       renderExternalStatus(); updateStatus();
     }
     await researchUI.refresh();
+    if (researchUI.readerOpen) updateStatus();
   } finally { syncingWorkspace = false; }
 }
 function renderExternalStatus() {
@@ -261,23 +309,50 @@ function remapDocumentPath(filePath: string, from: string, to: string | null): s
   return to === null ? null : to + file.slice(source.length).replace(/\//g,to.includes('\\')?'\\':'/');
 }
 
-async function openLocation(location: OpenLocation) {
+async function openLocation(location: OpenLocation, keepReader = false) {
+  const inProject = keepReader && researchUI.readerOpen;
+  let changedDocument = false;
   if (location.path !== current.path) {
+    const previous = inProject ? captureResearchStep() : undefined;
+    if (previous && dirty()) await persistDraft();
     const doc = await window.meki.openDocument(location.path); if (!doc) return;
-    await loadDocument(doc);
+    if (inProject) {
+      await loadResearchDocument(doc);
+      changedDocument = rememberResearchStep(previous);
+      if (changedDocument) setResearchEditing(dirty());
+    } else await loadDocument(doc);
   }
-  hideResearch();
+  if (!inProject) hideResearch();
   if (location.line) { switchMode('source'); editor.goToLine(location.line, location.column || 1); }
   else if (location.anchor) {
     switchMode('visual');
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
     const target = [...el('#visual-editor').querySelectorAll<HTMLElement>('[id]')].find(node => node.id === location.anchor);
     if (target) target.scrollIntoView({block:'center'}); else notify(t("没有找到标题锚点：{0}", location.anchor));
-  } else editor.focus();
+  } else if (!inProject) editor.focus();
+  if (inProject && changedDocument) {
+    el('#research-reader-title').focus({ preventScroll: true });
+    animateResearchDocument(1);
+  }
 }
 async function openRecentFolder(path: string) {
   workspace = await window.meki.openRecentFolder(path); setSidebarTab('files'); renderFiles();
   await researchUI.refresh();
+}
+
+async function openResearchProject(path?: string, demo = false) {
+  researchUI.closeProjects();
+  await perform(async () => {
+    if (researchUI.readerOpen) await persistDraft();
+    const result = demo ? await window.meki.createResearchDemo() : await window.meki.openResearchProject(path);
+    if (!result) return;
+    researchUI.closeReader(false);
+    researchReaderHistory.length = 0;
+    setResearchEditing(false);
+    workspace = result;
+    setSidebarTab('files'); renderFiles();
+    await showResearch();
+  }, true);
 }
 
 async function workspaceOperation(request: WorkspaceRequest) {
@@ -301,7 +376,7 @@ function applySettings() {
   document.documentElement.style.setProperty('--writing-size', `${settings.fontSize}px`);
   document.documentElement.style.setProperty('--line-width', `${settings.lineWidth}px`);
   document.body.classList.toggle('unlimited-width', settings.unlimitedWidth);
-  document.body.classList.toggle('focus-mode', settings.focus);
+  document.body.classList.toggle('focus-mode', settings.focus && !researchUI.visible);
   document.body.classList.toggle('sidebar-hidden', !settings.sidebar);
   el<HTMLSelectElement>('#font-family').value = settings.font;
   el<HTMLInputElement>('#custom-font').value = settings.fontFamily;
@@ -326,18 +401,29 @@ function changeSettings(patch: Partial<Settings>) {
   settings = { ...settings, ...patch }; applySettings();
   void window.meki.updateSettings(patch).catch(error => notify(String(error), true));
 }
-function closePopovers() { el('#style-panel').hidden = true; el('#export-panel').hidden = true; sidebarSettings.close(); }
+function closePopovers() { el('#style-panel').hidden = true; el('#export-panel').hidden = true; sidebarSettings.close(); workspaceUI.closeFolderMenu(); }
 function switchMode(mode: 'visual' | 'source') {
   if (editor.mode === mode) return; editor.flush(); editor.setMode(mode, current.content);
   document.querySelectorAll<HTMLElement>('[data-mode]').forEach(button => { const active = button.dataset.mode === mode; button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active)); });
   updateStatus(); outline?.schedule();
 }
-async function loadDocument(doc: DocumentFile, recovered = false) {
+async function loadDocument(doc: DocumentFile, recovered = false, keepProject = false) {
   clearTimeout(draftTimer);
   await documents.open(doc, recovered);
-  hideResearch();
+  if (!keepProject) hideResearch();
   if (doc.path) recentFiles = [{ path: doc.path, name: doc.name }, ...recentFiles.filter(f => f.path !== doc.path)].slice(0, 15);
   renderOutline(); renderFiles(); updateStatus();
+}
+async function loadResearchDocument(doc: DocumentFile) {
+  const existing = doc.path ? documents.findPath(doc.path) : undefined;
+  const reload = existing && !documents.dirty(existing) && existing.document.revision !== doc.revision;
+  try {
+    await loadDocument(doc, false, true);
+    if (reload) await documents.reload(doc);
+  } catch (error) {
+    if (doc.path && !documents.findPath(doc.path)) await window.meki.releaseDocument(doc.path);
+    throw error;
+  }
 }
 async function save(saveAs = false) {
   if (!await documents.save(documents.active, saveAs)) return false;
@@ -375,11 +461,93 @@ async function runExport(options: ExportOptions) {
   });
 }
 const exportDialog = new ExportDialog(runExport);
-const editorActions = new Set(['save', 'saveAs', 'source', 'math', 'diagram', 'image', 'find', 'replace', 'find-next', 'find-prev', 'snapshots', 'history', 'export']);
+const editActions = new Set(['save', 'source', 'math', 'insert-math', 'diagram', 'image', 'replace', 'organize-attachments', 'upload-document-images', 'restore-version']);
+const editorActions = new Set([...editActions, 'saveAs', 'find', 'find-next', 'find-prev', 'snapshots', 'history', 'export']);
+function mayEditDocument() { return !researchUI.visible || (researchUI.readerOpen && researchEditing); }
+
+function setResearchEditing(value: boolean) {
+  researchEditing = value;
+  el('.main-area').classList.toggle('research-reader-editing', researchUI.readerOpen && value);
+  const toggle = el<HTMLButtonElement>('[data-action="research-edit-body"]');
+  const surface = el('#document-surface');
+  if (researchUI.readerOpen) surface.setAttribute('aria-labelledby', 'research-reader-title');
+  else surface.removeAttribute('aria-labelledby');
+  toggle.setAttribute('aria-pressed', String(value));
+  toggle.querySelector('span')!.textContent = value ? t("完成编辑") : t("编辑正文");
+  editor.setReadOnly(researchUI.readerOpen && !value);
+  if (researchUI.readerOpen && !value) {
+    editor.cancelPendingActions();
+    switchMode('visual');
+  }
+  updateStatus();
+}
+
+function previousResearchStep() {
+  return researchReaderHistory.findLast(step => step.tabId !== documents.activeId && documents.tabs.some(tab => tab.id === step.tabId));
+}
+
+function captureResearchStep(): ResearchReaderStep | undefined {
+  const tabId = documents.activeId;
+  if (researchUI.readerOpen && tabId) return { tabId, scroll: el('#document-scroll').scrollTop, editing: researchEditing };
+}
+
+function rememberResearchStep(step?: ResearchReaderStep) {
+  if (!step || step.tabId === documents.activeId) return false;
+  researchReaderHistory.push(step);
+  writingTools?.close();
+  return true;
+}
+
+function animateResearchDocument(direction: 1 | -1) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const content = el('#editor-workspace');
+  content.getAnimations().forEach(animation => animation.cancel());
+  content.animate([
+    { opacity: 0.45, transform: `translateX(${6 * direction}px)` },
+    { opacity: 1, transform: 'translateX(0)' },
+  ], { duration: 160, easing: 'ease-out' });
+}
+
+async function backResearchReader() {
+  if (!researchUI.readerOpen) return;
+  const step = previousResearchStep();
+  if (!step) { await closeResearchReader(); return; }
+  closePopovers(); writingTools?.close();
+  await perform(async () => {
+    if (dirty()) await persistDraft();
+    documents.activate(step.tabId);
+    researchReaderHistory.splice(researchReaderHistory.lastIndexOf(step));
+    setResearchEditing(step.editing || dirty());
+    el('#document-scroll').scrollTop = step.scroll;
+    animateResearchDocument(-1);
+  }, true);
+}
+
+async function closeResearchReader() {
+  if (!researchUI.readerOpen) return;
+  closePopovers(); writingTools?.close();
+  await perform(async () => {
+    if (dirty()) await persistDraft();
+    researchUI.closeReader();
+    researchReaderHistory.length = 0;
+    setResearchEditing(false);
+  }, true);
+}
+
+async function showResearch() {
+  closePopovers();
+  el('[data-action="research"]').setAttribute('aria-pressed', 'true');
+  document.body.classList.remove('focus-mode');
+  await researchUI.show();
+}
+
 function hideResearch() {
   if (!researchUI.visible) return;
   researchUI.hide();
+  researchReaderHistory.length = 0;
   el('[data-action="research"]').setAttribute('aria-pressed', 'false');
+  setResearchEditing(false);
+  document.body.classList.toggle('focus-mode', settings.focus);
 }
 
 async function dispatch(action: string, payload?: unknown) {
@@ -401,14 +569,33 @@ async function dispatch(action: string, payload?: unknown) {
     await lifecycleSettingsQueue; return;
   }
   if (busy) return;
-  if (action === 'research') {
+  if (action === 'research') { await showResearch(); return; }
+  if (action === 'research-projects') {
     closePopovers();
-    el('[data-action="research"]').setAttribute('aria-pressed', 'true');
-    await researchUI.show();
+    await researchUI.showProjects().catch(error => notify(String(error), true));
     return;
   }
-  if (action === 'research-close') { hideResearch(); editor.focus(); return; }
-  if (researchUI.visible && (editorActions.has(action) || /^(?:edit-|format-|export-)/.test(action))) return;
+  if (action === 'research-open-project' || action === 'research-demo' || (action === 'folder' && researchUI.visible)) {
+    await openResearchProject(undefined, action === 'research-demo'); return;
+  }
+  if (action === 'research-close-reader') { await closeResearchReader(); return; }
+  if (action === 'research-reader-back') { await backResearchReader(); return; }
+  if (action === 'research-edit-body' && researchUI.readerOpen) {
+    setResearchEditing(!researchEditing);
+    if (researchEditing) editor.focus();
+    return;
+  }
+  if (action === 'research-close' || action === 'research-files') {
+    await closeResearchReader();
+    if (researchUI.readerOpen) return;
+    hideResearch();
+    if (action === 'research-files') { setSidebarTab('files'); el('#file-filter').focus(); }
+    else editor.focus();
+    return;
+  }
+  const formatting = /^(?:edit-|format-)/.test(action);
+  if (researchUI.visible && !researchUI.readerOpen && (editorActions.has(action) || formatting || /^export-/.test(action))) return;
+  if (!mayEditDocument() && (editActions.has(action) || formatting)) return;
   if (action === 'shortcut-settings') { closePopovers(); await shortcuts?.open(); return; }
   if (action === 'window-menu') { closePopovers(); documents.toggleWindows(); return; }
   if (action === 'autosave-blur') {
@@ -494,7 +681,8 @@ async function dispatch(action: string, payload?: unknown) {
     if (action === 'document-link') {
       if (!current.path) throw new Error(t("请先保存文稿，再打开相对文件链接。"));
       const location = await window.meki.resolveDocumentLink(String(payload),current.path);
-      await openLocation(location);
+      if ('evidenceId' in location) await researchUI.openEvidence(location.evidenceId);
+      else await openLocation(location, true);
     }
     if (action === 'reload-document' && current.path && await mayReplace()) { const doc = await window.meki.openDocument(current.path); if (doc) await documents.reload(doc); }
     if (action === 'import-document') {
@@ -522,10 +710,12 @@ async function dispatch(action: string, payload?: unknown) {
       }
     }
     if (action === 'save' || action === 'saveAs') await save(action === 'saveAs');
-    if (action === 'folder' || action === 'refresh' || action === 'research-demo') {
-      const result = action === 'research-demo' ? await window.meki.createResearchDemo()
-        : action === 'folder' ? await window.meki.chooseFolder() : await window.meki.refreshWorkspace();
-      if (result) { workspace = result; setSidebarTab('files'); renderFiles(); await researchUI.refresh(); }
+    if (action === 'folder' || action === 'refresh') {
+      const result = action === 'folder' ? await window.meki.chooseFolder() : await window.meki.refreshWorkspace();
+      if (result) {
+        if (action === 'folder' && workspace?.root !== result.root) hideResearch();
+        workspace = result; setSidebarTab('files'); renderFiles(); await researchUI.refresh();
+      }
     }
     if (action === 'close-request') {
       clearTimeout(draftTimer);
@@ -545,7 +735,7 @@ function setSidebarTab(tab: string) {
 document.addEventListener('click', event => {
   const target = event.target as HTMLElement;
   const preview = target.closest<HTMLElement>('.milkdown-code-block .preview');
-  if (preview && !busy) {
+  if (preview && !busy && mayEditDocument()) {
     const block = preview.closest('.milkdown-code-block')!;
     if (block.querySelector('.codemirror-host.hidden')) {
       block.querySelector<HTMLButtonElement>('.preview-toggle-button')?.click();
@@ -554,8 +744,12 @@ document.addEventListener('click', event => {
   }
   const action = target.closest<HTMLElement>('[data-action]');
   if (action) { void dispatch(action.dataset.action!); return; }
-  const format = target.closest<HTMLElement>('[data-format]'); if (format && ready && !busy) { editor.format(format.dataset.format!); return; }
-  const mode = target.closest<HTMLElement>('[data-mode]'); if (mode && ready && !busy) { switchMode(mode.dataset.mode as 'visual' | 'source'); return; }
+  const related = target.closest<HTMLButtonElement>('[data-research-related]');
+  if (related && ready && !busy) {
+    void researchUI.openReference(related.dataset.researchRelated!).catch(error => notify(String(error), true)); return;
+  }
+  const format = target.closest<HTMLElement>('[data-format]'); if (format && ready && !busy && mayEditDocument()) { editor.format(format.dataset.format!); return; }
+  const mode = target.closest<HTMLElement>('[data-mode]'); if (mode && ready && !busy && mayEditDocument()) { switchMode(mode.dataset.mode as 'visual' | 'source'); return; }
   const tab = target.closest<HTMLElement>('[data-tab]'); if (tab) { setSidebarTab(tab.dataset.tab!); return; }
   const theme = target.closest<HTMLElement>('button[data-theme]'); if (theme) { changeSettings({ theme: theme.dataset.theme as Settings['theme'] }); return; }
   const file = target.closest<HTMLElement>('[data-file]'); if (file) { void dispatch('open-path', file.dataset.file); return; }
@@ -565,7 +759,7 @@ document.addEventListener('click', event => {
     const href = link.getAttribute('href') || '';
     if (href.startsWith('#')) {
       try { [...el('#visual-editor').querySelectorAll<HTMLElement>('[id]')].find(node => node.id === href.slice(1) || node.id === decodeURIComponent(href.slice(1)))?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* Ignore a malformed anchor. */ }
-    } else if (event.ctrlKey || event.metaKey) {
+    } else if (event.ctrlKey || event.metaKey || (researchUI.readerOpen && !researchEditing)) {
       if (/^(https?:|mailto:)/i.test(href)) void window.meki.openExternal(href).catch(error => notify(String(error), true));
       else void dispatch('document-link',href);
     }
@@ -593,11 +787,18 @@ el<HTMLSelectElement>('#math-numbering').addEventListener('change', event => cha
 el<HTMLInputElement>('#math-physics').addEventListener('change', event => changeSettings({ mathPhysics: (event.target as HTMLInputElement).checked }));
 el<HTMLSelectElement>('#line-width').addEventListener('change', event => changeSettings({ lineWidth: Number((event.target as HTMLSelectElement).value) }));
 el<HTMLInputElement>('#unlimited-width').addEventListener('change', event => changeSettings({ unlimitedWidth: (event.target as HTMLInputElement).checked }));
-el<HTMLSelectElement>('#heading-format').addEventListener('change', event => { editor.format((event.target as HTMLSelectElement).value); });
+el<HTMLSelectElement>('#heading-format').addEventListener('change', event => { if (mayEditDocument()) editor.format((event.target as HTMLSelectElement).value); });
 el('#math-input').addEventListener('input', updateMathPreview);
 el('#math-kind').addEventListener('change', updateMathPreview);
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && !event.isComposing && !document.querySelector('dialog[open]')) { closePopovers(); if (!el('#find-panel').hidden) { writingTools?.close(); editor.focus(); } }
+  if (event.key !== 'Escape' || event.isComposing || document.querySelector('dialog[open]')) return;
+  const hadPopover = Boolean(document.querySelector('.popover:not([hidden])'));
+  closePopovers();
+  if (!el('#find-panel').hidden) { writingTools?.close(); editor.focus(); }
+  else if (!hadPopover && researchUI.readerOpen && !researchEditing && !busy) {
+    event.preventDefault();
+    void closeResearchReader();
+  }
 }, true);
 
 async function start() {
@@ -620,7 +821,11 @@ async function start() {
       if (tab === documents.active) changed(content);
       else { tab.document.content = content; tab.editedAt = Date.now(); scheduleDraft(); }
     },
-    selected: selected => { const previous = editor; editor = selected; writingTools?.switchEditor(previous); }, created: connectEditor,
+    selected: selected => {
+      const previous = editor; editor = selected;
+      editor.setReadOnly(researchUI.readerOpen && !researchEditing);
+      writingTools?.switchEditor(previous);
+    }, created: connectEditor,
     activate: id => { documents.activate(id); void persistDraft().catch(error => notify(String(error), true)); },
     dispatch: (command, payload) => { void dispatch(command, payload); }, notify });
   if (boot.session?.documents.length) {
@@ -634,15 +839,16 @@ async function start() {
   writingTools.apply(settings);
   installDiagramActions(notify);
   installMathCopyActions(() => settings, notify, () => busy);
-  media = new MediaController(() => editor, { current: () => current, documentId: () => documentId, blocked: () => busy || !ready, autoUpload: () => settings.imageAutoUpload, upload: images => imageHostingDialog.uploadNew(images), save: () => save(), run: task => perform(task, true), notify });
+  media = new MediaController(() => editor, { current: () => current, documentId: () => documentId, blocked: () => busy || !ready || !mayEditDocument(), autoUpload: () => settings.imageAutoUpload, upload: images => imageHostingDialog.uploadNew(images), save: () => save(), run: task => perform(task, true), notify });
   outline = new OutlinePanel(() => editor, () => busy || !ready);
   outline.apply(settings);
-  formatMenu = new FormatMenu(() => editor, { blocked: () => busy || !ready, notify, settings: () => settings, changeSettings });
+  formatMenu = new FormatMenu(() => editor, { blocked: () => busy || !ready || !mayEditDocument(), notify, settings: () => settings, changeSettings });
   formatMenu.apply(settings);
   shortcuts = new Shortcuts({ settings: () => settings, platform: () => platform, blocked: () => busy || !ready,
     dispatch: command => { void dispatch(command); }, save: async input => { settings = await window.meki.updateShortcut(input); applySettings(); } });
   for (const view of panes.views.values()) view.cleanup = connectEditor(view.editor, view.visual);
   applySettings(); updateStatus(); renderOutline(); renderFiles();
+  if (boot.startInProject) await showResearch();
   window.meki.onCommand((command, payload) => { if (shortcuts?.allowsNative(command)) void dispatch(command, payload); });
   el('#shell').dataset.ready = 'true';
   setInterval(() => { void synchronizeWorkspace().catch(() => {}); }, 2500);

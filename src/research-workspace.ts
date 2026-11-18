@@ -1,26 +1,23 @@
 import { getLocale, ht, t } from '../electron/i18n.mjs';
-import type { ResearchBatch, ResearchEntry, ResearchField, ResearchPhase, ResearchRange, ResearchSnapshot, ResearchType, ResearchValue, ResearchView } from '../shared/research';
+import type { ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSnapshot, ResearchType, ResearchValue, ResearchView } from '../shared/research';
 import { icon } from './icons';
+import { escapeResearch as escape, relationLabels, researchOption as option, ResearchTools, runFields } from './research-tools';
 import './research-workspace.css';
 
-const escape = (value: string | number | boolean) => String(value).replace(/[&<>"']/g, char => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-})[char]!);
 const errorText = (error: unknown) => String(error).replace(/^Error: (?:Error invoking remote method '[^']+': Error: )?/, '');
 const sortEntries = (a: ResearchEntry, b: ResearchEntry) => a.record.date.localeCompare(b.record.date) || a.record.id.localeCompare(b.record.id);
 const rangeText = (range: ResearchRange) => `${range.start} – ${range.end}`;
 const dayNumber = (date: string) => Date.parse(`${date}T00:00:00Z`) / 86400000;
+const isoDay = (day: number) => new Date(day * 86400000).toISOString().slice(0, 10);
 const formatDay = (day: number, year = false) => new Intl.DateTimeFormat(getLocale(), { year: year ? 'numeric' : undefined, month: 'numeric', day: 'numeric', timeZone: 'UTC' }).format(day * 86400000);
 const shortRange = (range: ResearchRange) => `${formatDay(dayNumber(range.start))} – ${formatDay(dayNumber(range.end))}`;
+const containsDay = (range: ResearchRange, date: string) => range.start <= date && date <= range.end;
+const overlaps = (a: ResearchRange, b: ResearchRange) => a.start <= b.end && b.start <= a.end;
 
 function projectToday(timeZone: string) {
   const parts = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone }).formatToParts();
   const value = (key: string) => parts.find(part => part.type === key)!.value;
   return `${value('year')}-${value('month')}-${value('day')}`;
-}
-
-function option(value: string, label: string, selected: string) {
-  return `<option value="${escape(value)}"${value === selected ? ' selected' : ''}>${escape(label)}</option>`;
 }
 
 function fieldValue(rule: ResearchField, value: ResearchValue) {
@@ -41,104 +38,295 @@ function fieldControl(rule: ResearchField, value: ResearchValue | undefined) {
   return `<input ${name} type="${rule.type}" value="${escape(text)}" maxlength="1000"${number}>`;
 }
 
-function timeline(phases: ResearchPhase[], entries: ResearchEntry[], activePhase: string) {
-  const summaries = entries.filter(({ record }) => record.coverage);
-  const days = [...phases.flatMap(phase => [phase.start, phase.end]), ...entries.map(({ record }) => record.date),
-    ...summaries.flatMap(({ record }) => [record.coverage!.start, record.coverage!.end])].map(dayNumber);
-  if (!days.length) return '';
-  const start = Math.min(...days), end = Math.max(...days), span = end - start + 1;
+function timeline(phases: ResearchPhase[], entries: ResearchEntry[], summariesByPhase: Map<string, ResearchEntry[]>,
+  activePhase: string, today: string, selection?: ResearchRange) {
+  const dates = [...phases.flatMap(phase => [phase.start, phase.end]), ...entries.map(({ record }) => record.date)].sort();
+  const range = selection || { start: dates[0] || today, end: dates.at(-1) || today };
+  const start = dayNumber(range.start), end = dayNumber(range.end), span = end - start + 1;
   const crossesYear = new Date(start * 86400000).getUTCFullYear() !== new Date(end * 86400000).getUTCFullYear();
-  const position = (value: string, offset = 0) => (dayNumber(value) - start + offset) * 100 / span;
-  const bar = (range: ResearchRange) => `--left:${position(range.start)}%;--right:${100 - position(range.end, 1)}%`;
+  const position = (date: string, offset = 0) => (dayNumber(date) - start + offset) * 100 / span;
   const dot = (date: string) => `<i class="research-timeline-dot" style="--point:${position(date, 0.5)}%"></i>`;
+  const hasToday = containsDay(range, today);
   const ticks = [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(start + (end - start) * i / 4)))];
-  const phaseRows = phases.map(phase => {
-    const activity = [...new Set(entries.filter(({ record }) => record.phaseId === phase.id && !record.coverage).map(({ record }) => record.date))];
+  const ordered = phases.filter(phase => overlaps(phase, range)).map(phase => {
+    const assigned = entries.filter(({ record }) => record.phaseId === phase.id);
+    const latest = [...assigned, ...(summariesByPhase.get(phase.id) || [])]
+      .reduce((date, { record }) => record.date > date ? record.date : date, '');
+    return { phase, ongoing: containsDay(phase, today), latest, assigned: assigned.filter(({ record }) => containsDay(range, record.date)) };
+  }).sort((a, b) => Number(b.ongoing) - Number(a.ongoing) || b.latest.localeCompare(a.latest));
+  const phaseRows = ordered.map(({ phase, ongoing, latest, assigned }) => {
+    const activity = [...new Set(assigned.map(({ record }) => record.date))];
+    const left = Math.max(0, position(phase.start)), right = Math.max(0, 100 - position(phase.end, 1));
     return `<button type="button" class="research-timeline-row" data-research-phase="${phase.id}" aria-pressed="${activePhase === phase.id}">
-      <span class="research-timeline-label"><strong>${escape(phase.title)}</strong><small>${escape(shortRange(phase))}</small></span>
-      <span aria-hidden="true" class="research-timeline-track"><i class="research-timeline-bar" style="${bar(phase)}"></i>${activity.map(dot).join('')}</span>
+      <span class="research-timeline-label"><strong>${escape(phase.title)}${ongoing ? ` <span class="research-phase-ongoing">${ht("进行中")}</span>` : ''}</strong>
+        <small>${escape(shortRange(phase))} · ${ht("{0} 条实验", assigned.length)}</small>${latest ? `<small>${ht("最近进展 {0}", escape(formatDay(dayNumber(latest), latest.slice(0, 4) !== today.slice(0, 4))))}</small>` : ''}</span>
+      <span aria-hidden="true" class="research-timeline-track"><i class="research-timeline-bar" style="--left:${left}%;--right:${right}%"></i>${activity.map(dot).join('')}
+        ${hasToday ? `<i class="research-today-line" style="--point:${position(today, 0.5)}%"></i>` : ''}</span>
     </button>`;
   }).join('');
-  const summaryRows = summaries.sort(sortEntries).map(({ record }) => `<button type="button" class="research-timeline-row research-timeline-summary" data-research-record="${record.id}">
-    <span class="research-timeline-label"><strong>${escape(record.title)}</strong><small>${escape(shortRange(record.coverage!))} · ${ht("撰写于 {0}", escape(formatDay(dayNumber(record.date))))}</small></span>
-    <span aria-hidden="true" class="research-timeline-track"><i class="research-timeline-bar" style="${bar(record.coverage!)}"></i>${dot(record.date)}</span>
-  </button>`).join('');
   return `<section class="research-timeline" aria-labelledby="research-range-title">
-    <div class="research-section-heading"><h2 id="research-range-title">${ht("阶段与覆盖时段")}</h2>
-      <div class="research-legend"><span class="research-key-phase">${ht("阶段")}</span><span class="research-key-summary">${ht("总结覆盖")}</span><span class="research-key-point">${ht("记录日期")}</span></div>
+    <div class="research-section-heading"><h2 id="research-range-title">${ht("研究阶段")}</h2>
+      <div class="research-actions"><button type="button" class="secondary-button" data-research-range data-start="${range.start}" data-end="${range.end}"
+        title="${ht("选择时间范围")}"${selection ? ` aria-label="${ht("选择时间范围")} · ${escape(rangeText(range))}"` : ''}>${icon('timeline', 14)}${selection ? escape(rangeText(range)) : ht("选择时间范围")}</button>
+        ${selection ? `<button type="button" class="secondary-button" data-research-reset-range>${ht("全部时段")}</button>` : ''}</div>
     </div>
-    <div class="research-timeline-axis" aria-hidden="true"><span></span><div>
-      ${ticks.map((day, i) => `<span class="${i === 0 ? 'first' : i === ticks.length - 1 ? 'last' : 'middle'}" style="--tick:${(day - start + 0.5) * 100 / span}%">${escape(formatDay(day, crossesYear))}</span>`).join('')}
-    </div></div>
-    ${phaseRows}${summaryRows}
+    ${phaseRows ? `<div class="research-legend"><span>${ht("阶段时段")}</span><span class="research-key-point">${ht("实验日期")}</span>${hasToday ? `<span class="research-key-today">${ht("今天")}</span>` : ''}</div>
+    <div class="research-timeline-axis" aria-hidden="true"><span></span><div class="research-timeline-ruler"${span > 1 ? ` data-research-axis data-start="${start}" data-end="${end}" title="${ht("拖动刻度选取时间范围")}"` : ''}>
+      ${ticks.map((day, i) => `<span class="${ticks.length === 1 ? '' : i === 0 ? 'first' : i === ticks.length - 1 ? 'last' : 'middle'}" style="--tick:${(day - start + 0.5) * 100 / span}%">${escape(formatDay(day, crossesYear))}</span>`).join('')}
+    </div></div>${phaseRows}` : `<p class="research-empty-list">${ht("这个时段内没有研究阶段。")}</p>`}
   </section>`;
+}
+
+type ResearchPage = 'timeline' | 'entries' | 'summaries' | 'sources' | 'rules' | 'view';
+interface Destination { key: string; label: string; glyph: string; page: ResearchPage; view?: ResearchView }
+
+function destinations(project: ResearchSnapshot['project']): Destination[] {
+  const unscoped = project.views.filter(view => !view.phaseIds);
+  const summaryTypes = new Set(project.recordTypes.filter(type => type.kind === 'summary').map(type => type.id));
+  const base: Destination[] = [
+    { key: 'timeline', label: t("时间线"), glyph: 'timeline', page: 'timeline',
+      view: unscoped.find(view => view.layout === 'timeline' && !view.typeIds) },
+    { key: 'entries', label: t("实验记录"), glyph: 'list', page: 'entries',
+      view: unscoped.find(view => view.layout === 'journal' && !view.typeIds) },
+    { key: 'summaries', label: t("阶段总结"), glyph: 'report', page: 'summaries',
+      view: unscoped.find(view => view.layout === 'journal' && view.typeIds?.length === summaryTypes.size && view.typeIds.every(id => summaryTypes.has(id))) },
+    { key: 'sources', label: t("资料"), glyph: 'folder', page: 'sources' },
+  ];
+  const used = new Set(base.map(item => item.view?.id));
+  return [...base, ...project.views.filter(view => !used.has(view.id)).map((view): Destination => ({
+    key: `view:${view.id}`, label: view.label, glyph: view.layout === 'timeline' ? 'timeline' : 'list',
+    page: view.layout === 'timeline' ? 'timeline' : 'view', view,
+  })), { key: 'rules', label: t("项目设置"), glyph: 'settings', page: 'rules' }];
+}
+
+function summaryCoversPhase(record: ResearchEntry['record'], phase: ResearchPhase, phases: ResearchPhase[]) {
+  if (record.phaseId === phase.id) return true;
+  const range = record.coverage;
+  if (!range || !overlaps(range, phase)) return false;
+  const primary = phases.find(item => item.id === record.phaseId);
+  // Adjacent phases can overlap. Only coverage outside the primary phase extends the association.
+  return !primary || (range.start < primary.start && phase.start < primary.start)
+    || (range.end > primary.end && phase.end > primary.end);
 }
 
 interface Hooks {
   root(): string | undefined;
   blocked(): boolean;
-  open(root: string, id: string): Promise<void>;
+  open(root: string, id: string, origin?: HTMLButtonElement, edit?: boolean): Promise<void>;
+  closeReader(): Promise<void>;
+  openProject(root: string): Promise<void>;
+  notify(message: string, error?: boolean): void;
 }
+
+interface ViewPosition { phaseId: string; date: string; scroll: number; range?: ResearchRange }
+interface AxisBrush { axis: HTMLElement; pointerId: number; clientX: number }
 
 export class ResearchWorkspace {
   private panel = document.createElement('section');
+  private toolbar = document.createElement('header');
   private content = document.createElement('div');
   private dialog = document.createElement('dialog');
+  private projectPicker = document.createElement('dialog');
+  private rangePicker = document.createElement('dialog');
+  private tools: ResearchTools;
   private snapshot: ResearchSnapshot | null = null;
   private signature = '';
   private root: string | undefined;
-  private viewId = '';
+  private viewKey = '';
   private phaseId = '';
   private date = '';
+  private timelineRange?: ResearchRange;
+  private recordFilter?: ResearchFilter;
+  private axisBrush?: AxisBrush;
+  private positions = new Map<string, ViewPosition>();
+  private readerReturn?: { scroll: number; origin?: HTMLButtonElement };
   private loading = false;
   private loadNumber = 0;
-  private rules = false;
   private editing: ResearchEntry | undefined;
   private formProject: ResearchSnapshot | null = null;
   private submitting = false;
 
-  constructor(private host: HTMLElement, private hooks: Hooks) {
+  constructor(private host: HTMLElement, private sidebar: HTMLElement, private hooks: Hooks) {
+    this.tools = new ResearchTools(() => this.refresh(), hooks.notify);
     this.panel.id = 'research-workspace';
     this.panel.hidden = true;
-    this.panel.innerHTML = `<div class="research-titlebar">
-      <button type="button" data-action="research-close" class="secondary-button">${icon('back', 14)}${ht("返回编辑器")}</button>
-      <button type="button" data-action="folder" class="secondary-button">${icon('folder', 15)}${ht("打开文件夹…")}</button>
-    </div>`;
+    this.toolbar.className = 'research-toolbar';
     this.content.className = 'research-content';
-    this.panel.append(this.content);
-    this.host.append(this.panel);
+    this.panel.append(this.toolbar, this.content);
+    this.host.prepend(this.panel);
     this.dialog.id = 'research-record-dialog';
-    document.body.append(this.dialog);
-    this.content.addEventListener('click', event => { void this.click(event); });
+    this.projectPicker.id = 'research-project-picker';
+    this.rangePicker.id = 'research-range-picker';
+    this.rangePicker.setAttribute('aria-labelledby', 'research-range-picker-title');
+    document.body.append(this.dialog, this.projectPicker, this.rangePicker);
+    for (const element of [this.sidebar, this.panel]) {
+      element.addEventListener('click', event => { void this.click(event).catch(error => this.hooks.notify(errorText(error), true)); });
+    }
     this.content.addEventListener('change', event => {
       const target = event.target as HTMLInputElement;
-      if (target.id === 'research-date') { this.date = target.value; this.render(); this.content.querySelector<HTMLInputElement>('#research-date')?.focus(); }
+      if (target.id === 'research-date') {
+        this.date = target.value;
+        this.render();
+        this.content.querySelector<HTMLInputElement>('#research-date')?.focus({ preventScroll: true });
+      }
+    });
+    this.content.addEventListener('pointerdown', event => this.beginAxisBrush(event));
+    this.content.addEventListener('pointermove', event => this.updateAxisBrush(event));
+    this.content.addEventListener('pointerup', event => this.finishAxisBrush(event));
+    this.content.addEventListener('lostpointercapture', event => {
+      if (this.axisBrush?.pointerId === event.pointerId) this.clearAxisBrush();
     });
     this.dialog.addEventListener('cancel', event => { if (this.submitting) event.preventDefault(); });
     this.dialog.addEventListener('click', event => {
-      if ((event.target as HTMLElement).closest('[data-research-cancel]') && !this.submitting) this.dialog.close();
+      const button = (event.target as Element).closest('button');
+      if (!button || this.submitting) return;
+      if (button.hasAttribute('data-research-cancel')) this.dialog.close();
+      if (button.hasAttribute('data-remove-relation')) button.closest('.research-relation-row')?.remove();
+      if (button.hasAttribute('data-add-relation')) {
+        const rows = this.dialog.querySelector('[data-research-relations]')!;
+        if (rows.childElementCount >= 40) return;
+        rows.insertAdjacentHTML('beforeend', this.relationRow());
+        rows.lastElementChild?.querySelector('select')?.focus();
+      }
     });
     this.dialog.addEventListener('change', event => {
       const target = event.target as HTMLInputElement;
       if (target.name === 'type') this.renderFields();
-      if (target.name === 'phaseId') this.fillCoverage();
+      if (target.name === 'phaseId' && !this.editing) this.fillCoverage();
     });
     this.dialog.addEventListener('submit', event => { event.preventDefault(); void this.submit(); });
+    this.projectPicker.addEventListener('click', event => {
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-research-project]');
+      if (!button || this.hooks.blocked()) return;
+      this.projectPicker.close();
+      void this.hooks.openProject(button.dataset.researchProject!).catch(error => this.hooks.notify(errorText(error), true));
+    });
+    this.rangePicker.addEventListener('click', event => {
+      if ((event.target as Element).closest('[data-research-cancel]')) this.rangePicker.close();
+    });
+    this.rangePicker.addEventListener('submit', event => {
+      event.preventDefault();
+      const data = new FormData(event.target as HTMLFormElement);
+      const start = String(data.get('start')), end = String(data.get('end'));
+      if (start > end) {
+        this.rangePicker.querySelector('[role="alert"]')!.textContent = t("结束日期不能早于开始日期。");
+        return;
+      }
+      this.rangePicker.close();
+      this.setTimelineRange({ start, end });
+    });
   }
 
   get visible() { return !this.panel.hidden; }
+  get readerOpen() { return Boolean(this.readerReturn); }
 
   async show() {
-    this.panel.hidden = false;
+    this.panel.hidden = this.sidebar.hidden = false;
     this.host.classList.add('research-mode');
+    this.host.closest('.shell')?.classList.add('research-shell');
     await this.refresh();
-    this.content.querySelector<HTMLElement>('h1')?.focus();
+    this.content.querySelector<HTMLElement>('h1')?.focus({ preventScroll: true });
   }
 
   hide() {
-    this.panel.hidden = true;
+    this.clearAxisBrush();
+    this.closeReader(false);
+    this.panel.hidden = this.sidebar.hidden = true;
     this.host.classList.remove('research-mode');
+    this.host.closest('.shell')?.classList.remove('research-shell');
   }
+
+  openReader(origin?: HTMLButtonElement) {
+    this.readerReturn ??= { scroll: this.content.scrollTop, origin };
+    this.host.classList.add('research-reader-open');
+    this.panel.inert = true;
+  }
+
+  closeReader(focus = true) {
+    const returning = this.readerReturn;
+    if (!returning) return;
+    this.readerReturn = undefined;
+    this.host.classList.remove('research-reader-open');
+    this.panel.inert = false;
+    this.content.scrollTop = returning.scroll;
+    if (focus) {
+      const button = returning.origin;
+      const id = button?.dataset.researchRecord;
+      const replacement = id ? this.content.querySelector<HTMLButtonElement>(`[data-research-record="${CSS.escape(id)}"]`) : null;
+      (button?.isConnected ? button : replacement || this.content.querySelector('h1'))?.focus({ preventScroll: true });
+    }
+  }
+
+  readerLabel(path: string | null) {
+    const reference = this.readerReference(path);
+    if (!reference || !this.snapshot) return null;
+    const state = this.snapshot;
+    const entry = state.records.find(item => item.record.id === reference.id)?.record;
+    const phase = state.project.phases.find(item => item.id === entry?.phaseId);
+    const type = state.project.recordTypes.find(item => item.id === entry?.type);
+    return { title: reference.title, context: [phase?.title, type?.label || t("资料"), entry?.date,
+      entry?.run?.missing.includes('RUN.md') ? t("待补报告") : ''].filter(Boolean).join(' · ') };
+  }
+
+  private readerReference(path: string | null) {
+    const state = this.snapshot;
+    if (!state || !path) return null;
+    const root = state.root.replace(/\\/g, '/').replace(/\/$/, '');
+    const file = path.replace(/\\/g, '/');
+    return state.documents.find(item => !item.sourceId && file === `${root}/${item.relativePath}`);
+  }
+
+  readerRelated(path: string | null) {
+    const reference = this.readerReference(path), state = this.snapshot;
+    if (!reference || !state) return '';
+    const record = state.records.find(item => item.record.id === reference.id)?.record;
+    const run = record?.run;
+    const evidence = [...new Set([...(record?.evidence || []), ...(run?.evidence || []),
+      ...(record?.sources || []).filter(id => state.documents.some(file => file.id === id && file.sourceId))])];
+    const incoming = state.records.flatMap(({ record }) => (record.relations || []).filter(relation => relation.target === reference.id)
+      .map(relation => ({ ...relation, target: record.id, incoming: true })));
+    const relations = [...(record?.relations || []), ...incoming];
+    if (!run && !evidence.length && !relations.length) return '';
+    const references = new Map(state.documents.map(file => [file.id, file]));
+    const link = (id: string) => {
+      const file = references.get(id);
+      return file ? `<button type="button" class="research-related-link" data-research-related="${id}" title="${escape(file.relativePath)}">${escape(file.title)}</button>` : `<code>${escape(id)}</code>`;
+    };
+    const labels = relationLabels(), fields = runFields();
+    const context = run ? { id: run.id, category: run.category, ...(run.status ? { status: run.status } : {}), ...run.context } : undefined;
+    return `${evidence.length ? `<section class="research-reader-evidence"><h3>${ht("原始证据")}</h3><div class="research-related-links">${evidence.slice(0, 5).map(link).join('')}</div>
+      ${evidence.length > 5 ? `<details><summary>${ht("其余 {0} 个文件", evidence.length - 5)}</summary><div class="research-related-links">${evidence.slice(5).map(link).join('')}</div></details>` : ''}</section>` : ''}
+      ${relations.length ? `<section><h3>${ht("研究关系")}</h3><ul class="research-related-relations">${relations.map(relation => `<li>
+        <span>${'incoming' in relation ? '← ' : ''}${escape(labels[relation.kind])}</span>${link(relation.target)}${relation.note ? `<small>${escape(relation.note)}</small>` : ''}</li>`).join('')}</ul></section>` : ''}
+      ${run && context ? `<details><summary>${ht("运行信息")}${run.missing.length ? ` · ${ht("缺件 {0} 项", run.missing.length)}` : ''}</summary>
+        <dl>${Object.entries(context).map(([key, value]) => `<dt>${escape(fields[key] || key)}</dt><dd>${escape(value)}</dd>`).join('')}
+          ${run.missing.length ? `<dt>${ht("缺件")}</dt><dd>${escape(run.missing.join(', '))}</dd>` : ''}</dl></details>` : ''}`;
+  }
+
+  async openEvidence(id: string) {
+    const root = this.hooks.root();
+    if (root) await this.tools.evidence(root, id);
+  }
+
+  async openReference(id: string, origin?: HTMLButtonElement) {
+    const state = this.snapshot;
+    if (!state) return;
+    if (state.documents.some(file => file.id === id && file.sourceId)) await this.openEvidence(id);
+    else await this.hooks.open(state.root, id, origin);
+  }
+
+  async showProjects() {
+    const projects = await window.meki.listResearchProjects();
+    if (this.projectPicker.open) return;
+    this.projectPicker.innerHTML = `<div class="dialog-heading"><h2>${ht("科研项目")}</h2><form method="dialog"><button class="icon-button" aria-label="${ht("关闭")}">${icon('close', 16)}</button></form></div>
+      ${projects.length ? `<ul class="research-project-list">${projects.map(project => `<li><button type="button" data-research-project="${escape(project.root)}"${project.root === this.root ? ' aria-current="true"' : ''}>
+        ${icon('folder', 17)}<span><strong>${escape(project.title)}</strong><small>${escape(project.root)}</small></span></button></li>`).join('')}</ul>` : ''}
+      <div class="research-picker-actions"><button type="button" class="primary-button" data-action="research-open-project">${ht("打开科研项目")}</button>
+        <button type="button" class="secondary-button" data-action="research-demo">${ht("创建示例项目")}</button></div>`;
+    this.projectPicker.showModal();
+  }
+
+  closeProjects() { if (this.projectPicker.open) this.projectPicker.close(); }
 
   async refresh() {
     if (!this.visible) return;
@@ -147,24 +335,35 @@ export class ResearchWorkspace {
       this.root = root;
       this.snapshot = null;
       this.signature = '';
-      this.viewId = this.phaseId = this.date = '';
-      this.rules = false;
+      this.viewKey = this.phaseId = this.date = '';
+      this.timelineRange = undefined;
+      this.recordFilter = undefined;
+      this.clearAxisBrush();
+      this.positions.clear();
+      this.content.scrollTop = 0;
     }
+    if (this.axisBrush) return;
     const number = ++this.loadNumber;
     this.loading = Boolean(root) && !this.signature;
     if (!this.signature) this.render();
     try {
-      const snapshot = root ? await window.meki.researchSnapshot() : null;
-      if (number !== this.loadNumber || root !== this.hooks.root()) return;
-      const signature = JSON.stringify(snapshot);
+      const snapshot = root ? await window.meki.researchSnapshot(this.recordFilter) : null;
+      if (number !== this.loadNumber || root !== this.hooks.root() || this.axisBrush) return;
+      const signature = JSON.stringify([snapshot, this.recordFilter, snapshot && projectToday(snapshot.project.timezone)]);
       this.loading = false;
       if (signature === this.signature) return;
+      const previous = this.snapshot && this.destination(this.snapshot);
       this.signature = signature;
       this.snapshot = snapshot;
-      if (this.phaseId && !snapshot?.project.phases.some(phase => phase.id === this.phaseId)) this.phaseId = '';
+      if (snapshot && previous && this.destination(snapshot).key !== previous.key) {
+        this.phaseId = this.date = '';
+        this.timelineRange = undefined;
+        this.content.scrollTop = 0;
+      }
+      if (!snapshot?.project.phases.some(phase => phase.id === this.phaseId)) this.phaseId = '';
       this.render();
     } catch (error) {
-      if (number !== this.loadNumber || root !== this.hooks.root()) return;
+      if (number !== this.loadNumber || root !== this.hooks.root() || this.axisBrush) return;
       this.loading = false;
       this.snapshot = null;
       const message = errorText(error);
@@ -172,50 +371,202 @@ export class ResearchWorkspace {
     }
   }
 
+  private openRangePicker(range: ResearchRange) {
+    this.rangePicker.innerHTML = `<form>
+      <div class="dialog-heading"><h2 id="research-range-picker-title">${ht("选择时间范围")}</h2>
+        <button type="button" class="icon-button" data-research-cancel aria-label="${ht("取消")}">${icon('close', 15)}</button></div>
+      <div class="research-form-grid">
+        <label>${ht("开始日期")}<input name="start" type="date" min="0001-01-01" max="9999-12-31" value="${range.start}" required autofocus></label>
+        <label>${ht("结束日期")}<input name="end" type="date" min="0001-01-01" max="9999-12-31" value="${range.end}" required></label>
+      </div>
+      <p class="research-form-error" role="alert"></p>
+      <div class="research-actions"><button type="submit" class="primary-button">${ht("应用")}</button></div>
+    </form>`;
+    this.rangePicker.showModal();
+  }
+
+  private setTimelineRange(range?: ResearchRange) {
+    this.timelineRange = range;
+    if (range && this.date && !containsDay(range, this.date)) this.date = '';
+    this.render();
+    this.content.querySelector<HTMLButtonElement>('[data-research-range]')?.focus({ preventScroll: true });
+  }
+
+  private async setRecordFilter(filter?: ResearchFilter) {
+    this.recordFilter = filter;
+    await this.refresh();
+    this.content.querySelector<HTMLButtonElement>('[data-research-filter]')?.focus({ preventScroll: true });
+  }
+
+  private beginAxisBrush(event: PointerEvent) {
+    const axis = (event.target as Element).closest<HTMLElement>('[data-research-axis]');
+    if (!axis || event.button !== 0 || this.axisBrush || this.hooks.blocked()) return;
+    this.axisBrush = { axis, pointerId: event.pointerId, clientX: event.clientX };
+    axis.setPointerCapture(event.pointerId);
+  }
+
+  private updateAxisBrush(event: PointerEvent) {
+    const brush = this.axisBrush;
+    if (!brush || brush.pointerId !== event.pointerId) return;
+    const bounds = brush.axis.getBoundingClientRect();
+    const fraction = (x: number) => Math.max(0, Math.min(1, (x - bounds.left) / bounds.width));
+    const left = fraction(Math.min(brush.clientX, event.clientX)), right = fraction(Math.max(brush.clientX, event.clientX));
+    brush.axis.style.setProperty('--selection-left', `${left * 100}%`);
+    brush.axis.style.setProperty('--selection-right', `${(1 - right) * 100}%`);
+    return { left, right };
+  }
+
+  private finishAxisBrush(event: PointerEvent) {
+    const brush = this.axisBrush;
+    if (!brush || brush.pointerId !== event.pointerId) return;
+    const selection = this.updateAxisBrush(event);
+    this.clearAxisBrush();
+    if (!selection || Math.abs(event.clientX - brush.clientX) < 4) return;
+    const start = Number(brush.axis.dataset.start), end = Number(brush.axis.dataset.end);
+    const dayAt = (fraction: number) => isoDay(Math.min(end, start + Math.floor(fraction * (end - start + 1))));
+    this.setTimelineRange({ start: dayAt(selection.left), end: dayAt(selection.right) });
+  }
+
+  private clearAxisBrush() {
+    this.axisBrush?.axis.style.removeProperty('--selection-left');
+    this.axisBrush?.axis.style.removeProperty('--selection-right');
+    this.axisBrush = undefined;
+  }
+
+  private destination(state: ResearchSnapshot) {
+    const pages = destinations(state.project);
+    return pages.find(page => page.key === this.viewKey)
+      || pages.find(page => page.view?.id === state.project.defaultView) || pages[0];
+  }
+
+  private renderSidebar(state: ResearchSnapshot | null, active?: Destination) {
+    const navigation = state ? destinations(state.project) : [];
+    const button = (item: Destination) => `<button type="button" data-research-destination="${escape(item.key)}"
+      ${item.view ? `data-research-view="${item.view.id}"` : ''} aria-current="${item.key === active?.key ? 'page' : 'false'}"
+      aria-pressed="${item.key === active?.key}">${icon(item.glyph, 17)}<span>${escape(item.label)}</span></button>`;
+    this.sidebar.innerHTML = `<button type="button" class="research-project-switch" data-action="research-projects" aria-haspopup="dialog" aria-label="${ht("切换科研项目")}">
+        ${icon('folder', 17)}<span><small>${ht("科研项目")}</small><strong>${escape(state?.project.title || t("选择项目"))}</strong></span>${icon('down', 14)}
+      </button>
+      <div class="research-nav-list">${navigation.slice(0, 4).map(button).join('')}</div>
+      ${navigation.length > 5 ? `<div class="research-nav-label">${ht("项目视图")}</div><div class="research-nav-list">${navigation.slice(4, -1).map(button).join('')}</div>` : ''}
+      <div class="research-nav-bottom">${navigation.length ? button(navigation[navigation.length - 1]) : ''}
+        <button type="button" data-action="research-close">${icon('page', 17)}<span>${ht("文稿编辑器")}</span></button>
+      </div>`;
+  }
+
   private render(error?: string) {
-    const state = this.snapshot;
-    if (!state) {
-      const message = error || (this.loading ? t("正在读取研究项目…") : t("打开包含 .mekir/project.json 的项目，或创建一个渲染研究示例。"));
-      this.content.innerHTML = `<div class="research-empty"><h1 tabindex="-1">${ht("研究项目")}</h1>
+    const state = this.snapshot, active = state && this.destination(state);
+    const scroll = this.content.scrollTop;
+    const today = state && projectToday(state.project.timezone);
+    const toggle = `<button type="button" class="icon-button" data-action="sidebar" aria-label="${ht("显示或隐藏侧栏")}" title="${ht("显示或隐藏侧栏")}">${icon('layout', 17)}</button>`;
+    this.renderSidebar(state, active || undefined);
+    this.toolbar.innerHTML = `<div>${toggle}<span>${escape(active?.label || t("科研项目"))}</span></div>
+      ${state ? `<button type="button" class="icon-button" data-action="refresh" aria-label="${ht("刷新项目")}" title="${ht("刷新项目")}">${icon('refresh', 17)}</button>` : ''}`;
+    if (!state || !active || !today) {
+      const message = error || (this.loading ? t("正在读取研究项目…") : t("打开项目后即可查看研究阶段、实验记录和阶段总结。"));
+      this.content.innerHTML = `<div class="research-empty"><h1 tabindex="-1">${ht("科研项目")}</h1>
         <p${error ? ' role="alert"' : ''}>${escape(message)}</p>
-        ${this.loading ? '' : `<button type="button" class="primary-button" data-action="research-demo">${ht("创建渲染研究示例")}</button>`}
+        ${this.loading ? '' : `<div class="research-actions"><button type="button" class="primary-button" data-action="research-projects">${ht("打开科研项目")}</button>
+          <button type="button" class="secondary-button" data-action="research-demo">${ht("创建示例项目")}</button></div>`}
       </div>`;
       return;
     }
     const { project, records, problems } = state;
-    const view = project.views.find(item => item.id === this.viewId) || project.views.find(item => item.id === project.defaultView)!;
-    const inView = records.filter(({ record }) => (!view.typeIds || view.typeIds.includes(record.type)) &&
-      (!view.phaseIds || (record.phaseId && view.phaseIds.includes(record.phaseId))));
-    const viewPhases = project.phases.filter(phase => !view.phaseIds || view.phaseIds.includes(phase.id));
-    const entries = inView.filter(({ record }) => (!this.phaseId || record.phaseId === this.phaseId) && (!this.date || record.date === this.date))
-      .sort((a, b) => view.order === 'oldest' ? sortEntries(a, b) : sortEntries(b, a));
-    const hasSummary = project.recordTypes.some(type => type.kind === 'summary');
-    const hasEntry = project.recordTypes.some(type => type.kind === 'entry');
+    const view = active.view;
+    const projectPage = active.page === 'timeline';
+    const dateRange = projectPage ? this.timelineRange : undefined;
+    const summaryTypes = new Set(project.recordTypes.filter(type => type.kind === 'summary').map(type => type.id));
+    const isSummary = ({ record }: ResearchEntry) => summaryTypes.has(record.type) || Boolean(record.coverage);
+    const phases = project.phases.filter(phase => !view?.phaseIds || view.phaseIds.includes(phase.id));
+    const phase = phases.find(item => item.id === this.phaseId && (!dateRange || overlaps(item, dateRange)));
+    if (!phase) this.phaseId = '';
+    const summaries = records.filter(isSummary);
+    const experiments = records.filter(item => !isSummary(item));
+    const inView = records.filter(({ record }) => (!view?.typeIds || view.typeIds.includes(record.type)) &&
+      (!view?.phaseIds || (record.phaseId && view.phaseIds.includes(record.phaseId))));
+    const sequence = active.page === 'summaries' ? inView.filter(isSummary) :
+      active.page === 'view' ? inView : inView.filter(item => !isSummary(item));
+    const matching = state.matchingIds && new Set(state.matchingIds);
+    const matches = ({ record }: ResearchEntry) => !matching || matching.has(record.id);
+    const entries = sequence.filter(({ record }) => (!phase || record.phaseId === phase.id) &&
+      (!this.date || record.date === this.date) && (!dateRange || containsDay(dateRange, record.date)))
+      .filter(matches).sort((a, b) => view?.order === 'oldest' ? sortEntries(a, b) : sortEntries(b, a));
+    const summariesByPhase = new Map(projectPage ? phases.map(phase => [phase.id,
+      summaries.filter(({ record }) => summaryCoversPhase(record, phase, project.phases))]) : []);
+    const phaseTitle = phase ? `<h2 id="research-journal-title">${escape(phase.title)}</h2><p class="research-phase-range">${escape(rangeText(phase))}</p>`
+      : `<h2 id="research-journal-title">${active.page === 'summaries' ? ht("已归档总结") : ht("实验记录")} <span>${entries.length}</span></h2>`;
+    const lastExperiment = experiments.reduce((latest, { record }) => record.date > latest ? record.date : latest, '');
+    const newEntry = project.recordTypes.some(type => type.kind === 'entry') ? `<button type="button" class="secondary-button" data-research-new="entry">${icon('plus', 14)}${ht("新建研究记录")}</button>` : '';
+    const newSummary = summaryTypes.size ? `<button type="button" class="secondary-button" data-research-new="summary">${icon('plus', 14)}${ht("插入阶段总结")}</button>` : '';
     this.content.innerHTML = `
-      <div class="research-overview">
-        <div><h1 tabindex="-1">${escape(project.title)}</h1>${project.description ? `<p>${escape(project.description)}</p>` : ''}</div>
-        <div class="research-actions">${hasSummary ? `<button type="button" class="secondary-button" data-research-new="summary">${ht("插入阶段总结")}</button>` : ''}
-          ${hasEntry ? `<button type="button" class="primary-button" data-research-new="entry">${icon('plus', 15)}${ht("新建研究记录")}</button>` : ''}</div>
-      </div>
-      <div class="research-navigation">
-        <div class="research-views" role="group" aria-label="${ht("项目视图")}">
-          ${project.views.map(item => `<button type="button" data-research-view="${item.id}" aria-pressed="${item.id === view.id}">${escape(item.label)}</button>`).join('')}
-        </div>
-        <button type="button" class="secondary-button" data-research-rules aria-expanded="${this.rules}">${ht("项目规则")}</button>
-      </div>
-      ${this.rules ? this.renderRules(state) : ''}
+      <header class="research-overview"><div><h1 tabindex="-1">${escape(projectPage ? project.title : active.label)}</h1>
+        ${projectPage && project.description ? `<p>${escape(project.description)}</p>` : ''}</div>
+        ${projectPage ? `<div class="research-overview-stats"><span>${ht("{0} 条实验", experiments.length)}</span><span>${ht("{0} 份阶段总结", summaries.length)}</span>
+          ${lastExperiment ? `<span>${ht("最近实验 {0}", escape(lastExperiment))}</span>` : ''}</div>` : ''}
+      </header>
       ${problems.length ? `<details class="research-problems"><summary>${ht("{0} 份文档无法读取", problems.length)}</summary><ul>${problems.map(item => `<li><code>${escape(item.file)}</code> · ${escape(item.message)}</li>`).join('')}</ul></details>` : ''}
-      ${view.layout === 'timeline' ? timeline(viewPhases, inView, this.phaseId) : ''}
-      <section class="research-journal" aria-labelledby="research-journal-title">
-        <div class="research-section-heading"><h2 id="research-journal-title">${ht("研究记录")} <span>${entries.length}</span></h2>
-          <div class="research-filters">
-            <label for="research-date">${ht("按日期筛选")}</label><input id="research-date" type="date" value="${escape(this.date)}">
-            ${this.phaseId || this.date ? `<button type="button" class="secondary-button" data-research-clear>${ht("清除筛选")}</button>` : ''}
+      ${projectPage ? timeline(phases, sequence, summariesByPhase, phase?.id || '', today, dateRange) : ''}
+      ${active.page === 'rules' ? this.renderRules(state) : active.page === 'sources' ? this.renderSources(state) : `
+        <section class="research-journal" aria-labelledby="research-journal-title">
+          <div class="research-section-heading"><div>${phaseTitle}</div>
+            <div class="research-actions">${active.page === 'summaries' ? newSummary : newEntry}
+              ${phase || this.date || this.recordFilter ? `<button type="button" class="secondary-button" data-research-clear>${ht("清除筛选")}</button>` : ''}</div>
           </div>
-        </div>
-        ${this.phaseId ? `<p class="research-phase-filter">${ht("当前阶段")} · ${escape(project.phases.find(phase => phase.id === this.phaseId)!.title)}</p>` : ''}
-        ${entries.length ? this.renderEntries(entries, view, state) : `<p class="research-empty-list">${ht("这个视图中没有符合条件的记录。")}</p>`}
-      </section>`;
+          ${phase && projectPage ? this.renderStageSummaries((summariesByPhase.get(phase.id) || []).filter(matches), newSummary) : ''}
+          ${projectPage && !phase && newSummary ? `<div class="research-summary-shortcut">${newSummary}</div>` : ''}
+          <div class="research-record-filters">
+            ${phase && projectPage ? `<h3>${ht("实验记录")} <span>${entries.length}</span></h3>` : ''}
+            <div class="research-filters"><button type="button" class="secondary-button" data-research-filter aria-haspopup="dialog" aria-pressed="${Boolean(this.recordFilter)}">${icon('search', 14)} ${ht("研究筛选")}</button>
+              <label for="research-date">${ht("按日期筛选")}</label><input id="research-date" type="date" value="${escape(this.date)}"${dateRange ? ` min="${dateRange.start}" max="${dateRange.end}"` : ''}></div>
+          </div>
+          ${this.recordFilter ? `<p class="research-active-filter">${escape([
+            this.recordFilter.query, this.recordFilter.month, ...(this.recordFilter.fields || []).map(({ field, value }) => `${this.filterFieldName(field, state)} = ${value}`),
+          ].filter(Boolean).join(' · '))}</p>` : ''}
+          ${entries.length ? this.renderEntries(entries, view, state) : `<p class="research-empty-list">${ht("这个视图中没有符合条件的记录。")}</p>`}
+        </section>`}
+    `;
+    this.content.scrollTop = scroll;
+  }
+
+  private renderStageSummaries(entries: ResearchEntry[], create: string) {
+    return `<section class="research-phase-summaries" aria-labelledby="research-phase-summaries-title">
+      <div class="research-section-heading"><h3 id="research-phase-summaries-title">${ht("阶段总结")}</h3>${create}</div>
+      ${entries.length ? `<ul>${entries.sort((a, b) => sortEntries(b, a)).map(({ record }) => `<li class="research-summary-item"><button type="button" data-research-record="${record.id}">
+        ${icon('report', 18)}<span><strong>${escape(record.title)}</strong>
+          <small>${record.coverage ? ht("覆盖 {0}", escape(rangeText(record.coverage))) + ' · ' : ''}${ht("撰写于 {0}", escape(record.date))}</small></span>${icon('chevron', 14)}</button>
+        <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button></li>`).join('')}</ul>`
+        : `<p class="research-empty-list">${ht("这个阶段还没有总结。")}</p>`}
+    </section>`;
+  }
+
+  private renderSources(state: ResearchSnapshot) {
+    const records = new Set(state.records.map(({ record }) => record.id));
+    const sources = state.documents.filter(document => !document.sourceId && !records.has(document.id));
+    const external = state.evidenceSources || [];
+    return `${state.manifestFile.startsWith('.mekir/') ? `<section class="research-indexed-files research-source-folders">
+      <div class="research-section-heading"><h2>${ht("只读来源")}</h2><button type="button" class="secondary-button" data-research-add-source>${icon('plus', 14)} ${ht("登记只读来源")}</button></div>
+      ${external.length ? `<ul>${external.map(source => {
+        const evidence = state.documents.filter(file => file.sourceId === source.id);
+        return `<li><div class="research-source-folder"><div><strong>${escape(source.label)}</strong> <code>${source.id}</code>
+          <small>${source.available ? escape(source.directory || '') : ht("来源目录待绑定")}</small></div>
+          <div class="research-actions"><button type="button" class="secondary-button" data-research-bind-source="${source.id}">${ht("重新绑定目录")}</button>
+            <button type="button" class="secondary-button" data-research-index-evidence="${source.id}"${source.available ? '' : ' disabled'}>${ht("登记证据")}</button>
+            <button type="button" class="secondary-button" data-research-import="${source.id}"${source.available ? '' : ' disabled'}>${ht("预览导入归档")}</button></div></div>
+          ${evidence.length ? `<details><summary>${ht("已索引 {0} 个文件", evidence.length)}</summary><ul class="research-evidence-index">${evidence.map(file => `<li>
+            <button type="button" data-research-record="${file.id}"><span><strong>${escape(file.title)}</strong><small>${escape(file.relativePath)}</small></span></button>
+            <button type="button" class="icon-button research-copy-evidence" data-research-copy-evidence="${file.id}" title="${ht("复制证据链接")}" aria-label="${ht("复制证据链接")}">${icon('link', 15)}</button></li>`).join('')}</ul></details>` : ''}</li>`;
+      }).join('')}</ul>` : `<p class="research-empty-list">${ht("可登记论文仓库或实验归档目录，供记录引用。")}</p>`}</section>` : ''}
+      <section class="research-indexed-files">
+      ${sources.length ? `<ul>${sources.map(document => `<li><button type="button" data-research-record="${document.id}">${icon('page', 18)}
+        <span><strong>${escape(document.title)}</strong><small>${escape(document.relativePath)}</small></span>${icon('chevron', 14)}</button></li>`).join('')}</ul>`
+      : `<p class="research-empty-list">${ht("项目索引中还没有其他资料。")}</p>`}
+      <button type="button" class="secondary-button" data-action="research-files">${ht("浏览项目文件")}</button>
+    </section>`;
+  }
+
+  private filterFieldName(field: string, state: ResearchSnapshot) {
+    if (field.startsWith('run.')) return runFields()[field.slice(4)] || field;
+    return state.project.recordTypes.flatMap(type => type.fields).find(rule => rule.id === field)?.label || field;
   }
 
   private renderRules({ project, root, manifestFile }: ResearchSnapshot) {
@@ -232,7 +583,7 @@ export class ResearchWorkspace {
     </section>`;
   }
 
-  private renderEntries(entries: ResearchEntry[], view: ResearchView, state: ResearchSnapshot) {
+  private renderEntries(entries: ResearchEntry[], view: ResearchView | undefined, state: ResearchSnapshot) {
     const byDate = new Map<string, ResearchEntry[]>();
     for (const item of entries) {
       const group = byDate.get(item.record.date);
@@ -245,10 +596,11 @@ export class ResearchWorkspace {
       <ul>${items.map(({ record, issues }) => {
         const type = state.project.recordTypes.find(item => item.id === record.type);
         const phase = state.project.phases.find(item => item.id === record.phaseId);
-        const fields = type?.fields.filter(rule => (!view.fieldIds || view.fieldIds.includes(rule.id)) && Object.hasOwn(record.fields, rule.id)) || [];
-        const sources = (record.sources || []).filter(id => titles.has(id));
+        const fields = type?.fields.filter(rule => (!view?.fieldIds || view.fieldIds.includes(rule.id)) && Object.hasOwn(record.fields, rule.id)) || [];
+        const sources = [...new Set([...(record.sources || []), ...(record.evidence || [])])].filter(id => titles.has(id));
         return `<li class="research-entry">
           <div class="research-entry-title"><span class="research-entry-type${record.coverage ? ' summary' : ''}">${escape(type?.label || record.type)}</span>
+            ${record.run?.missing.includes('RUN.md') ? `<span class="research-entry-type summary">${ht("待补报告")}</span>` : ''}
             <button type="button" data-research-record="${record.id}">${escape(record.title)}</button>
             <button type="button" class="research-edit" data-research-edit="${record.id}" title="${ht("编辑记录属性")}" aria-label="${ht("编辑记录属性")}">${icon('settings', 15)}</button>
           </div>
@@ -268,13 +620,26 @@ export class ResearchWorkspace {
     const state = this.snapshot;
     if (!button || !state || this.hooks.blocked()) return;
     const data = button.dataset;
-    if (data.researchRecord) { await this.hooks.open(state.root, data.researchRecord); return; }
-    if (data.researchEdit) {
-      const entry = state.records.find(item => item.record.id === data.researchEdit);
-      if (entry) this.openForm(state, undefined, entry);
+    if (data.researchRecord) { await this.openReference(data.researchRecord, button); return; }
+    if ('researchAddSource' in data) { this.tools.registerSource(state.root); return; }
+    if (data.researchBindSource) { await this.tools.bind(state.root, data.researchBindSource); return; }
+    if (data.researchIndexEvidence) { this.tools.registerEvidence(state.root, data.researchIndexEvidence); return; }
+    if (data.researchImport) { await this.tools.importPreview(state.root, data.researchImport); return; }
+    if (data.researchCopyEvidence) {
+      await window.meki.writeClipboardText(`mekir:${data.researchCopyEvidence}`);
+      this.hooks.notify(t("已复制证据链接"));
       return;
     }
-    if (data.researchNew) { this.openForm(state, data.researchNew as ResearchType['kind']); return; }
+    if ('researchFilter' in data) { this.tools.filter(state, this.recordFilter, filter => this.setRecordFilter(filter)); return; }
+    if (data.researchEdit || data.researchNew) {
+      await this.refresh();
+      const latest = this.snapshot;
+      if (!latest || latest.root !== state.root || this.dialog.open) return;
+      const entry = latest.records.find(item => item.record.id === data.researchEdit);
+      const kind = data.researchNew as ResearchType['kind'] | undefined;
+      if (entry || latest.project.recordTypes.some(type => type.kind === kind)) this.openForm(latest, kind, entry);
+      return;
+    }
     if ('researchCopyRoot' in data) {
       try {
         await window.meki.writeClipboardText(state.root);
@@ -282,16 +647,36 @@ export class ResearchWorkspace {
       } catch (error) { button.textContent = errorText(error); }
       return;
     }
-    if (data.researchView) this.viewId = data.researchView;
-    else if (data.researchPhase) this.phaseId = this.phaseId === data.researchPhase ? '' : data.researchPhase;
-    else if ('researchClear' in data) { this.date = ''; this.phaseId = ''; }
-    else if ('researchRules' in data) this.rules = !this.rules;
-    else return;
-    const stableTarget = button.getAttributeNames().find(name => name.startsWith('data-research-'));
-    this.render();
-    if (stableTarget) {
-      const value = button.getAttribute(stableTarget);
-      [...this.content.querySelectorAll<HTMLButtonElement>(`[${stableTarget}]`)].find(item => item.getAttribute(stableTarget) === value)?.focus();
+    if (data.researchDestination) {
+      if (this.readerOpen) {
+        await this.hooks.closeReader();
+        if (this.readerOpen) return;
+      }
+      const from = this.destination(state).key;
+      const to = data.researchDestination;
+      if (from === to) return;
+      this.positions.set(from, { phaseId: this.phaseId, date: this.date, scroll: this.content.scrollTop, range: this.timelineRange });
+      const position = this.positions.get(to);
+      this.viewKey = to;
+      this.phaseId = position?.phaseId || '';
+      this.date = position?.date || '';
+      this.timelineRange = position?.range;
+      this.render();
+      this.content.scrollTop = position?.scroll || 0;
+      this.sidebar.querySelector<HTMLButtonElement>(`[data-research-destination="${CSS.escape(to)}"]`)?.focus({ preventScroll: true });
+    } else if (data.researchPhase) {
+      this.phaseId = this.phaseId === data.researchPhase ? '' : data.researchPhase;
+      this.render();
+      this.content.querySelector<HTMLButtonElement>(`[data-research-phase="${CSS.escape(data.researchPhase)}"]`)?.focus({ preventScroll: true });
+    } else if ('researchClear' in data) {
+      this.date = this.phaseId = '';
+      if (this.recordFilter) await this.setRecordFilter();
+      else this.render();
+      this.content.querySelector<HTMLInputElement>('#research-date')?.focus({ preventScroll: true });
+    } else if ('researchRange' in data) {
+      this.openRangePicker({ start: data.start!, end: data.end! });
+    } else if ('researchResetRange' in data) {
+      this.setTimelineRange();
     }
   }
 
@@ -300,12 +685,13 @@ export class ResearchWorkspace {
     this.editing = original;
     this.formProject = state;
     const { project } = state;
-    const view = project.views.find(view => view.id === (this.viewId || project.defaultView));
+    const view = this.destination(state).view;
     const available = project.recordTypes.filter(type => type.kind === kind);
     const type = record ? project.recordTypes.find(type => type.id === record.type) ?? project.recordTypes[0]
       : available.find(type => view?.typeIds?.includes(type.id)) ?? available[0];
     const typeOptions = (record ? project.recordTypes : available).map(item => option(item.id, item.label, type.id));
-    const sources = state.documents.filter(source => source.id !== record?.id)
+    const targets = state.documents.filter(source => source.id !== record?.id);
+    const sources = targets.filter(source => !source.sourceId || record?.sources?.includes(source.id))
       .sort((a, b) => Number(!a.date) - Number(!b.date) || (a.date || '').localeCompare(b.date || '') || a.title.localeCompare(b.title, getLocale()));
     const availableIds = new Set(sources.map(source => source.id));
     const missingSources = (record?.sources || []).filter(id => !availableIds.has(id));
@@ -331,6 +717,14 @@ export class ResearchWorkspace {
         </details>
       </div>
       <div class="research-form-grid" data-research-fields></div>
+      <details class="research-related-form"><summary>${ht("原始证据与研究关系")}</summary>
+        ${targets.some(target => target.sourceId) || record?.evidence?.length ? `<label>${ht("证据 ID")}
+          <input name="evidence-ids" value="${escape(record?.evidence?.join(' ') || '')}" placeholder="${ht("多个 ID 用空格分隔")}" list="research-evidence-ids"></label>
+          <datalist id="research-evidence-ids">${targets.filter(target => target.sourceId).map(target => option(target.id, target.title, '')).join('')}</datalist>` : ''}
+        <datalist id="research-relation-targets">${targets.map(target => option(target.id, target.title, '')).join('')}</datalist>
+        <div data-research-relations>${(record?.relations || []).map(relation => this.relationRow(relation)).join('')}</div>
+        <button type="button" class="secondary-button" data-add-relation>${icon('plus', 14)} ${ht("添加研究关系")}</button>
+      </details>
       <p class="research-form-error" role="alert"></p>
       <div class="dialog-actions"><button type="button" class="secondary-button" data-research-cancel>${ht("取消")}</button>
         <button type="submit" class="primary-button">${escape(record ? t("保存属性") : t("创建并编辑"))}</button></div>
@@ -342,6 +736,15 @@ export class ResearchWorkspace {
 
   private get form() { return this.dialog.querySelector<HTMLFormElement>('form')!; }
   private input<T extends HTMLInputElement | HTMLSelectElement = HTMLInputElement>(name: string) { return this.form.elements.namedItem(name) as T; }
+
+  private relationRow(relation?: ResearchRelation) {
+    return `<div class="research-relation-row">
+      <select name="relation-kind" aria-label="${ht("关系类型")}">${Object.entries(relationLabels()).map(([kind, label]) => option(kind, label, relation?.kind || '')).join('')}</select>
+      <input name="relation-target" aria-label="${ht("关联记录或证据 ID")}" placeholder="${ht("关联记录或证据 ID")}" value="${escape(relation?.target || '')}" list="research-relation-targets" maxlength="64">
+      <button type="button" class="icon-button" data-remove-relation aria-label="${ht("移除研究关系")}">${icon('close', 14)}</button>
+      <input name="relation-note" aria-label="${ht("采用依据或关系说明")}" placeholder="${ht("采用依据或关系说明")}" value="${escape(relation?.note || '')}" maxlength="1000">
+    </div>`;
+  }
 
   private selectedType() {
     return this.formProject!.project.recordTypes.find(type => type.id === this.input('type').value)!;
@@ -380,12 +783,22 @@ export class ResearchWorkspace {
     }
     const date = this.input('date').value;
     const id = original?.record.id ?? `record-${date}-${crypto.randomUUID().slice(0, 8)}`;
+    const data = new FormData(this.form);
+    const evidence = [...new Set(String(data.get('evidence-ids') || '').trim().split(/\s+/).filter(Boolean))];
+    const relationKinds = data.getAll('relation-kind') as ResearchRelation['kind'][];
+    const relationNotes = data.getAll('relation-note').map(value => String(value).trim());
+    const relations = data.getAll('relation-target').flatMap((value, i) => {
+      const target = String(value).trim(), note = relationNotes[i];
+      return target || note ? [{ kind: relationKinds[i], target, ...(note ? { note } : {}) }] : [];
+    });
     const write: ResearchBatch = { ifProjectRevision: state.revision, records: [{
       id, ifRevision: original?.revision ?? null, type: type.id, title: this.input('title').value.trim(), date,
       phaseId: this.input('phaseId').value || null, fields,
+      ...(evidence.length || original?.record.evidence ? { evidence } : {}),
+      ...(relations.length || original?.record.relations ? { relations } : {}),
       ...(type.kind === 'summary' ? {
         coverage: { start: this.input('start').value, end: this.input('end').value },
-        sources: new FormData(this.form).getAll('source').map(String),
+        sources: data.getAll('source').map(String),
       } : { coverage: null }),
     }] };
     const feedback = this.dialog.querySelector<HTMLElement>('.research-form-error')!;
@@ -396,7 +809,7 @@ export class ResearchWorkspace {
       await window.meki.writeResearchBatch(state.root, write);
       this.dialog.close();
       await this.refresh();
-      if (!original) await this.hooks.open(state.root, id);
+      if (!original) await this.hooks.open(state.root, id, undefined, true);
     } catch (error) {
       feedback.textContent = errorText(error);
     } finally {

@@ -19,7 +19,7 @@ const semantic = node => { const { position, data, ...value } = node; if (value.
 async function idle() { await page.waitForFunction(() => !document.body.classList.contains('is-busy')); }
 async function action(name) { await page.locator(`[data-action="${name}"]`).first().evaluate(button => button.click()); await idle(); }
 try {
-  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? [] : [root], env });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--editor'] : [root, '--editor'], env });
   page = await app.firstWindow(); page.setDefaultTimeout(20000); page.on('pageerror', error => errors.push(error.message));
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].show());
   await page.waitForSelector('#shell[data-ready="true"]'); await action('open');

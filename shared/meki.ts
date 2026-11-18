@@ -1,6 +1,6 @@
 import type { ExportRequest, ExportTools, ImportedDocument, DiagramSaveRequest } from './export';
 import type { UpdateState } from './updates';
-import type { ResearchBatch, ResearchSnapshot, ResearchWriteResult } from './research';
+import type { BoundResearchSource, RecentResearchProject, ResearchBatch, ResearchEvidenceFile, ResearchFilter, ResearchImportPreview, ResearchReference, ResearchSnapshot, ResearchWriteResult, SavedResearchFilter } from './research';
 export interface DocumentFile {
   path: string | null;
   name: string;
@@ -83,6 +83,7 @@ export interface BootState {
   locale: Settings['locale'];
   windowId?: string;
   transferred?: boolean;
+  startInProject: boolean;
   platform: string;
   version: string;
   updatesAvailable: boolean;
@@ -128,15 +129,24 @@ export interface MekiAPI {
   openRecentFolder(path: string): Promise<Workspace>;
   changeRecentFolders(input: RecentFolderChange): Promise<RecentFolder[]>;
   refreshWorkspace(): Promise<Workspace | null>;
-  researchSnapshot(): Promise<ResearchSnapshot | null>;
+  researchSnapshot(filter?: ResearchFilter): Promise<ResearchSnapshot | null>;
+  listResearchProjects(): Promise<RecentResearchProject[]>;
+  openResearchProject(root?: string): Promise<Workspace | null>;
   createResearchDemo(): Promise<Workspace | null>;
   writeResearchBatch(root: string, input: ResearchBatch): Promise<ResearchWriteResult>;
   openResearchRecord(root: string, id: string): Promise<DocumentFile | null>;
+  bindResearchSource(root: string, id: string, label?: string): Promise<BoundResearchSource | null>;
+  indexResearchEvidence(root: string, sourceId: string, id: string, label?: string): Promise<ResearchReference | null>;
+  openResearchEvidence(root: string, id: string): Promise<ResearchEvidenceFile>;
+  revealResearchEvidence(root: string, id: string): Promise<void>;
+  researchImportPreview(root: string, sourceId: string): Promise<ResearchImportPreview>;
+  applyResearchImport(root: string, sourceId: string, token: string): Promise<ResearchWriteResult>;
+  saveResearchFilter(root: string, label: string, filter: ResearchFilter): Promise<SavedResearchFilter>;
   workspaceOperation(input: WorkspaceRequest): Promise<WorkspaceResult | null>;
   searchWorkspace(query: string, caseSensitive?: boolean): Promise<WorkspaceSearch>;
   workspacePathAction(action: 'reveal' | 'copy-path', path: string): Promise<void>;
   documentPathAction(action: 'reveal' | 'copy-path', path: string): Promise<void>;
-  resolveDocumentLink(href: string, documentPath: string): Promise<{ path: string; anchor: string }>;
+  resolveDocumentLink(href: string, documentPath: string): Promise<{ path: string; anchor: string } | { evidenceId: string }>;
   checkDocument(path: string, revision: string | null): Promise<DocumentStatus>;
   saveDraft(draft: Draft | null): Promise<void>;
   updateSettings(patch: Partial<Settings>): Promise<Settings>;

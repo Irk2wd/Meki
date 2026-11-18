@@ -18,7 +18,7 @@ const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: path.join(run, 'pr
 let app, page, failureState; const results = [], errors = [];
 const record = name => { results.push(name); console.log(`PASS ${name}`); };
 async function launch(launchEnv = env, args = ['--open', documentPath]) {
-  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? args : [root, ...args], env: launchEnv, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--editor', ...args] : [root, '--editor', ...args], env: launchEnv, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => { errors.push(error.stack || error.message); console.error(error.stack || error.message); });
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); });
   await page.waitForSelector('#shell[data-ready="true"]', { timeout: 30000 });

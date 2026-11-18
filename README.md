@@ -19,7 +19,7 @@ npm run build
 npm start
 ```
 
-在左侧选择「研究项目」，可以创建渲染研究示例，或打开包含 `.mekir/project.json` 的项目目录。
+启动后进入科研项目，左上角可以切换项目，或点「创建示例项目」。时间线按阶段组织实验，实验和总结在右侧阅读和编辑。左栏的「文稿编辑器」可打开普通 Markdown 编辑界面。
 
 项目字段、模板、视图与阶段都可通过本地 CLI 调整。用 `npm --silent run research -- --help` 查看命令，或阅读[研究项目使用说明](docs/research-workspace.md)。
 

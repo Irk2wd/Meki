@@ -52,7 +52,7 @@ async function poll(check, timeout = 18000) {
   throw Error('Timed out waiting for lifecycle state');
 }
 async function launch(args = []) {
-  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? args : [root, ...args], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--editor', ...args] : [root, '--editor', ...args], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].show());
   await page.waitForSelector('#shell[data-ready="true"]');

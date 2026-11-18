@@ -5,6 +5,7 @@ const { app, BrowserWindow, Menu, dialog, shell, screen, clipboard, session } = 
 const bootstrap = globalThis[Symbol.for('meki.bootstrap')];
 const { WorkspaceStore, documentStatus } = require('./workspace-store.cjs');
 const { ResearchStore } = require('./research-store.cjs');
+const { previewEvidence, sourceDirectory } = require('./research-evidence.cjs');
 const { DOCUMENT_SCHEME, researchLinkId } = require('./research-links.mjs');
 const { exampleProject, exampleRecords } = require('./research-example.cjs');
 const { PRODUCT_NAME } = require('./app-identity.cjs');
@@ -244,27 +245,64 @@ async function currentResearch(root = workspaceStore?.root) {
   return project;
 }
 
-async function researchDocumentPath(project, selected, documentId) {
-  const { relativePath } = await project.resolveDocument(documentId);
-  const file = await selected.existing(path.join(project.root, relativePath), { document: true });
+async function listResearchProjects() {
+  const projects = await Promise.all(store.metadata.recentFolders.map(async folder => {
+    try {
+      const project = await ResearchStore.open(folder.path);
+      if (!project || pathKey(project.root) !== pathKey(folder.path)) return null;
+      const { project: config } = await project.manifest();
+      return { root: project.root, title: config.title };
+    } catch { return null; }
+  }));
+  return projects.filter(Boolean);
+}
+
+async function openResearchProject(root) {
+  const recent = root !== undefined;
+  if (recent) {
+    root = validateAbsolutePath(root);
+    if (!store.metadata.recentFolders.some(folder => pathKey(folder.path) === pathKey(root))) throw new Error(t("请通过“打开科研项目”选择这个目录。"));
+  } else if (TEST_MODE) root = process.env.MEKI_TEST_FOLDER_PATH;
+  else {
+    const result = await dialog.showOpenDialog(mainWindow, { title: t("打开科研项目"), properties: ['openDirectory'] });
+    if (!result.canceled) root = result.filePaths[0];
+  }
+  if (!root) return null;
+  const project = await ResearchStore.open(validateAbsolutePath(root));
+  if (!project || (recent && pathKey(project.root) !== pathKey(root))) {
+    throw new Error(t("请选择包含研究项目配置的目录。"));
+  }
+  await project.manifest();
+  return setWorkspace(project.root, true);
+}
+
+async function requireResearch(root) {
+  const project = await currentResearch(root);
+  if (!project) throw new Error(t("请先打开要编辑的研究项目。"));
+  return project;
+}
+
+async function researchLocation(project, selected, documentId) {
+  const reference = await project.resolveDocument(documentId);
+  const file = reference.sourceId ? null : await selected.existing(path.join(project.root, reference.relativePath), { document: true });
   if (selected !== workspaceStore) throw new Error(t("项目目录已移动，请重新打开。"));
-  return file.path;
+  return file ? { path: file.path } : { evidenceId: documentId };
 }
 
 async function createResearchDemo() {
   const selected = TEST_MODE ? process.env.MEKI_TEST_RESEARCH_PARENT : (await dialog.showOpenDialog(mainWindow, {
-    title: t("选择渲染研究示例的存放位置"), defaultPath: app.getPath('documents'), properties: ['openDirectory', 'createDirectory'],
+    title: t("选择示例项目的存放位置"), defaultPath: app.getPath('documents'), properties: ['openDirectory', 'createDirectory'],
   })).filePaths[0];
   if (!selected) return null;
   const parent = await fs.promises.realpath(validateAbsolutePath(selected));
   for (let attempt = 0; attempt < 100; attempt++) {
-    const root = path.join(parent, attempt ? `meki-render-research-${attempt + 1}` : 'meki-render-research');
+    const root = path.join(parent, `research-example${attempt ? `-${attempt + 1}` : ''}`);
     try {
       const project = await ResearchStore.initialize(root, exampleProject, exampleRecords);
       return await setWorkspace(project.root, true);
     } catch (error) { if (error.code !== 'EEXIST' || error.path !== root) throw error; }
   }
-  throw new Error(t("无法在该目录中创建新的研究示例。"));
+  throw new Error(t("无法在该目录中创建示例项目。"));
 }
 
 async function setWorkspace(root, requireSamePath = false) {
@@ -471,6 +509,15 @@ function registerIpc() {
     if (bootResult) return { ...bootResult, settings: store.metadata.settings, recentFiles: store.metadata.recentFiles, recentFolders: store.metadata.recentFolders, workspace };
     let initialDoc = null;
     const firstLaunchPath = launchPaths.shift();
+    const startInProject = !firstLaunchPath && !options.fresh && !options.transferred && !process.argv.includes('--editor');
+    if (startInProject) {
+      try {
+        if (!await currentResearch()) {
+          const [recent] = await listResearchProjects();
+          if (recent) await openResearchProject(recent.root);
+        }
+      } catch (error) { console.warn('Meki could not restore its research project:', error.message); }
+    }
     const session = options.initialSession || await lifecycle.restore(store.metadata.settings.reopenSession);
     for (const doc of session?.documents || []) if (doc.path) authorize(doc.path);
     const reopenPath = firstLaunchPath || (!options.fresh && !session && !recovery && store.metadata.settings.reopenSession ? store.metadata.recentFiles[0]?.path : null);
@@ -480,6 +527,7 @@ function registerIpc() {
     }
     bootResult = {
       platform: process.platform, version: bootstrap?.runtime?.version || app.getVersion(), updatesAvailable: Boolean(updates), locale: getLocale(), settings: store.metadata.settings,
+      startInProject,
       recovery: session ? null : recovery, session, initialDoc: initialDoc || (options.fresh ? { path: null, name: t("未命名.md"), content: '', revision: null } : null), transferred: options.transferred === true, windowId: id, recentFiles: store.metadata.recentFiles, recentFolders: store.metadata.recentFolders, workspace,
     };
     rendererBooted = true;
@@ -570,20 +618,49 @@ function registerIpc() {
     return selected ? setWorkspace(validateAbsolutePath(selected)) : null;
   });
   register('refresh-workspace', refreshWorkspace);
-  register('research-snapshot', async () => (await currentResearch())?.snapshot() ?? null);
+  register('research-snapshot', async filter => (await currentResearch())?.snapshot(filter) ?? null);
+  register('list-research-projects', listResearchProjects);
+  register('open-research-project', openResearchProject);
   register('create-research-demo', createResearchDemo);
-  register('write-research-batch', async (root, input) => {
-    const project = await currentResearch(root);
-    if (!project) throw new Error(t("请先打开要编辑的研究项目。"));
-    return project.writeBatch(input);
-  });
+  register('write-research-batch', async (root, input) => (await requireResearch(root)).writeBatch(input));
   register('open-research-record', async (root, recordId) => {
     const selected = workspaceStore;
-    const project = await currentResearch(root);
-    if (!project) throw new Error(t("请先打开要编辑的研究项目。"));
-    const file = await researchDocumentPath(project, selected, recordId);
-    return openKnownDocument(authorize(file));
+    const project = await requireResearch(root);
+    const location = await researchLocation(project, selected, recordId);
+    if (!location.path) throw new Error(t("请通过只读预览打开证据。"));
+    return openKnownDocument(authorize(location.path));
   });
+  register('bind-research-source', async (root, sourceId, label) => {
+    await requireResearch(root);
+    const directory = TEST_MODE ? process.env.MEKI_TEST_EVIDENCE_FOLDER : (await dialog.showOpenDialog(mainWindow, {
+      title: t("选择只读来源目录"), properties: ['openDirectory'],
+    })).filePaths[0];
+    return directory ? (await requireResearch(root)).bindEvidenceSource(sourceId, directory, label) : null;
+  });
+  register('index-research-evidence', async (root, sourceId, fileId, label) => {
+    const project = await requireResearch(root);
+    const directory = await sourceDirectory(project.root, sourceId);
+    const file = TEST_MODE ? process.env.MEKI_TEST_EVIDENCE_FILE : (await dialog.showOpenDialog(mainWindow, {
+      title: t("选择原始证据文件"), defaultPath: directory, properties: ['openFile'],
+    })).filePaths[0];
+    if (!file) return null;
+    return (await requireResearch(root)).indexEvidence(fileId, { sourceId, title: label || path.basename(file),
+      relativePath: path.relative(directory, file).split(path.sep).join('/') });
+  });
+  register('open-research-evidence', async (root, id) => {
+    const { source, reference, file } = await (await requireResearch(root)).evidenceFile(id);
+    return previewEvidence(file, reference, source);
+  });
+  register('reveal-research-evidence', async (root, id) => {
+    const { file } = await (await requireResearch(root)).evidenceFile(id);
+    if (!TEST_MODE) shell.showItemInFolder(file.path);
+  });
+  register('research-import-preview', async (root, sourceId) => (await requireResearch(root)).importArchive(sourceId));
+  register('research-import-apply', async (root, sourceId, token) => {
+    if (typeof token !== 'string') throw new Error(t("请先预览导入变更。"));
+    return (await requireResearch(root)).importArchive(sourceId, token);
+  });
+  register('save-research-filter', async (root, label, filter) => (await requireResearch(root)).saveFilter(label, filter));
   register('list-recent-folders', () => store.metadata.recentFolders);
   register('open-recent-folder', async folder => {
     folder = validateAbsolutePath(folder);
@@ -640,7 +717,8 @@ function registerIpc() {
       let anchor = '';
       try { if (hash >= 0) anchor = decodeURIComponent(href.slice(hash + 1)); }
       catch { throw new Error(t("链接包含无效的 URL 编码。")); }
-      return { path: authorize(await researchDocumentPath(project, selected, documentId)), anchor };
+      const location = await researchLocation(project, selected, documentId);
+      return location.path ? { path: authorize(location.path), anchor } : location;
     }
     const boundary = selected || await WorkspaceStore.open(path.dirname(documentPath));
     const result = await boundary.resolveLink(href, documentPath);

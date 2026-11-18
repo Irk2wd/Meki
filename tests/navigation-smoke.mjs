@@ -21,12 +21,22 @@ const modifier=process.platform==='darwin'?'Meta':'Control', end=process.platfor
 const results=[],errors=[]; let app,page;
 function pass(message){results.push(message);console.log(`PASS ${message}`);}
 async function idle(){await page.waitForFunction(()=>!document.body.classList.contains('is-busy'));}
-async function action(name){await page.locator(`[data-action="${name}"]`).first().evaluate(node=>node.click());await idle();}
 async function focus(file){await page.locator('.workspace-tree-row').evaluateAll((nodes,file)=>{const row=nodes.find(node=>node.dataset.wsPath===file);if(!row)throw Error(`Missing row ${file}`);row.focus();},file);}
 async function focused(file){await page.waitForFunction(file=>document.activeElement?.dataset.wsPath===file,file);}
 async function exists(file){return page.locator('.workspace-tree-row').evaluateAll((nodes,file)=>nodes.some(node=>node.dataset.wsPath===file),file);}
 async function refresh(){await page.locator('[data-ws="refresh"]').evaluate(node=>node.click());await idle();}
-async function folders(){await action('recent-folders');await page.locator('#recent-folders-dialog').waitFor({state:'visible'});await page.waitForFunction(()=>!document.querySelector('#recent-folder-status').textContent.includes('正在读取'));}
+async function switcher(){
+  await page.locator('#workspace-switch').click();
+  const menu = page.locator('#workspace-switch-menu');
+  await menu.locator('[aria-current="true"]').waitFor();
+  return menu;
+}
+async function folders(){
+  const menu = await switcher();
+  await menu.locator('[data-switch-folder="manage"]').click();
+  await page.locator('#recent-folders-dialog').waitFor({state:'visible'});
+  await page.waitForFunction(()=>!document.querySelector('#recent-folder-status').textContent.includes('正在读取'));
+}
 async function folderAction(folder,action){await page.locator('.recent-folder-row').evaluateAll((nodes,{folder,action})=>{const row=nodes.find(node=>node.dataset.folderPath===folder);if(!row)throw Error(`Missing folder ${folder}`);row.querySelector(`[data-folders="${action}"]`).click();},{folder,action});await page.waitForFunction(()=>!document.querySelector('#recent-folders-dialog').hasAttribute('aria-busy'));await idle();}
 async function denied(file){return page.evaluate(async file=>{try{await window.meki.openDocument(file);return false;}catch{return true;}},file);}
 async function launch(){
@@ -77,6 +87,30 @@ try{
   pass('filtering and sorting keep one tree tab stop, preserve input focus, and expand filtered directories');
 
   assert.equal(await denied(bFile),true);assert.equal(await denied(secret),true);
+  const switchButton = page.locator('#workspace-switch');
+  const anchoredMenu = await switcher();
+  assert.equal(await page.locator('#recent-folders-dialog').isVisible(), false);
+  assert.equal(await switchButton.getAttribute('aria-expanded'), 'true');
+  assert.equal(await anchoredMenu.locator('[aria-current="true"]').getAttribute('data-folder-path'), a);
+  assert.equal(await denied(bFile),true);
+  const triggerBounds = await switchButton.boundingBox();
+  const menuBounds = await anchoredMenu.boundingBox();
+  assert.equal(menuBounds.x, triggerBounds.x);
+  assert.ok(menuBounds.y >= triggerBounds.y + triggerBounds.height);
+  await page.screenshot({path:path.join(run,'workspace-switch.png'),animations:'disabled'});
+  await page.locator('.sidebar').screenshot({path:path.join(run,'workspace-switch-sidebar.png'),animations:'disabled'});
+  await page.locator('#document-name').click();
+  await anchoredMenu.waitFor({state:'hidden'});
+  await switchButton.press('ArrowDown');
+  await anchoredMenu.locator('[aria-current="true"]:focus').waitFor();
+  await page.keyboard.press('End');
+  await anchoredMenu.locator('[data-switch-folder="manage"]:focus').waitFor();
+  await page.keyboard.press('Escape');
+  await anchoredMenu.waitFor({state:'hidden'});
+  assert.equal(await switchButton.getAttribute('aria-expanded'), 'false');
+  assert.equal(await switchButton.evaluate(button=>document.activeElement===button), true);
+  pass('the workspace button opens an anchored, keyboard-accessible switcher and keeps management separate');
+
   await folders();assert.equal(await page.locator('.recent-folder-row').count(),4);assert.equal(await denied(bFile),true);
   await folderAction(b,'pin');assert.equal(await page.locator('.recent-folder-row').first().getAttribute('data-folder-path'),b);
   assert.equal(await page.locator('.recent-folder-row').first().locator('.recent-folder-pin').getAttribute('aria-pressed'),'true');
@@ -93,7 +127,16 @@ try{
   assert.deepEqual(invalid,[true,true,true,true]);
   pass('missing and replaced recent locations report visible errors without changing the workspace or granting access');
 
-  const beforeTabs=await page.locator('.document-tab').count();await folderAction(b,'open');await page.locator('#recent-folders-dialog').waitFor({state:'hidden'});
+  await page.locator('[data-folders="close"]').click();
+  const quickMenu = await switcher();
+  await quickMenu.getByRole('menuitem', { name: /^missing\b/ }).click();
+  await quickMenu.getByRole('status').filter({hasText:'无法打开最近文件夹'}).waitFor();
+  assert.equal(await page.locator('#workspace-name').innerText(),'Workspace A');
+  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(900,420));
+  await page.waitForFunction(()=>innerHeight <= 420 && document.querySelector('#workspace-switch-menu').getBoundingClientRect().bottom <= innerHeight);
+  const beforeTabs=await page.locator('.document-tab').count();
+  await quickMenu.getByRole('menuitem', { name: /^Workspace B\b/ }).click();
+  await quickMenu.waitFor({state:'hidden'});
   assert.equal(await page.locator('#workspace-name').innerText(),'Workspace B');assert.equal(await page.locator('.document-tab').count(),beforeTabs);
   await focus(bFile);await page.keyboard.press('Enter');await idle();await page.waitForFunction(()=>document.querySelector('#document-name').textContent==='beta.md');
   await folders();const filesBefore=(await page.evaluate(()=>window.meki.boot())).recentFiles;
@@ -105,7 +148,12 @@ try{
   await page.locator('.document-tab [role="tab"]').evaluateAll((nodes,z)=>nodes.find(node=>node.title===z).click(),z);await idle();
   await page.locator('[data-mode="source"]').click();assert.match(await page.locator('#source-editor').innerText(),/Unsaved navigation buffer/);
   assert.equal(await fs.readFile(z,'utf8'),'\uFEFF# Z\r\n\r\nKeep original bytes.\r\n');
-  pass('explicit recent selection opens its workspace; clear/remove preserve pinned choices, recent files, disk data and unsaved tabs');
+  const emptyRecents = await switcher();
+  assert.equal(await emptyRecents.locator('[data-switch-folder="open"]').count(), 1);
+  await emptyRecents.locator('[data-switch-folder="choose"]').click();
+  await page.locator('#workspace-name').getByText('Workspace A', { exact: true }).waitFor();
+  assert.equal(await page.locator('#recent-folders-dialog').isVisible(), false);
+  pass('quick switching reports missing folders and opens a valid workspace; management preserves tabs and files');
 
   await page.screenshot({path:path.join(run,'navigation.png'),animations:'disabled'});assert.deepEqual(errors,[]);pass('no renderer exceptions');
 }finally{

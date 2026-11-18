@@ -50,7 +50,7 @@ async function windowId(page) { return page.evaluate(async () => (await window.m
 async function active(page) { const id = await windowId(page), record = (await catalog()).find(record => record.id === id); return record.session.documents.find(doc => doc.id === record.session.activeId); }
 async function newWindow(page, command = 'new-window') { const created = app.waitForEvent('window'); await action(page, command); return ready(await created); }
 async function launch(args = []) {
-  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? args : [root, ...args], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--editor', ...args] : [root, '--editor', ...args], env, timeout: 30000 });
   app.on('window', page => { void ready(page).catch(() => {}); });
   const page = await ready(await app.firstWindow()); await native(page, 'focus'); return page;
 }

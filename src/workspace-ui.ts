@@ -16,6 +16,8 @@ interface Hooks {
   choose(): Promise<void>;
   openFolder(path: string): Promise<void>;
   refresh(): Promise<void>;
+  blocked(): boolean;
+  closePopovers(): void;
   notify(message: string, error?: boolean): void;
 }
 
@@ -37,6 +39,9 @@ export class WorkspaceUI {
   private visibleRows: NavigationRow[] = [];
   private folders: RecentFolder[] = [];
   private folderBusy = false;
+  private folderMenuRequest = 0;
+  private readonly folderSwitch = document.querySelector<HTMLButtonElement>('#workspace-switch')!;
+  private readonly folderMenu = document.querySelector<HTMLElement>('#workspace-switch-menu')!;
   private readonly panel = document.querySelector<HTMLElement>('#files-panel')!;
   private readonly dialog: HTMLDialogElement;
   private readonly picker: HTMLDialogElement;
@@ -57,6 +62,34 @@ export class WorkspaceUI {
     this.picker = host.querySelector('#workspace-picker')!;
     this.menu = host.querySelector('#workspace-menu')!;
     this.folderDialog = host.querySelector('#recent-folders-dialog')!;
+    this.folderMenu.innerHTML = `<div class="workspace-switch-options" role="group" aria-label="${ht("最近文件夹")}"></div>
+      <div class="workspace-switch-status" role="status" hidden></div>
+      <div class="workspace-switch-actions" role="group"><button type="button" role="menuitem" tabindex="-1" data-switch-folder="choose">${icon('folder', 15)}<span>${ht("打开其他文件夹…")}</span></button>
+      <button type="button" role="menuitem" tabindex="-1" data-switch-folder="manage">${icon('settings', 15)}<span>${ht("管理最近文件夹…")}</span></button></div>`;
+    this.folderSwitch.addEventListener('click', event => {
+      event.stopPropagation();
+      if (this.folderMenu.hidden) void this.showFolderMenu();
+      else this.closeFolderMenu(true);
+    });
+    this.folderSwitch.addEventListener('keydown', event => {
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      event.preventDefault();
+      void this.showFolderMenu(event.key === 'ArrowUp');
+    });
+    this.folderMenu.addEventListener('keydown', event => this.folderMenuKey(event));
+    this.folderMenu.addEventListener('click', event => {
+      event.stopPropagation();
+      void this.switchFolder(event).catch(error => this.hooks.notify(String(error), true));
+    });
+    document.addEventListener('pointerdown', event => {
+      const target = event.target as Node;
+      if (!this.folderSwitch.contains(target) && !this.folderMenu.contains(target)) this.closeFolderMenu();
+    }, true);
+    document.addEventListener('keydown', event => {
+      if (this.folderMenu.hidden || event.key !== 'Escape' || event.isComposing) return;
+      event.preventDefault(); event.stopImmediatePropagation(); this.closeFolderMenu(true);
+    }, true);
+    window.addEventListener('resize', () => { if (!this.folderMenu.hidden) this.positionFolderMenu(); });
     this.folderDialog.addEventListener('click', event => { void this.folderAction(event).catch(error => this.folderMessage(String(error))); });
     this.panel.addEventListener('click', event => { event.stopPropagation(); void this.click(event).catch(error => hooks.notify(String(error), true)); });
     this.panel.addEventListener('contextmenu', event => {
@@ -239,6 +272,108 @@ export class WorkspaceUI {
     if (!this.folderDialog.open) this.folderDialog.showModal();
     try { this.folders = await window.meki.listRecentFolders(); this.renderFolders(); this.folderMessage(t("最多保留 20 个位置，可固定 10 个。清除记录不会删除文件。")); }
     catch (error) { this.folderMessage(String(error)); }
+  }
+
+  closeFolderMenu(restoreFocus = false) {
+    if (this.folderMenu.hidden) return;
+    this.folderMenuRequest++;
+    this.folderMenu.hidden = true;
+    this.folderSwitch.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) this.folderSwitch.focus({ preventScroll: true });
+  }
+
+  private folderMenuMessage(message = '') {
+    const status = this.folderMenu.querySelector<HTMLElement>('.workspace-switch-status')!;
+    status.textContent = message.replace(/^Error: (Error invoking remote method '[^']+': Error: )?/, '');
+    status.hidden = !message;
+  }
+
+  private folderMenuItems() {
+    return [...this.folderMenu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+  }
+
+  private async showFolderMenu(last = false) {
+    if (this.hooks.blocked() || this.folderBusy) return;
+    const focusItem = () => this.folderMenuItems().at(last ? -1 : 0)?.focus();
+    if (!this.folderMenu.hidden) { focusItem(); return; }
+    this.hooks.closePopovers();
+    const request = ++this.folderMenuRequest;
+    this.folderMenu.querySelector('.workspace-switch-options')!.replaceChildren();
+    this.folderMenuMessage(t("正在读取最近位置…"));
+    this.folderMenu.hidden = false;
+    this.folderSwitch.setAttribute('aria-expanded', 'true');
+    this.positionFolderMenu();
+    this.folderMenu.focus({ preventScroll: true });
+    try {
+      const folders = await window.meki.listRecentFolders();
+      if (request !== this.folderMenuRequest) return;
+      this.renderFolderMenu(folders);
+      this.folderMenuMessage();
+    } catch (error) {
+      if (request !== this.folderMenuRequest) return;
+      this.folderMenuMessage(String(error));
+    }
+    if (document.activeElement === this.folderMenu) focusItem();
+  }
+
+  private positionFolderMenu() {
+    const trigger = this.folderSwitch.getBoundingClientRect();
+    if (!trigger.width) { this.closeFolderMenu(); return; }
+    const above = trigger.top - 13, below = innerHeight - trigger.bottom - 13;
+    const openAbove = below < 170 && above > below;
+    this.folderMenu.classList.toggle('above', openAbove);
+    this.folderMenu.style.maxHeight = `${Math.min(344, Math.max(0, openAbove ? above : below))}px`;
+  }
+
+  private renderFolderMenu(folders: RecentFolder[]) {
+    const root = this.workspace?.root;
+    const isCurrent = (path: string) => this.hooks.platform() === 'win32' ? path.toLowerCase() === root?.toLowerCase() : path === root;
+    const current = root ? [{ path: root, name: base(root), pinned: folders.some(folder => folder.pinned && isCurrent(folder.path)) }] : [];
+    const entries = [...current, ...folders.filter(folder => !isCurrent(folder.path))];
+    this.folderMenu.querySelector('.workspace-switch-options')!.innerHTML = entries.map(folder => {
+      const active = isCurrent(folder.path);
+      const parts = folder.path.split(/[\\/]/).filter(Boolean);
+      const separator = folder.path.includes('\\') ? '\\' : '/';
+      const parent = parts.slice(-3, -1).join(separator);
+      return `<button type="button" role="menuitem" tabindex="-1" data-switch-folder="open" data-folder-path="${escape(folder.path)}" title="${escape(folder.path)}"${active ? ' aria-current="true"' : ''}>
+        <span class="workspace-switch-names"><strong>${escape(folder.name)}</strong>${parent ? `<small>${parts.length > 3 ? `…${separator}` : ''}${escape(parent)}</small>` : ''}</span>
+        ${active ? icon('check', 15) : folder.pinned ? `<span class="workspace-switch-pin" aria-label="${ht("已固定")}">★</span>` : ''}</button>`;
+    }).join('');
+  }
+
+  private folderMenuKey(event: KeyboardEvent) {
+    if (event.key === 'Tab') { this.closeFolderMenu(true); return; }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    const items = this.folderMenuItems();
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const first = event.key === 'Home' || (current === -1 && event.key === 'ArrowDown');
+    const last = event.key === 'End' || (current === -1 && event.key === 'ArrowUp');
+    const next = first ? 0 : last ? items.length - 1 : (current + items.length + (event.key === 'ArrowDown' ? 1 : -1)) % items.length;
+    event.preventDefault(); items[next]?.focus();
+  }
+
+  private async switchFolder(event: MouseEvent) {
+    const button = (event.target as Element).closest<HTMLButtonElement>('[data-switch-folder]');
+    if (!button || this.hooks.blocked() || this.folderBusy) return;
+    const action = button.dataset.switchFolder;
+    if (action === 'choose' || action === 'manage' || button.hasAttribute('aria-current')) {
+      this.closeFolderMenu(true);
+      if (action === 'choose') await this.hooks.choose();
+      if (action === 'manage') await this.showFolders();
+      return;
+    }
+    const path = button.dataset.folderPath;
+    if (!path) return;
+    this.folderBusy = true;
+    this.folderMenu.setAttribute('aria-busy', 'true');
+    this.folderMenuMessage();
+    try {
+      await this.hooks.openFolder(path);
+      this.closeFolderMenu(true);
+    } catch (error) {
+      if (this.folderMenu.hidden) this.hooks.notify(String(error), true);
+      else this.folderMenuMessage(String(error));
+    } finally { this.folderBusy = false; this.folderMenu.removeAttribute('aria-busy'); }
   }
   private folderMessage(message: string) { this.folderDialog.querySelector('#recent-folder-status')!.textContent = message.replace(/^Error: (Error invoking remote method '[^']+': Error: )?/, ''); }
   private renderFolders() {

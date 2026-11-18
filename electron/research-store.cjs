@@ -6,13 +6,18 @@ const { isDeepStrictEqual } = require('node:util');
 const { setTimeout: delay } = require('node:timers/promises');
 const { atomicWrite, readBytes, decodeDocument, digest, isDocumentPath, isWithin, pathKey, MAX_DOCUMENT_BYTES, RevisionConflictError } = require('./file-store.cjs');
 const { WorkspaceStore } = require('./workspace-store.cjs');
+const { bindDirectory, boundSources, sourceDirectory, evidencePath } = require('./research-evidence.cjs');
+const { researchMatcher } = require('./research-filter.cjs');
+const { planArchive, MAX_RUNS } = require('./research-import.cjs');
 const {
   METADATA, MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, DOCUMENT_SCHEME, RECORDS, RECORD_FILE, REVISION,
   assert, object, array, id, validateProject, validateRecord,
+  validateSource, validateEvidence, validateFilter,
   relationshipIssues, fieldIssues, validateChange, parseMarkdown, formatMarkdown, fileName, templateBody,
 } = require('./research-model.cjs');
 
 const MAX_JSON_BYTES = 512 * 1024;
+const MAX_INDEX_BYTES = 8 * 1024 * 1024;
 
 async function statIfPresent(file) {
   try { return await fs.lstat(file); }
@@ -161,10 +166,11 @@ class ResearchStore {
     return publicRecord(await this.readFile(target, recordId));
   }
 
-  async catalog(bodyIds = new Set()) {
+  async catalog(bodyIds = new Set(), matches) {
     const items = new Map();
     const problems = [];
     const seen = new Set();
+    const matchingIds = [];
     for (const directory of this.recordDirectories) {
       if (!await this.directory(directory)) continue;
       for (const file of (await fs.readdir(directory)).sort()) {
@@ -179,6 +185,7 @@ class ResearchStore {
           }
           seen.add(recordId);
           const item = await this.readFile(target, recordId);
+          if (matches?.(item)) matchingIds.push(recordId);
           if (!bodyIds.has(recordId)) delete item.body;
           items.set(recordId, item);
         } catch (error) {
@@ -186,20 +193,21 @@ class ResearchStore {
         }
       }
     }
-    return { items, problems };
+    return { items, problems, matchingIds };
   }
 
   async readIndex() {
     const paths = new Map();
-    if (!this.indexPath || !await this.directory(path.dirname(this.indexPath))) return { paths, revision: null };
+    const evidence = new Map();
+    if (!this.indexPath || !await this.directory(path.dirname(this.indexPath))) return { paths, evidence, revision: null };
     const entry = await statIfPresent(this.indexPath);
-    if (!entry) return { paths, revision: null };
+    if (!entry) return { paths, evidence, revision: null };
     assert(entry.isFile(), `${INDEX} must be a regular file in the project folder.`);
-    const { bytes, mode } = await readBytes(this.indexPath, MAX_JSON_BYTES);
+    const { bytes, mode } = await readBytes(this.indexPath, MAX_INDEX_BYTES);
     let index;
     try { index = JSON.parse(decodeDocument(bytes).content); }
     catch (error) { throw new Error(`Could not read ${INDEX}: ${error.message}`); }
-    object(index, INDEX, ['version', 'documents']);
+    object(index, INDEX, ['version', 'documents', 'evidence']);
     assert(index.version === 1, `Unsupported version in ${INDEX}.`);
     object(index.documents, 'index.documents');
     for (const [documentId, relativePath] of Object.entries(index.documents)) {
@@ -207,7 +215,15 @@ class ResearchStore {
       validateIndexPath(relativePath);
       paths.set(documentId, relativePath);
     }
-    return { paths, revision: digest(bytes), mode };
+    if (index.evidence !== undefined) {
+      object(index.evidence, 'index.evidence');
+      for (const [fileId, reference] of Object.entries(index.evidence)) {
+        id(fileId, 'evidence ID');
+        assert(!paths.has(fileId), `The document index already uses ID ${fileId}.`);
+        evidence.set(fileId, validateEvidence(reference));
+      }
+    }
+    return { paths, evidence, revision: digest(bytes), mode };
   }
 
   async indexedDocument(documentId, relativePath) {
@@ -220,13 +236,15 @@ class ResearchStore {
   async resolveDocument(documentId) {
     const target = await this.findRecord(documentId);
     if (target) return recordReference(await this.readFile(target, documentId));
-    const { paths } = await this.readIndex();
+    const { paths, evidence } = await this.readIndex();
+    if (evidence.has(documentId)) return { id: documentId, ...evidence.get(documentId) };
     assert(paths.has(documentId), `Unknown document ID: ${documentId}.`);
     return this.indexedDocument(documentId, paths.get(documentId));
   }
 
-  async writeIndex({ paths, revision, mode }) {
-    const bytes = encodeJson({ version: 1, documents: Object.fromEntries([...paths].sort(([a], [b]) => a.localeCompare(b, 'en'))) });
+  async writeIndex({ paths, evidence, revision, mode }) {
+    const sorted = entries => Object.fromEntries([...entries].sort(([a], [b]) => a.localeCompare(b, 'en')));
+    const bytes = encodeJson({ version: 1, documents: sorted(paths), ...(evidence.size ? { evidence: sorted(evidence) } : {}) }, MAX_INDEX_BYTES);
     await atomicWrite(this.indexPath, bytes, { mode, beforeCommit: async () => {
       if ((await this.readIndex()).revision !== revision) throw revisionConflict('The document index');
     } });
@@ -241,11 +259,71 @@ class ResearchStore {
       assert(!await this.findRecord(documentId), `A research record already uses document ID ${documentId}.`);
       const document = await this.indexedDocument(documentId, relativePath);
       const index = await this.readIndex();
+      assert(!index.evidence.has(documentId), `An evidence file already uses ID ${documentId}.`);
       if (index.paths.get(documentId) !== relativePath) {
         index.paths.set(documentId, relativePath);
         await this.writeIndex(index);
       }
       return document;
+    });
+  }
+
+  async bindEvidenceSource(sourceId, directory, label) {
+    assert(this.indexPath, `Evidence sources require ${MANIFEST}.`);
+    id(sourceId, 'evidence source ID');
+    return this.locked(async () => {
+      const current = await this.manifest();
+      const sources = current.project.evidenceSources || [];
+      let source = sources.find(item => item.id === sourceId);
+      if (!source) {
+        source = validateSource({ id: sourceId, label });
+        validateProject({ ...current.project, evidenceSources: [...sources, source] });
+      }
+      const absolute = await bindDirectory(this.root, sourceId, directory);
+      if (!sources.includes(source)) await this.writeManifest({ ...current.project, evidenceSources: [...sources, source] }, current);
+      return { ...source, directory: absolute, available: true };
+    });
+  }
+
+  async indexEvidence(fileId, reference) {
+    assert(this.indexPath, `Evidence indexing requires ${MANIFEST}.`);
+    id(fileId, 'evidence ID');
+    validateEvidence(reference);
+    return this.locked(async () => {
+      const { project } = await this.manifest();
+      assert(project.evidenceSources?.some(item => item.id === reference.sourceId), `Unknown evidence source: ${reference.sourceId}.`);
+      await evidencePath(await sourceDirectory(this.root, reference.sourceId), reference.relativePath);
+      const index = await this.readIndex();
+      assert(!index.paths.has(fileId) && !await this.findRecord(fileId), `A project document already uses ID ${fileId}.`);
+      if (!isDeepStrictEqual(index.evidence.get(fileId), reference)) {
+        index.evidence.set(fileId, reference);
+        await this.writeIndex(index);
+      }
+      return { id: fileId, ...reference };
+    });
+  }
+
+  async evidenceFile(fileId) {
+    id(fileId, 'evidence ID');
+    const { evidence } = await this.readIndex();
+    const indexed = evidence.get(fileId);
+    assert(indexed, `Unknown evidence ID: ${fileId}.`);
+    const { project } = await this.manifest();
+    const source = project.evidenceSources?.find(item => item.id === indexed.sourceId);
+    assert(source, `Unknown evidence source: ${indexed.sourceId}.`);
+    const directory = await sourceDirectory(this.root, source.id);
+    return { source, reference: { id: fileId, ...indexed }, file: await evidencePath(directory, indexed.relativePath) };
+  }
+
+  async saveFilter(label, filter) {
+    const saved = validateFilter({ ...validateFilter(filter), id: `filter-${digest(Buffer.from(String(label))).slice(0, 16)}`, label }, true);
+    return this.locked(async () => {
+      const current = await this.manifest();
+      const filters = current.project.savedFilters || [];
+      if (isDeepStrictEqual(filters.find(item => item.id === saved.id), saved)) return saved;
+      const savedFilters = [...filters.filter(item => item.id !== saved.id), saved];
+      await this.writeManifest(validateProject({ ...current.project, savedFilters }), current);
+      return saved;
     });
   }
 
@@ -277,12 +355,16 @@ class ResearchStore {
         problems.push({ file: relativePath, message: `${documentId}: ${error.message}` });
       }
     }
+    for (const [fileId, reference] of index.evidence) {
+      if (documents.has(fileId)) problems.push({ file: reference.relativePath, message: `A project document already uses ID ${fileId}.` });
+      else documents.set(fileId, { id: fileId, ...reference });
+    }
     return { documents, problems };
   }
 
-  async snapshot() {
+  async snapshot(filter) {
     const { project, revision } = await this.manifest();
-    const { items, problems } = await this.catalog();
+    const { items, problems, matchingIds } = await this.catalog(new Set(), filter && researchMatcher(validateFilter(filter), project));
     const index = await this.documentIndex(items, await this.readIndex());
     const records = [...items.values()].map(({ record, revision, relativePath }) => ({
       record, revision, relativePath,
@@ -290,11 +372,15 @@ class ResearchStore {
         ...relationshipIssues(record, project),
         ...fieldIssues(record, project.recordTypes.find(type => type.id === record.type)).map(issue => issue.message),
         ...(record.sources || []).filter(source => !index.documents.has(source)).map(source => `Missing source document: ${source}.`),
+        ...[...(record.evidence || []), ...(record.run?.evidence || [])].filter(file => !index.documents.get(file)?.sourceId).map(file => `Missing evidence: ${file}.`),
+        ...(record.relations || []).filter(({ target }) => !index.documents.has(target)).map(({ target }) => `Missing relation target: ${target}.`),
       ],
     }));
     return {
       root: this.root, project, revision, manifestFile: this.manifestFile,
       records, documents: [...index.documents.values()], problems: [...problems, ...index.problems],
+      ...(project.evidenceSources?.length ? { evidenceSources: await boundSources(this.root, project.evidenceSources) } : {}),
+      ...(filter ? { matchingIds: matchingIds.filter(recordId => items.has(recordId)) } : {}),
     };
   }
 
@@ -337,33 +423,77 @@ class ResearchStore {
       if (unreadable) throw new Error(`${unreadable.file}: ${unreadable.message}`);
       const index = await this.readIndex();
       const { documents } = await this.documentIndex(items, index);
-      for (const recordId of ids) assert(!index.paths.has(recordId), `The document index already uses ID ${recordId}.`);
+      for (const recordId of ids) assert(!index.paths.has(recordId) && !index.evidence.has(recordId), `The document index already uses ID ${recordId}.`);
       const changes = this.prepareBatch(input.records, project, items, documents);
-      const written = [];
-      for (const item of changes) {
-        const target = path.join(this.root, item.relativePath);
-        if (item.bytes) {
-          const directory = path.dirname(target);
-          assert(await this.directory(directory, true), `Missing record folder: ${directory}.`);
-          await atomicWrite(target, item.bytes, { mode: item.mode, beforeCommit: async () => {
-            const current = await this.findRecord(item.record.id);
-            if (current && pathKey(current) !== pathKey(target)) throw revisionConflict(item.record.id);
-            const entry = await statIfPresent(target);
-            if (entry && !entry.isFile()) throw revisionConflict(item.record.id);
-            const currentRevision = entry ? digest((await readBytes(target)).bytes) : null;
-            if (currentRevision !== item.before) throw revisionConflict(item.record.id);
-          } });
-        }
-        written.push({ id: item.record.id, revision: item.revision, relativePath: item.relativePath, changed: Boolean(item.bytes) });
-      }
-      return { projectRevision: revision, records: written };
+      return { projectRevision: revision, records: await this.writeChanges(changes) };
     });
+  }
+
+  async writeChanges(changes) {
+    const written = [];
+    for (const item of changes) {
+      const target = path.join(this.root, item.relativePath);
+      if (item.bytes) {
+        const directory = path.dirname(target);
+        assert(await this.directory(directory, true), `Missing record folder: ${directory}.`);
+        await atomicWrite(target, item.bytes, { mode: item.mode, beforeCommit: async () => {
+          const current = await this.findRecord(item.record.id);
+          if (current && pathKey(current) !== pathKey(target)) throw revisionConflict(item.record.id);
+          const entry = await statIfPresent(target);
+          if (entry && !entry.isFile()) throw revisionConflict(item.record.id);
+          const currentRevision = entry ? digest((await readBytes(target)).bytes) : null;
+          if (currentRevision !== item.before) throw revisionConflict(item.record.id);
+        } });
+      }
+      written.push({ id: item.record.id, revision: item.revision, relativePath: item.relativePath, changed: Boolean(item.bytes) });
+    }
+    return written;
+  }
+
+  async importArchive(sourceId, token) {
+    id(sourceId, 'archive source ID');
+    assert(this.indexPath, `Archive imports require ${MANIFEST}.`);
+    if (token !== undefined) assert(typeof token === 'string' && REVISION.test(token), 'Confirm the archive import using its preview token.');
+    const run = async () => {
+      const current = await this.manifest();
+      assert(current.project.evidenceSources?.some(source => source.id === sourceId), `Unknown archive source: ${sourceId}.`);
+      const directory = await sourceDirectory(this.root, sourceId);
+      const { items, problems } = await this.catalog();
+      const index = await this.readIndex();
+      const { preview, changes, references, bodies, proposed } = await planArchive({ directory, sourceId, current, items, problems, index });
+      if (token === undefined) return preview;
+      if (!changes.length) return { projectRevision: current.revision, records: [] };
+      if (token !== preview.token) throw revisionConflict('The archive import plan');
+      for (const change of changes) {
+        const old = items.get(change.id);
+        if (!old) { change.body = bodies.get(change.id); continue; }
+        const full = await this.readFile(path.join(this.root, old.relativePath), change.id);
+        if (full.revision !== old.revision) throw revisionConflict(change.id);
+        if (full.record.run?.importedBodyRevision === digest(Buffer.from(full.body))) change.body = bodies.get(change.id);
+        items.set(change.id, full);
+      }
+      const evidence = new Map([...index.evidence, ...references]);
+      const { documents } = await this.documentIndex(items, { ...index, evidence });
+      const nextProject = validateProject(proposed);
+      const records = this.prepareBatch(changes, nextProject, items, documents, MAX_RUNS);
+      const projectRevision = nextProject === current.project ? current.revision : await this.writeManifest(nextProject, current);
+      if (!isDeepStrictEqual(evidence, index.evidence)) await this.writeIndex({ ...index, evidence });
+      return { projectRevision, records: await this.writeChanges(records) };
+    };
+    return token === undefined ? run() : this.locked(run);
+  }
+
+  async writeManifest(project, { mode, revision }) {
+    const bytes = encodeJson(project);
+    await atomicWrite(this.manifestPath, bytes, { mode, beforeCommit: async () => {
+      if ((await this.manifest()).revision !== revision) throw revisionConflict('The project rules');
+    } });
+    return digest(bytes);
   }
 
   async configure(input) {
     object(input, 'configuration', ['ifRevision', 'project']);
     const proposed = validateProject(input.project);
-    const bytes = encodeJson(proposed);
     return this.locked(async () => {
       const { project, revision, mode } = await this.manifest();
       if (isDeepStrictEqual(project, proposed)) return { project, revision, changed: false };
@@ -376,10 +506,12 @@ class ResearchStore {
         const added = relationshipIssues(record, proposed).find(issue => !oldIssues.includes(issue));
         if (added) throw new Error(`${record.id}: ${added}`);
       }
-      await atomicWrite(this.manifestPath, bytes, { mode, beforeCommit: async () => {
-        if ((await this.manifest()).revision !== revision) throw revisionConflict('The project rules');
-      } });
-      return { project: proposed, revision: digest(bytes), changed: true };
+      const { evidence } = await this.readIndex();
+      for (const { sourceId } of evidence.values()) {
+        assert(!project.evidenceSources?.some(source => source.id === sourceId) || proposed.evidenceSources?.some(source => source.id === sourceId),
+          `Source ${sourceId} still has indexed evidence.`);
+      }
+      return { project: proposed, revision: await this.writeManifest(proposed, { mode, revision }), changed: true };
     });
   }
 
@@ -397,7 +529,7 @@ class ResearchStore {
       if (!overwrite && revision !== document.revision) throw new RevisionConflictError(target);
       const { items } = await this.catalog();
       const index = await this.readIndex();
-      assert(!index.paths.has(recordId), `The document index already uses ID ${recordId}.`);
+      assert(!index.paths.has(recordId) && !index.evidence.has(recordId), `The document index already uses ID ${recordId}.`);
       const { documents } = await this.documentIndex(items, index);
       const { record } = parseMarkdown(document.content.replace(/\r\n/g, '\n'), recordId);
       validateChange(record, items.get(recordId)?.record, project, documents);
@@ -405,11 +537,12 @@ class ResearchStore {
     });
   }
 
-  prepareBatch(input, project, items, documents) {
-    array(input, 'batch.records', 100);
+  prepareBatch(input, project, items, documents, limit = 100) {
+    array(input, 'batch.records', limit);
     const seen = new Set();
+    const pending = new Set(input.map(change => change.id));
     return input.map(change => {
-      object(change, 'record change', ['id', 'ifRevision', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'body']);
+      object(change, 'record change', ['id', 'ifRevision', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'body', 'evidence', 'relations', 'run']);
       id(change.id, 'record ID');
       assert(!seen.has(change.id), `Use one change per record in a batch: ${change.id}.`);
       seen.add(change.id);
@@ -430,7 +563,7 @@ class ResearchStore {
       }
       const record = validateRecord({ ...existing?.record, ...metadata, fields: Object.fromEntries(merged) }, change.id);
       if (body !== undefined) assert(typeof body === 'string' && !body.includes('\0'), 'body must be Markdown text.');
-      validateChange(record, existing?.record, project, documents);
+      validateChange(record, existing?.record, project, documents, pending);
       const markdown = body?.replace(/\r\n/g, '\n') ?? existing?.body ?? templateBody(record, project, documents, this.sourceHref);
       if (existing && isDeepStrictEqual(existing.record, record) && existing.body === markdown) return existing;
       if ((ifRevision ?? null) !== (existing?.revision ?? null)) throw revisionConflict(change.id);
@@ -451,9 +584,9 @@ class ResearchStore {
   }
 }
 
-function encodeJson(value) {
+function encodeJson(value, limit = MAX_JSON_BYTES) {
   const bytes = Buffer.from(JSON.stringify(value, null, 2) + '\n');
-  assert(bytes.length <= MAX_JSON_BYTES, 'Research project JSON exceeds 512 KiB.');
+  assert(bytes.length <= limit, `Research project JSON exceeds ${limit / 1024} KiB.`);
   return bytes;
 }
 
@@ -464,6 +597,8 @@ const projectGuide = `# 为 mekiR 研究项目工作的 agent
 将实测结果整理成 JSON，再用 \`batch <目录> --input <JSON 文件>\` 写入。为同一次运行保留稳定 ID，使用当天实际发生的日期，新建时可省略正文以套用模板。更新已有记录时传入由 read 返回的 ifRevision。用 describe 返回的 revision 作为 ifProjectRevision。资料缺失时保留缺失信息，正文可链接原始结果。
 
 阶段总结使用该项目配置的 summary 类型。date 是撰写日期，coverage 是回顾区间，sources 是作为依据的文档 ID。若来源与总结一起提交，将来源放在 batch.records 中的前面。来源 ID 可通过 list 的 documents 或 \`resolve <目录> <ID>\` 查找。用 \`index <目录> <ID> --path <项目内相对路径>\` 登记普通文档。正文可用 \`[标题](mekir:<ID>)\` 引用同一项目的已索引文档。
+
+外部论文和归档目录用 \`bind-source\` 登记，用 \`index --source <来源 ID>\` 登记证据。记录的 evidence 保存证据 ID，relations 保存 kind、target 和可选 note。kind 的可选值从 describe 读取。实验归档用 \`import-archive\` 预览，核对新增、变化和缺件后再用返回的 token 确认。用 \`list --query\`、\`--month\`、\`--field\` 或 \`--filter\` 查找相关实验。
 
 调整项目方案时，从 describe 的 project 开始，按需修改 recordTypes、fields、template、phases、views 或 defaultView，再用 \`configure <目录> --input <JSON 文件>\` 提交包含 ifRevision 和 project 的对象。冲突时重新读取最新内容并合并。已写入的正文可以继续用 mekiR 打开编辑。
 `;

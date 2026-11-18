@@ -1,0 +1,222 @@
+import { ht, t } from '../electron/i18n.mjs';
+import type { ResearchFilter, ResearchImportPreview, ResearchRelationKind, ResearchSnapshot } from '../shared/research';
+import { icon } from './icons';
+
+export const escapeResearch = (value: string | number | boolean) => String(value).replace(/[&<>"']/g, char => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+})[char]!);
+
+export const researchOption = (value: string, label: string, selected: string) =>
+  `<option value="${escapeResearch(value)}"${value === selected ? ' selected' : ''}>${escapeResearch(label)}</option>`;
+
+export function relationLabels(): Record<ResearchRelationKind, string> {
+  return { retest: t("复测"), replaces: t("替代"), compares: t("候选对照"), 'paper-adopted': t("论文采用"), 'paper-version': t("论文版本") };
+}
+
+export function runFields(): Record<string, string> {
+  return { id: t("运行 ID"), category: t("归档类别"), status: t("归档状态"), question: t("研究问题"), models: t("模型范围"),
+    scene: t("场景"), method: t("方法"), camera: t("相机"), protocol: t("评测口径"), paper_version: t("论文版本"), conclusion: t("结论") };
+}
+
+const escape = escapeResearch;
+const option = researchOption;
+const closeButton = (label = ht("取消")) => `<button type="button" class="icon-button" data-tools-close aria-label="${label}" title="${label}">${icon('close', 16)}</button>`;
+const heading = (title: string) => `<div class="dialog-heading"><h2 id="research-tools-title">${escape(title)}</h2>${closeButton()}</div>`;
+const feedback = '<p class="research-form-error" role="alert"></p>';
+
+export class ResearchTools {
+  private dialog = document.createElement('dialog');
+  private submitting = false;
+
+  constructor(private refresh: () => Promise<void>, private notify: (message: string, error?: boolean) => void) {
+    this.dialog.id = 'research-tools-dialog';
+    this.dialog.setAttribute('aria-labelledby', 'research-tools-title');
+    document.body.append(this.dialog);
+    this.dialog.addEventListener('cancel', event => { if (this.submitting) event.preventDefault(); });
+    this.dialog.addEventListener('click', event => {
+      if ((event.target as Element).closest('[data-tools-close]') && !this.submitting) this.dialog.close();
+    });
+    this.dialog.addEventListener('close', () => { if (!this.dialog.open) this.dialog.replaceChildren(); });
+  }
+
+  private show(content: string, className = '') {
+    this.dialog.className = className;
+    this.dialog.innerHTML = content;
+    if (!this.dialog.open) this.dialog.showModal();
+    this.dialog.querySelector<HTMLElement>('[autofocus]')?.focus({ preventScroll: true });
+  }
+
+  private submit(action: (data: FormData, submitter: HTMLElement | null) => Promise<void>) {
+    const form = this.dialog.querySelector('form')!;
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (this.submitting) return;
+      this.submitting = true;
+      const message = form.querySelector<HTMLElement>('[role="alert"]')!;
+      const buttons = form.querySelectorAll<HTMLButtonElement>('button[type="submit"]');
+      buttons.forEach(button => { button.disabled = true; });
+      message.textContent = '';
+      try { await action(new FormData(form), event.submitter); }
+      catch (error) { message.textContent = String(error).replace(/^Error: (?:Error invoking remote method '[^']+': Error: )?/, ''); }
+      finally { this.submitting = false; buttons.forEach(button => { button.disabled = false; }); }
+    });
+  }
+
+  registerSource(root: string) {
+    this.show(`<form>${heading(t("登记只读来源"))}
+      <div class="research-form-grid">
+        <label>${ht("来源名称")}<input name="label" required maxlength="240" autofocus></label>
+        <label>${ht("来源 ID")}<input name="id" required pattern="[a-z][a-z0-9_\\-]{0,63}" placeholder="source-id"></label>
+      </div>${feedback}<div class="research-actions"><button type="submit" class="primary-button">${ht("选择目录并绑定")}</button></div>
+    </form>`);
+    this.submit(async data => {
+      if (await window.meki.bindResearchSource(root, String(data.get('id')).trim(), String(data.get('label')).trim())) {
+        this.dialog.close(); await this.refresh();
+      }
+    });
+  }
+
+  registerEvidence(root: string, sourceId: string) {
+    this.show(`<form>${heading(t("登记原始证据"))}
+      <div class="research-form-grid">
+        <label>${ht("证据 ID")}<input name="id" required pattern="[a-z][a-z0-9_\\-]{0,63}" placeholder="evidence-id" autofocus></label>
+        <label>${ht("证据名称")}<input name="label" maxlength="240" placeholder="${ht("默认使用文件名")}"></label>
+      </div>${feedback}<div class="research-actions"><button type="submit" class="primary-button">${ht("选择文件并登记")}</button></div>
+    </form>`);
+    this.submit(async data => {
+      if (await window.meki.indexResearchEvidence(root, sourceId, String(data.get('id')).trim(), String(data.get('label')).trim() || undefined)) {
+        this.dialog.close(); await this.refresh();
+      }
+    });
+  }
+
+  async bind(root: string, sourceId: string) {
+    if (await window.meki.bindResearchSource(root, sourceId)) await this.refresh();
+  }
+
+  async evidence(root: string, id: string) {
+    const file = await window.meki.openResearchEvidence(root, id);
+    this.show(`<div class="dialog-heading research-evidence-heading">
+      <button type="button" class="icon-button" data-tools-close aria-label="${ht("返回正文")}" title="${ht("返回正文")}" autofocus>${icon('back', 17)}</button>
+      <div><h2 id="research-tools-title">${escape(file.title)}</h2><small>${escape(file.source)} · ${escape(file.relativePath)}</small></div>${closeButton(ht("关闭证据预览"))}
+    </div><div class="research-evidence-content"></div>
+    <div class="research-actions research-evidence-footer"><span>${ht("只读来源")}</span>
+      <button type="button" class="secondary-button" data-evidence-reveal>${ht("定位原文件")}</button></div>`, 'research-evidence-preview');
+    const body = this.dialog.querySelector('.research-evidence-content')!;
+    if (file.kind === 'image') {
+      const image = document.createElement('img');
+      image.src = `data:${file.mime};base64,${file.content}`;
+      image.alt = file.title;
+      body.append(image);
+    } else {
+      const text = document.createElement(file.kind === 'text' ? 'pre' : 'p');
+      text.textContent = file.content ?? t("可在原目录中查看此文件。");
+      body.append(text);
+    }
+    this.dialog.querySelector('[data-evidence-reveal]')!.addEventListener('click', () => {
+      void window.meki.revealResearchEvidence(root, id).catch(error => this.notify(String(error), true));
+    });
+  }
+
+  async importPreview(root: string, sourceId: string) {
+    this.show(`<div class="research-import-loading">${heading(t("导入实验归档"))}<p role="status">${ht("正在扫描归档…")}</p></div>`, 'research-import-preview');
+    try {
+      const plan = await window.meki.researchImportPreview(root, sourceId);
+      if (this.dialog.open && this.dialog.querySelector('.research-import-loading')) this.renderImport(root, plan);
+    } catch (error) {
+      if (!this.dialog.querySelector('.research-import-loading')) return;
+      this.dialog.close();
+      this.notify(String(error), true);
+    }
+  }
+
+  private renderImport(root: string, plan: ResearchImportPreview) {
+    const labels = { new: t("新增"), changed: t("有变化"), unchanged: t("无变化"), blocked: t("待确认") };
+    const counts = Object.entries(labels).map(([status, label]) => `${label} ${plan.runs.filter(run => run.change === status).length}`);
+    const missing = plan.runs.filter(run => run.missing.length).length;
+    const changed = plan.runs.filter(run => run.change === 'new' || run.change === 'changed').length;
+    const rows = (runs: ResearchImportPreview['runs']) => `<ul class="research-import-runs">${runs.map(run => `<li>
+      <strong>${escape(run.title)}</strong><span>${escape(labels[run.change])}${run.missing.includes('RUN.md') ? ` · ${ht("待补报告")}` : ''}</span>
+      <small>${escape(run.runId)} · ${escape(run.directory)}${run.missing.length ? `<br>${ht("缺件 {0}", escape(run.missing.join(', ')))}` : ''}</small>
+      ${run.error ? `<small>${escape(run.error)}</small>` : ''}</li>`).join('')}</ul>`;
+    const needsReview = plan.runs.filter(run => run.change !== 'unchanged' || run.missing.length || run.error);
+    const unchanged = plan.runs.filter(run => !needsReview.includes(run));
+    this.show(`<form>${heading(t("导入实验归档"))}
+      <div class="research-import-counts" role="status">${escape(counts.join(' · '))} · ${ht("{0} 个运行有缺件", missing)}</div>
+      ${needsReview.length ? rows(needsReview) : ''}${unchanged.length ? `<details><summary>${ht("查看未变化的运行")}</summary>${rows(unchanged)}</details>` : ''}
+      ${plan.runs.length ? '' : `<p>${ht("这个来源中没有找到实验运行目录。")}</p>`}
+      ${feedback}<div class="research-actions"><button type="submit" class="primary-button"${changed ? '' : ' disabled'}>${ht("确认导入 {0} 条记录", changed)}</button></div>
+    </form>`, 'research-import-preview');
+    this.submit(async () => {
+      const result = await window.meki.applyResearchImport(root, plan.sourceId, plan.token);
+      this.dialog.close();
+      await this.refresh();
+      this.notify(t("已导入或更新 {0} 条实验记录", result.records.filter(record => record.changed).length));
+    });
+  }
+
+  filter(state: ResearchSnapshot, current: ResearchFilter | undefined, apply: (filter?: ResearchFilter) => Promise<void>) {
+    const fields = new Map(state.project.recordTypes.flatMap(type => type.fields.map(field => [field.id, field.label] as const)));
+    Object.entries(runFields()).forEach(([id, label]) => fields.set(`run.${id}`, label));
+    const presets = state.project.savedFilters || [];
+    this.show(`<form>${heading(t("研究筛选"))}
+      ${presets.length ? `<label class="research-filter-preset">${ht("已保存的筛选")}<select name="preset">${option('', t("选择筛选"), '')}${presets.map(filter => option(filter.id, filter.label, '')).join('')}</select></label>` : ''}
+      <div class="research-form-grid">
+        <label>${ht("关键词")}<input name="query" maxlength="500" placeholder="${ht("多个关键词用空格分隔")}" autofocus></label>
+        <label>${ht("实验月份")}<input name="month" type="month"></label>
+      </div><div data-filter-fields></div>
+      <button type="button" class="secondary-button" data-add-filter-field>${icon('plus', 14)} ${ht("添加字段条件")}</button>
+      ${feedback}<div class="research-filter-footer">
+        <label>${ht("筛选名称")}<input name="label" maxlength="240" placeholder="${ht("用于保存常用筛选")}"></label>
+        <div class="research-actions"><button type="submit" class="secondary-button" data-save-filter>${ht("保存并应用")}</button>
+          <button type="submit" class="primary-button">${ht("应用")}</button></div>
+      </div>
+    </form>`, 'research-filter-dialog');
+    const form = this.dialog.querySelector('form')!;
+    const fieldRows = form.querySelector('[data-filter-fields]')!;
+    const input = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
+    const add = (field = '', value = '') => {
+      if (fieldRows.childElementCount >= 12) return;
+      const options = [...fields];
+      if (field && !fields.has(field)) options.push([field, field]);
+      fieldRows.insertAdjacentHTML('beforeend', `<div class="research-filter-field-row">
+        <select name="field" aria-label="${ht("筛选字段")}">${option('', t("选择字段"), field)}${options.map(([id, label]) => option(id, label, field)).join('')}</select>
+        <input name="value" aria-label="${ht("匹配值")}" value="${escape(value)}" maxlength="500">
+        <button type="button" class="icon-button" data-remove-filter-field aria-label="${ht("移除此条件")}">${icon('close', 14)}</button></div>`);
+    };
+    const fill = (filter: ResearchFilter | undefined, label = '') => {
+      input('query').value = filter?.query || '';
+      input('month').value = filter?.month || '';
+      input('label').value = label;
+      fieldRows.replaceChildren();
+      filter?.fields?.forEach(({ field, value }) => add(field, value));
+    };
+    fill(current);
+    form.querySelector('[name=preset]')?.addEventListener('change', event => {
+      const preset = presets.find(item => item.id === (event.target as HTMLSelectElement).value);
+      fill(preset, preset?.label);
+    });
+    form.querySelector('[data-add-filter-field]')!.addEventListener('click', () => {
+      add(); fieldRows.lastElementChild?.querySelector('select')?.focus();
+    });
+    fieldRows.addEventListener('click', event => (event.target as Element).closest('[data-remove-filter-field]')?.parentElement?.remove());
+    this.submit(async (data, submitter) => {
+      const query = String(data.get('query')).trim(), month = String(data.get('month'));
+      const values = data.getAll('value').map(value => String(value).trim());
+      const filters = data.getAll('field').flatMap((field, i) => {
+        if (!field && !values[i]) return [];
+        if (!field || !values[i]) throw new Error(t("请为每个字段条件填写字段和值。"));
+        return [{ field: String(field), value: values[i] }];
+      });
+      const filter: ResearchFilter = { ...(query ? { query } : {}), ...(month ? { month } : {}), ...(filters.length ? { fields: filters } : {}) };
+      const active = Object.keys(filter).length > 0;
+      if (submitter?.hasAttribute('data-save-filter')) {
+        const label = String(data.get('label')).trim();
+        if (!active || !label) throw new Error(t("填写筛选名称和至少一个条件后再保存。"));
+        await window.meki.saveResearchFilter(state.root, label, filter);
+      }
+      this.dialog.close();
+      await apply(active ? filter : undefined);
+    });
+  }
+}

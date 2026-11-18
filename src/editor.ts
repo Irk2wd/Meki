@@ -58,6 +58,7 @@ export class WritingEditor {
   private metadata = '';
   private updating = false;
   private ready = false;
+  private readOnly = false;
   private documentGeneration = 0;
   private headingNumbering = false;
   private visualContent = '';
@@ -161,6 +162,12 @@ export class WritingEditor {
   async create() { await this.crepe.editor.remove([strikethroughInputRule, tableBlockView, imageBlockView]); await this.crepe.create(); this.ready = true; this.lastSerialized = this.crepe.getMarkdown(); }
   cancelPendingActions() { this.documentGeneration++; this.blocks.cancel(); }
   async destroy() { this.cancelPendingActions(); this.search.close(); this.source.destroy(); await this.crepe.destroy(); }
+  setReadOnly(value: boolean) {
+    if (this.readOnly === value) return;
+    this.readOnly = value;
+    this.crepe.setReadonly(value);
+  }
+
   updateSettings(settings: Settings) { this.math.updateSettings(settings); this.diagrams.updateSettings(settings); this.writing.updateSettings(settings); this.typing.updateSettings(settings); this.code.updateSettings(settings); this.headingNumbering = settings.headingNumbering === true; if (this.ready) this.crepe.editor.action(ctx => setHeadingNumbering(ctx.get(editorViewCtx), this.headingNumbering)); }
   async preparePrint() { await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); this.math.flush(); await this.diagrams.flush(); }
   flush() {

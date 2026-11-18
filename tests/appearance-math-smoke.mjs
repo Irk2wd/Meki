@@ -51,7 +51,7 @@ function pass(name) { results.push(name); console.log(`PASS ${name}`); }
 async function idle() { await page.waitForFunction(() => !document.body.classList.contains('is-busy')); }
 async function action(name) { await page.locator(`[data-action="${name}"]`).first().evaluate(button => button.click()); await idle(); }
 async function launch() {
-  app = await electron.launch({ executablePath:process.env.MEKI_EXECUTABLE || require('electron'), args:process.env.MEKI_EXECUTABLE ? [] : [root], env, timeout:30000 });
+  app = await electron.launch({ executablePath:process.env.MEKI_EXECUTABLE || require('electron'), args:process.env.MEKI_EXECUTABLE ? ['--editor'] : [root, '--editor'], env, timeout:30000 });
   page = await app.firstWindow();
   page.setDefaultTimeout(15000);
   page.on('pageerror', error => errors.push(error.message));

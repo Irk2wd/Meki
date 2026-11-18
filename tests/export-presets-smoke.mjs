@@ -30,7 +30,7 @@ async function ready(target) {
   await target.waitForSelector('#shell[data-ready="true"]'); return target;
 }
 async function launch() {
-  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? [] : [root], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--editor'] : [root, '--editor'], env, timeout: 30000 });
   page = await ready(await app.firstWindow());
   await (await app.browserWindow(page)).evaluate(win => { win.show(); win.focus(); });
   if (!(await page.locator('.ProseMirror').innerText()).includes('First chapter body')) {

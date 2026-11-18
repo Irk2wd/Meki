@@ -13,6 +13,9 @@ const RECORD_FILE = /^r-([a-z][a-z0-9_-]{0,63})\.md$/;
 const REVISION = /^[a-f0-9]{64}$/;
 const FIELD_TYPES = ['text', 'number', 'boolean', 'date', 'choice'];
 const TEMPLATE_KEYS = ['title', 'date', 'phase', 'coverage_start', 'coverage_end', 'sources'];
+const RELATION_KINDS = ['retest', 'replaces', 'compares', 'paper-adopted', 'paper-version'];
+const RUN_CONTEXT = ['question', 'models', 'scene', 'method', 'camera', 'protocol', 'paper_version', 'conclusion'];
+const RUN_FILTER_FIELDS = ['run.id', 'run.category', 'run.status', ...RUN_CONTEXT.map(field => `run.${field}`)];
 const TOKEN = /\{\{\s*([\w.-]+)\s*\}\}/g;
 
 function assert(condition, message) {
@@ -62,6 +65,47 @@ function listOfIds(value, label, max = 100) {
   unique(value, label);
 }
 
+function validateSource(source) {
+  object(source, 'evidence source', ['id', 'label']);
+  id(source.id, 'evidence source ID');
+  string(source.label, 'evidence source label');
+  return source;
+}
+
+function validateEvidencePath(file) {
+  string(file, 'evidence path', { limit: 4096 });
+  assert(!/[\\:\x00-\x1f<>"|?*]/.test(file) && file.split('/').every(part => part && part !== '.' && part !== '..'),
+    'Use a source-relative file path with / separators.');
+  return file;
+}
+
+function validateEvidence(evidence) {
+  object(evidence, 'evidence file', ['sourceId', 'relativePath', 'title']);
+  id(evidence.sourceId, 'evidence source ID');
+  validateEvidencePath(evidence.relativePath);
+  string(evidence.title, 'evidence title');
+  return evidence;
+}
+
+function validateFilter(filter, saved = false) {
+  object(filter, 'research filter', saved ? ['id', 'label', 'query', 'month', 'fields'] : ['query', 'month', 'fields']);
+  if (saved) { id(filter.id, 'filter ID'); string(filter.label, 'filter name'); }
+  if (filter.query !== undefined) string(filter.query, 'filter keywords', { limit: 500 });
+  if (filter.month !== undefined) {
+    assert(typeof filter.month === 'string' && /^\d{4}-\d{2}$/.test(filter.month), 'Use YYYY-MM for the research month.');
+    date(`${filter.month}-01`, 'filter month');
+  }
+  if (filter.fields !== undefined) {
+    array(filter.fields, 'field filters', 12);
+    for (const item of filter.fields) {
+      object(item, 'field filter', ['field', 'value']);
+      if (!RUN_FILTER_FIELDS.includes(item.field)) id(item.field, 'filter field');
+      string(item.value, 'field match', { limit: 500 });
+    }
+  }
+  return filter;
+}
+
 function fieldError(rule, value) {
   switch (rule.type) {
     case 'text': return typeof value !== 'string' || !value.trim() || value.length > 1000 || value.includes('\0') ? 'must be nonempty text (up to 1000 characters)' : null;
@@ -104,7 +148,7 @@ function validateField(rule, typeId) {
 }
 
 function validateProject(project) {
-  object(project, 'project', ['version', 'id', 'title', 'description', 'timezone', 'instructions', 'phases', 'recordTypes', 'views', 'defaultView']);
+  object(project, 'project', ['version', 'id', 'title', 'description', 'timezone', 'instructions', 'phases', 'recordTypes', 'views', 'defaultView', 'evidenceSources', 'savedFilters']);
   assert(project.version === 1, 'project.version must be 1.');
   id(project.id, 'project.id');
   string(project.title, 'project.title');
@@ -165,11 +209,21 @@ function validateProject(project) {
   }
   unique(project.views.map(view => view.id), 'project.views');
   assert(project.views.some(view => view.id === project.defaultView), 'project.defaultView must name a configured view.');
+  if (project.evidenceSources !== undefined) {
+    array(project.evidenceSources, 'project.evidenceSources', 40);
+    project.evidenceSources.forEach(validateSource);
+    unique(project.evidenceSources.map(source => source.id), 'evidence sources');
+  }
+  if (project.savedFilters !== undefined) {
+    array(project.savedFilters, 'project.savedFilters', 40);
+    project.savedFilters.forEach(filter => validateFilter(filter, true));
+    unique(project.savedFilters.map(filter => filter.id), 'saved filters');
+  }
   return project;
 }
 
 function validateRecord(record, expectedId) {
-  object(record, 'record', ['id', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields']);
+  object(record, 'record', ['id', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'evidence', 'relations', 'run']);
   id(record.id, 'record.id');
   assert(record.id === expectedId, `record.id must match the filename r-${expectedId}.md.`);
   id(record.type, 'record.type');
@@ -184,6 +238,37 @@ function validateRecord(record, expectedId) {
   if (record.sources !== undefined) {
     listOfIds(record.sources, 'record.sources');
     assert(!record.sources.includes(record.id), 'A record cannot cite itself.');
+  }
+  if (record.evidence !== undefined) listOfIds(record.evidence, 'record.evidence');
+  if (record.relations !== undefined) {
+    array(record.relations, 'record.relations', 40);
+    for (const relation of record.relations) {
+      object(relation, 'research relation', ['kind', 'target', 'note']);
+      assert(RELATION_KINDS.includes(relation.kind), `Unknown research relation: ${relation.kind}.`);
+      id(relation.target, 'relation target');
+      assert(relation.target !== record.id, 'A relation cannot target its own record.');
+      if (relation.note !== undefined) string(relation.note, 'relation note', { limit: 1000 });
+    }
+    unique(record.relations.map(relation => `${relation.kind}:${relation.target}`), 'record relations');
+  }
+  if (record.run !== undefined) {
+    const run = record.run;
+    object(run, 'record.run', ['id', 'sourceId', 'directory', 'category', 'title', 'date', 'status', 'context', 'missing', 'evidence', 'reportRevision', 'manifestRevision', 'importedBodyRevision']);
+    string(run.id, 'archive run ID');
+    id(run.sourceId, 'archive source ID');
+    validateEvidencePath(run.directory);
+    string(run.category, 'archive category');
+    if (run.title !== undefined) string(run.title, 'archive title');
+    if (run.date !== undefined) date(run.date, 'archive date');
+    if (run.status !== undefined) string(run.status, 'archive run status');
+    object(run.context, 'run context', RUN_CONTEXT);
+    for (const value of Object.values(run.context)) string(value, 'run context value', { limit: 2000 });
+    array(run.missing, 'missing files', 100);
+    run.missing.forEach(validateEvidencePath);
+    listOfIds(run.evidence, 'run evidence');
+    for (const key of ['reportRevision', 'manifestRevision', 'importedBodyRevision']) {
+      if (run[key] !== undefined) assert(typeof run[key] === 'string' && REVISION.test(run[key]), `${key} must be a revision.`);
+    }
   }
   object(record.fields, 'record.fields');
   for (const [key, value] of Object.entries(record.fields)) {
@@ -200,6 +285,7 @@ function relationshipIssues(record, project) {
   else if (type.kind === 'summary' && !record.coverage) issues.push('A summary needs a coverage start and end date.');
   else if (type.kind === 'entry' && record.coverage) issues.push('Coverage is only used by summary records.');
   if (record.phaseId && !project.phases.some(phase => phase.id === record.phaseId)) issues.push(`Unknown phase: ${record.phaseId}.`);
+  if (record.run && !project.evidenceSources?.some(source => source.id === record.run.sourceId)) issues.push(`Unknown archive source: ${record.run.sourceId}.`);
   return issues;
 }
 
@@ -217,11 +303,19 @@ function fieldIssues(record, type) {
   return checks;
 }
 
-function validateChange(record, previous, project, documents) {
+function validateChange(record, previous, project, documents, pending = new Set()) {
   const issues = relationshipIssues(record, project);
   if (issues.length) throw new Error(issues.join(' '));
   for (const source of record.sources || []) {
     assert(documents.has(source) || previous?.sources?.includes(source), `Source document does not exist: ${source}.`);
+  }
+  const existingEvidence = new Set([...(previous?.evidence || []), ...(previous?.run?.evidence || [])]);
+  for (const evidence of [...(record.evidence || []), ...(record.run?.evidence || [])]) {
+    assert(documents.get(evidence)?.sourceId || existingEvidence.has(evidence), `Evidence ID does not exist: ${evidence}.`);
+  }
+  for (const { kind, target } of record.relations || []) {
+    assert(documents.has(target) || pending.has(target) || previous?.relations?.some(item => item.kind === kind && item.target === target),
+      `Relation target does not exist: ${target}.`);
   }
   const type = project.recordTypes.find(item => item.id === record.type);
   for (const { field, message } of fieldIssues(record, type)) {
@@ -266,6 +360,7 @@ function templateBody(record, project, documents, sourceHref) {
 module.exports = {
   METADATA, MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, RECORDS, DOCUMENT_SCHEME,
   RECORD_FILE, REVISION, FIELD_TYPES, TEMPLATE_KEYS,
+  RELATION_KINDS, RUN_CONTEXT, RUN_FILTER_FIELDS, validateSource, validateEvidencePath, validateEvidence, validateFilter,
   assert, object, array, id, date, listOfIds, validateProject, validateRecord, relationshipIssues,
   fieldIssues, validateChange, parseMarkdown, formatMarkdown, fileName, templateBody,
 };

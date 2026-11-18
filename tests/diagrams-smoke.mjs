@@ -50,7 +50,7 @@ async function assertSvg(target, expected) {
   return state;
 }
 try {
-  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? [] : [root], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--editor'] : [root, '--editor'], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000);
   page.on('pageerror', error => errors.push(error.message)); page.on('request', request => { if (/^https?:/.test(request.url())) network.push(request.url()); });
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].show());

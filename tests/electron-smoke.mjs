@@ -24,7 +24,7 @@ let app;
 const results = [], errors = [];
 const record = (name) => { results.push(name); console.log(`PASS ${name}`); };
 async function launch(args = []) {
-  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? args : [root, ...args], env, timeout: 30000 });
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--editor', ...args] : [root, '--editor', ...args], env, timeout: 30000 });
   const page = await app.firstWindow();
   // A real compositor frame is needed for requestAnimationFrame and lazy formula views.
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); });

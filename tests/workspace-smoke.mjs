@@ -44,7 +44,7 @@ async function quick(query){
   await idle();
 }
 try{
-  app=await electron.launch({executablePath:process.env.MEKI_EXECUTABLE||require('electron'),args:process.env.MEKI_EXECUTABLE?[]:[root],env,timeout:30000});
+  app=await electron.launch({executablePath:process.env.MEKI_EXECUTABLE||require('electron'),args:process.env.MEKI_EXECUTABLE?['--editor']:[root,'--editor'],env,timeout:30000});
   page=await app.firstWindow();page.setDefaultTimeout(15000);page.on('pageerror',error=>errors.push(error.message));
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].show());
   await page.waitForSelector('#shell[data-ready="true"]');
