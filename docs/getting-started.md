@@ -6,7 +6,7 @@ mekiR 在本地编辑 Markdown，并以研究项目组织实验记录和阶段�
 
 ## 获取与安装
 
-从研究版发布页获取对应平台的安装包。[mekiR 1.1.4](https://github.com/Irk2wd/Meki/releases/tag/mekir-v1.1.4)
+在版本发布页选择以 `mekiR-` 开头的安装包。[版本列表](https://github.com/Irk2wd/Meki/releases) · [mekiR 1.1.4](https://github.com/Irk2wd/Meki/releases/tag/mekir-v1.1.4)
 
 | 平台 | 安装方式 |
 | --- | --- |
