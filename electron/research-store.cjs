@@ -384,6 +384,19 @@ class ResearchStore {
     };
   }
 
+  async linkedSummaries(targetId, project, filter) {
+    const summaryTypes = new Set(project.recordTypes.filter(type => type.kind === 'summary').map(type => type.id));
+    if (!summaryTypes.size || project.id === targetId) return [];
+    const matchesFilter = filter && researchMatcher(validateFilter(filter), project);
+    const matches = item => summaryTypes.has(item.record.type) && item.record.coverage &&
+      item.record.relatedProjects?.includes(targetId) && (!matchesFilter || matchesFilter(item));
+    const { items, matchingIds } = await this.catalog(new Set(), matches);
+    return matchingIds.flatMap(recordId => {
+      const item = items.get(recordId);
+      return item ? [{ record: item.record, relativePath: item.relativePath }] : [];
+    });
+  }
+
   async locked(action) {
     await this.assertRoot();
     const lock = path.join(this.root, '.meki-research.lock');
@@ -542,7 +555,7 @@ class ResearchStore {
     const seen = new Set();
     const pending = new Set(input.map(change => change.id));
     return input.map(change => {
-      object(change, 'record change', ['id', 'ifRevision', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'body', 'evidence', 'relations', 'run']);
+      object(change, 'record change', ['id', 'ifRevision', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'body', 'evidence', 'relations', 'run', 'relatedProjects']);
       id(change.id, 'record ID');
       assert(!seen.has(change.id), `Use one change per record in a batch: ${change.id}.`);
       seen.add(change.id);
@@ -597,6 +610,8 @@ const projectGuide = `# 为 mekiR 研究项目工作的 agent
 将实测结果整理成 JSON，再用 \`batch <目录> --input <JSON 文件>\` 写入。为同一次运行保留稳定 ID，使用当天实际发生的日期，新建时可省略正文以套用模板。更新已有记录时传入由 read 返回的 ifRevision。用 describe 返回的 revision 作为 ifProjectRevision。资料缺失时保留缺失信息，正文可链接原始结果。
 
 阶段总结使用该项目配置的 summary 类型。date 是撰写日期，coverage 是回顾区间，sources 是作为依据的文档 ID。若来源与总结一起提交，将来源放在 batch.records 中的前面。来源 ID 可通过 list 的 documents 或 \`resolve <目录> <ID>\` 查找。用 \`index <目录> <ID> --path <项目内相对路径>\` 登记普通文档。正文可用 \`[标题](mekir:<ID>)\` 引用同一项目的已索引文档。
+
+用阶段总结的 relatedProjects 关联多个项目。填入从各目标项目 describe 读取的项目 ID，在总结的原项目执行 batch，继续使用同一个记录 ID 和正文文件。
 
 外部论文和归档目录用 \`bind-source\` 登记，用 \`index --source <来源 ID>\` 登记证据。记录的 evidence 保存证据 ID，relations 保存 kind、target 和可选 note。kind 的可选值从 describe 读取。实验归档用 \`import-archive\` 预览，核对新增、变化和缺件后再用返回的 token 确认。用 \`list --query\`、\`--month\`、\`--field\` 或 \`--filter\` 查找相关实验。
 

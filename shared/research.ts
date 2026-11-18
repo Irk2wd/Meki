@@ -112,6 +112,7 @@ export interface ResearchRecord {
   phaseId?: string | null;
   coverage?: ResearchRange | null;
   sources?: string[];
+  relatedProjects?: string[];
   evidence?: string[];
   relations?: ResearchRelation[];
   run?: ResearchRun;
@@ -133,7 +134,12 @@ export interface ResearchReference {
   sourceId?: string;
 }
 
-export interface RecentResearchProject { root: string; title: string }
+export interface RecentResearchProject { id: string; root: string; title: string }
+export interface LinkedResearchSummary {
+  project: RecentResearchProject;
+  record: ResearchRecord;
+  relativePath: string;
+}
 
 export interface ResearchSnapshot {
   root: string;
@@ -145,6 +151,8 @@ export interface ResearchSnapshot {
   problems: Array<{ file: string; message: string }>;
   evidenceSources?: BoundResearchSource[];
   matchingIds?: string[];
+  knownProjects?: RecentResearchProject[];
+  linkedSummaries?: LinkedResearchSummary[];
 }
 
 export interface ResearchBatch {

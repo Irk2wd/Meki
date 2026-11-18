@@ -94,8 +94,8 @@ export class ResearchTools {
     if (await window.meki.bindResearchSource(root, sourceId)) await this.refresh();
   }
 
-  async evidence(root: string, id: string) {
-    const file = await window.meki.openResearchEvidence(root, id);
+  async evidence(root: string, id: string, sourceDocument?: string) {
+    const file = await window.meki.openResearchEvidence(root, id, sourceDocument);
     this.show(`<div class="dialog-heading research-evidence-heading">
       <button type="button" class="icon-button" data-tools-close aria-label="${ht("返回正文")}" title="${ht("返回正文")}" autofocus>${icon('back', 17)}</button>
       <div><h2 id="research-tools-title">${escape(file.title)}</h2><small>${escape(file.source)} · ${escape(file.relativePath)}</small></div>${closeButton(ht("关闭证据预览"))}
@@ -114,7 +114,7 @@ export class ResearchTools {
       body.append(text);
     }
     this.dialog.querySelector('[data-evidence-reveal]')!.addEventListener('click', () => {
-      void window.meki.revealResearchEvidence(root, id).catch(error => this.notify(String(error), true));
+      void window.meki.revealResearchEvidence(root, id, sourceDocument).catch(error => this.notify(String(error), true));
     });
   }
 

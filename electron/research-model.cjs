@@ -223,7 +223,7 @@ function validateProject(project) {
 }
 
 function validateRecord(record, expectedId) {
-  object(record, 'record', ['id', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'evidence', 'relations', 'run']);
+  object(record, 'record', ['id', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'evidence', 'relations', 'run', 'relatedProjects']);
   id(record.id, 'record.id');
   assert(record.id === expectedId, `record.id must match the filename r-${expectedId}.md.`);
   id(record.type, 'record.type');
@@ -239,6 +239,7 @@ function validateRecord(record, expectedId) {
     listOfIds(record.sources, 'record.sources');
     assert(!record.sources.includes(record.id), 'A record cannot cite itself.');
   }
+  if (record.relatedProjects !== undefined) listOfIds(record.relatedProjects, 'record.relatedProjects');
   if (record.evidence !== undefined) listOfIds(record.evidence, 'record.evidence');
   if (record.relations !== undefined) {
     array(record.relations, 'record.relations', 40);
@@ -285,6 +286,10 @@ function relationshipIssues(record, project) {
   else if (type.kind === 'summary' && !record.coverage) issues.push('A summary needs a coverage start and end date.');
   else if (type.kind === 'entry' && record.coverage) issues.push('Coverage is only used by summary records.');
   if (record.phaseId && !project.phases.some(phase => phase.id === record.phaseId)) issues.push(`Unknown phase: ${record.phaseId}.`);
+  if (record.relatedProjects?.length) {
+    if (type?.kind !== 'summary') issues.push('Only phase summaries can link to other projects.');
+    if (record.relatedProjects.includes(project.id)) issues.push('A summary already belongs to its original project.');
+  }
   if (record.run && !project.evidenceSources?.some(source => source.id === record.run.sourceId)) issues.push(`Unknown archive source: ${record.run.sourceId}.`);
   return issues;
 }

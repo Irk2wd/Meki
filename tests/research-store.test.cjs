@@ -184,3 +184,22 @@ test('archive import previews changes and incomplete reports, and retrying updat
   assert.deepEqual((await store.read(chosenRecord.record.id)).record.relations, relations);
   assert.deepEqual((await store.snapshot({ query: '剔除规则补齐' })).matchingIds, [chosenRecord.record.id]);
 });
+
+test('only summaries can name multiple other project IDs and expose their metadata to each target', async t => {
+  const root = await projectFolder(t);
+  const store = await ResearchStore.initialize(root, exampleProject, exampleRecords);
+  const { record, revision } = await store.read('exploration-review');
+  const update = { id: record.id, ifRevision: revision };
+  await assert.rejects(store.writeBatch({ records: [{ ...update, relatedProjects: [exampleProject.id] }] }), /original project/);
+  const experiment = await store.read('tile-culling');
+  await assert.rejects(store.writeBatch({ records: [{ id: experiment.record.id, ifRevision: experiment.revision,
+    relatedProjects: ['paper'] }] }), /Only phase summaries/);
+  await store.writeBatch({ records: [{ ...update, relatedProjects: ['paper', 'reference-runs'] }] });
+
+  const paper = await store.linkedSummaries('paper', exampleProject);
+  const references = await store.linkedSummaries('reference-runs', exampleProject, { query: '遮挡边缘' });
+  assert.deepEqual(paper, references);
+  assert.equal(paper[0].relativePath, '.mekir/summaries/r-exploration-review.md');
+  assert.deepEqual(paper[0].record.relatedProjects, ['paper', 'reference-runs']);
+  assert.deepEqual(await store.linkedSummaries('unrelated', exampleProject), []);
+});

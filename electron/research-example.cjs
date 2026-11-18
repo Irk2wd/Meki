@@ -1,5 +1,7 @@
 'use strict';
 
+const { randomUUID } = require('node:crypto');
+
 const exampleProject = {
   version: 1,
   id: 'render-benchmark',
@@ -70,4 +72,8 @@ const exampleRecords = [
   },
 ];
 
-module.exports = { exampleProject, exampleRecords };
+function newExampleProject() {
+  return { ...exampleProject, id: `${exampleProject.id}-${randomUUID()}` };
+}
+
+module.exports = { exampleProject, exampleRecords, newExampleProject };

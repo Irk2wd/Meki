@@ -6,7 +6,7 @@ const path = require('node:path');
 const { parseArgs } = require('node:util');
 const { ResearchStore } = require('./research-store.cjs');
 const { MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, DOCUMENT_SCHEME, RECORDS, FIELD_TYPES, TEMPLATE_KEYS, RELATION_KINDS, RUN_FILTER_FIELDS, assert, date, id } = require('./research-model.cjs');
-const { exampleProject, exampleRecords } = require('./research-example.cjs');
+const { newExampleProject, exampleRecords } = require('./research-example.cjs');
 const { PRODUCT_NAME } = require('./app-identity.cjs');
 
 const usage = `${PRODUCT_NAME} research projects
@@ -59,7 +59,7 @@ async function main(args) {
   for (const key of Object.keys(values)) assert(allowedOptions.includes(key), `--${key} is not used by ${command}.`);
   const root = path.resolve(folder);
   if (command === 'init' || command === 'init-demo') {
-    const config = command === 'init' ? await readInput(values.input) : exampleProject;
+    const config = command === 'init' ? await readInput(values.input) : newExampleProject();
     const store = await ResearchStore.initialize(root, config, command === 'init-demo' ? exampleRecords : []);
     const { project, revision } = await store.manifest();
     return { root: store.root, id: project.id, revision };
@@ -77,12 +77,13 @@ async function main(args) {
         dateFormat: 'YYYY-MM-DD',
         fieldTypes: FIELD_TYPES, templateVariables: [...TEMPLATE_KEYS, 'field.<id>'],
         relationKinds: RELATION_KINDS, archiveFilterFields: RUN_FILTER_FIELDS,
-        summary: { date: 'date written', coverage: { start: 'inclusive date', end: 'inclusive date' }, sources: 'document IDs from list or resolve' },
+        summary: { date: 'date written', coverage: { start: 'inclusive date', end: 'inclusive date' }, sources: 'document IDs from list or resolve',
+          relatedProjects: 'IDs from the other projects’ describe output' },
       },
       writes: {
         batch: {
           input: { ifProjectRevision: 'revision from describe (optional)', records: [{ id: 'stable record ID', ifRevision: 'revision from read or null for creation', type: 'configured type ID', title: 'single line', date: 'date of record', phaseId: 'configured phase ID or null', coverage: 'summary interval or null', sources: 'document IDs', fields: 'patch keyed by field ID; null clears a value', body: 'Markdown; omission keeps the existing body or applies the template on creation' }] },
-          relationships: 'Use evidence: [indexed file ID] and relations: [{kind, target, note?}]. Place new source records before summaries that cite them.',
+          relationships: 'Use evidence: [indexed file ID], relations: [{kind, target, note?}], and relatedProjects: [other project IDs] for summaries. Place new source records before summaries that cite them.',
         },
         configure: { input: { ifRevision: 'revision from describe', project: 'updated copy of project' } },
       },

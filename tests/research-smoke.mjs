@@ -22,8 +22,8 @@ const env = {
 };
 delete env.ELECTRON_RUN_AS_NODE;
 
-function command(name, args = [], input, errorPattern) {
-  const result = spawnSync(process.execPath, [cli, name, project, ...args, ...(input ? ['--input', '-'] : [])], {
+function commandAt(directory, name, args = [], input, errorPattern) {
+  const result = spawnSync(process.execPath, [cli, name, directory, ...args, ...(input ? ['--input', '-'] : [])], {
     input: input ? JSON.stringify(input) : undefined, encoding: 'utf8', timeout: 10000,
     env: { ...process.env, MEKIR_LOCAL_STATE: env.MEKIR_LOCAL_STATE },
   });
@@ -35,6 +35,8 @@ function command(name, args = [], input, errorPattern) {
   assert.equal(result.status, 0, result.stderr || String(result.error));
   return JSON.parse(result.stdout);
 }
+
+const command = (name, args, input, errorPattern) => commandAt(project, name, args, input, errorPattern);
 
 let app, page;
 const results = [], errors = [];
@@ -102,6 +104,29 @@ try {
   pass('phase order prioritizes ongoing dates and then the latest activity, including summaries');
 
   const rangeButton = page.locator('[data-research-range]');
+  const quickRange = (name) => page.getByRole('group', { name: '快捷时间范围' }).getByRole('button', { name, exact: true });
+  for (const [name, start] of [['最近 7 天', '2026-11-13'], ['最近 14 天', '2026-11-06'],
+    ['最近 1 个月', '2026-10-20'], ['最近 3 个月', '2026-08-20']]) {
+    const preset = quickRange(name);
+    await preset.click();
+    assert.equal(await preset.getAttribute('aria-pressed'), 'true');
+    assert.equal(await rangeButton.getAttribute('data-start'), start);
+    assert.equal(await rangeButton.getAttribute('data-end'), '2026-11-19');
+  }
+  await page.clock.setFixedTime(new Date('2024-03-31T12:00:00+08:00'));
+  await quickRange('最近 1 个月').click();
+  assert.equal(await rangeButton.getAttribute('data-start'), '2024-03-01');
+  assert.equal(await rangeButton.getAttribute('data-end'), '2024-03-31');
+  await page.clock.setFixedTime(new Date('2026-11-19T12:00:00+08:00'));
+  await refresh.click();
+  await idle();
+  assert.equal(await quickRange('最近 1 个月').getAttribute('aria-pressed'), 'true');
+  assert.equal(await rangeButton.getAttribute('data-start'), '2026-10-20');
+  await quickRange('最近 7 天').click();
+  assert.equal(await page.locator('.research-entry').count(), 1);
+  await page.locator('[data-research-reset-range]').click();
+  pass('today-based date range shortcuts use inclusive days and clamp to the calendar month');
+
   const rangePicker = page.getByRole('dialog', { name: '选择时间范围' });
   const applyRange = rangePicker.getByRole('button', { name: '应用' });
   await rangeButton.click();
@@ -402,8 +427,155 @@ try {
   await page.getByRole('button', { name: '返回上一份文档' }).click();
   await page.locator('#research-reader-title').getByText('森林结果采用决定').waitFor();
   await page.screenshot({ path: path.join(folder, 'research-evidence.png'), animations: 'disabled' });
-  assert.deepEqual(errors, []);
   pass('adoption decisions link back to comparable runs, manuscript versions and read-only images, CSV and manifests');
+
+  await closeReader();
+  const expanded = command('describe');
+  expanded.project.phases.push(...Array.from({ length: 12 }, (_, i) => ({
+    id: `extra-${i + 1}`, title: `补充阶段 ${i + 1}`, start: '2026-10-01', end: '2026-11-06',
+  })));
+  command('configure', [], { ifRevision: expanded.revision, project: expanded.project });
+  await refresh.click();
+  await idle();
+  const timelineView = page.locator('[data-research-destination=timeline]');
+  await timelineView.click();
+  const pageSize = page.getByRole('spinbutton', { name: '每页阶段数' });
+  const pageNumber = page.locator('#research-phase-page-number');
+  const nextPage = page.getByRole('button', { name: '下一页', exact: true });
+  const previousPage = page.getByRole('button', { name: '上一页', exact: true });
+  assert.equal(await pageSize.inputValue(), '10');
+  assert.equal(await phases.count(), 10);
+  assert.equal(await previousPage.isDisabled(), true);
+  assert.equal((await phaseOrder())[0], 'validation');
+  await pageSize.fill('4');
+  await pageSize.press('Enter');
+  await pageNumber.getByText('第 1 页，共 4 页', { exact: true }).waitFor();
+  const firstPage = await phaseOrder();
+  assert.equal(firstPage.length, 4);
+  assert.equal(firstPage[0], 'validation');
+  const timeSpan = [await rangeButton.getAttribute('data-start'), await rangeButton.getAttribute('data-end')];
+  const journal = await page.locator('#research-journal-title').innerText();
+  await nextPage.click();
+  const secondPage = await phaseOrder();
+  assert.equal(secondPage.length, 4);
+  assert.ok(secondPage.every(id => !firstPage.includes(id)));
+  assert.deepEqual([await rangeButton.getAttribute('data-start'), await rangeButton.getAttribute('data-end')], timeSpan);
+  assert.equal(await page.locator('#research-journal-title').innerText(), journal);
+  await page.locator('[data-research-destination=entries]').click();
+  await timelineView.click();
+  assert.deepEqual(await phaseOrder(), secondPage);
+  assert.equal(await pageNumber.innerText(), '第 2 页，共 4 页');
+  await page.locator('.research-timeline').screenshot({ path: path.join(folder, 'timeline-pagination.png'), animations: 'disabled' });
+  await previousPage.click();
+  assert.deepEqual(await phaseOrder(), firstPage);
+  for (let i = 0; i < 3; i++) await nextPage.click();
+  assert.equal(await phases.count(), 3);
+  assert.equal(await nextPage.isDisabled(), true);
+  await quickRange('最近 7 天').click();
+  await pageNumber.waitFor({ state: 'hidden' });
+  assert.equal(await phases.count(), 2);
+  await page.locator('[data-research-reset-range]').click();
+  assert.deepEqual(await phaseOrder(), firstPage);
+  await page.getByRole('button', { name: '全部阶段', exact: true }).click();
+  assert.equal(await phases.count(), 15);
+  assert.equal(await pageNumber.count(), 0);
+  pass('phase pagination supports a custom limit and show all, and preserves the sorted page across views');
+
+  async function showProjectPicker() {
+    await page.locator('#research-sidebar [data-action=research-projects]').click();
+    await projectPicker.waitFor({ state: 'visible' });
+  }
+  async function createPeer(title) {
+    await showProjectPicker();
+    await projectPicker.getByRole('button', { name: '创建示例项目', exact: true }).click();
+    await idle();
+    const state = await page.evaluate(() => window.meki.researchSnapshot());
+    const configuration = commandAt(state.root, 'describe');
+    configuration.project.title = title;
+    commandAt(state.root, 'configure', [], { ifRevision: configuration.revision, project: configuration.project });
+    await refresh.click();
+    await page.getByRole('heading', { name: title, exact: true }).waitFor();
+    return { root: state.root, id: state.project.id, title };
+  }
+  async function switchProject(root) {
+    await showProjectPicker();
+    await projectPicker.locator('[data-research-project]').evaluateAll((buttons, target) => {
+      const button = buttons.find(button => button.dataset.researchProject === target);
+      if (!button) throw new Error(`Project not found: ${target}`);
+      button.click();
+    }, root);
+    await idle();
+    assert.equal((await page.evaluate(() => window.meki.researchSnapshot())).root, root);
+  }
+
+  const ownerId = command('describe').project.id;
+  const firstPeer = await createPeer('复现实验项目');
+  const secondPeer = await createPeer('论文分析项目');
+  assert.equal(new Set([ownerId, firstPeer.id, secondPeer.id]).size, 3);
+  await switchProject(project);
+  await page.locator('[data-research-destination=summaries]').click();
+  await page.locator('[data-research-edit=paper-decision]').click();
+  const projectChoices = dialog.getByRole('group', { name: '关联项目' });
+  await projectChoices.getByRole('checkbox', { name: /复现实验项目/ }).check();
+  await projectChoices.getByRole('checkbox', { name: /论文分析项目/ }).check();
+  await dialog.getByRole('button', { name: '保存属性' }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  assert.deepEqual(new Set(command('read', ['paper-decision']).record.relatedProjects), new Set([firstPeer.id, secondPeer.id]));
+
+  await switchProject(firstPeer.root);
+  await page.locator('[data-research-destination=summaries]').click();
+  const shared = page.getByRole('region', { name: '跨项目总结' }).getByRole('button', { name: /森林结果采用决定/ });
+  await shared.waitFor();
+  assert.match(await shared.innerText(), /原项目 实时渲染性能研究/);
+  const denied = await page.evaluate(async ({ root, ownerId }) => {
+    try { await window.meki.openLinkedResearchSummary(root, ownerId, 'exploration-review'); return false; }
+    catch (error) { return String(error).includes('这份阶段总结在当前项目中暂不可用。'); }
+  }, { root: firstPeer.root, ownerId });
+  assert.equal(denied, true);
+  await shared.click();
+  await page.locator('#research-reader-title').getByText('森林结果采用决定').waitFor();
+  assert.match(await page.locator('#research-reader-context').innerText(), /实时渲染性能研究/);
+  await related.getByText('论文分析项目', { exact: true }).waitFor();
+  await related.getByRole('button', { name: '论文 v3' }).click();
+  await tools.locator('pre').getByText(/Four-view validation/).waitFor();
+  await tools.getByRole('button', { name: '返回正文' }).click();
+  await related.getByRole('button', { name: '森林四视角报告' }).click();
+  await page.locator('#research-reader-title').getByText('森林四视角报告').waitFor();
+  await page.getByRole('button', { name: '返回上一份文档' }).click();
+  await page.locator('#research-reader-title').getByText('森林结果采用决定').waitFor();
+  await page.locator('[data-action=research-edit-body]').click();
+  await sourceAppend('\n从复现实验项目补充的结论。');
+  await page.locator('[data-action=save]').click();
+  await idle();
+  assert.match(command('read', ['paper-decision']).body, /从复现实验项目补充的结论/);
+  assert.equal(commandAt(firstPeer.root, 'list', ['--type', 'stage-summary']).records.some(item => item.record.id === 'paper-decision'), false);
+  await closeReader();
+
+  await switchProject(secondPeer.root);
+  await page.locator('[data-research-destination=summaries]').click();
+  await shared.waitFor();
+  await page.locator('[data-research-filter]').click();
+  await tools.getByLabel('关键词').fill('从复现实验项目补充的结论');
+  await tools.getByRole('button', { name: '应用', exact: true }).click();
+  await page.locator('.research-active-filter').waitFor();
+  await shared.click();
+  await page.locator('#visual-editor').getByText('从复现实验项目补充的结论。').waitFor();
+  await closeReader();
+
+  await switchProject(project);
+  await page.locator('[data-research-destination=summaries]').click();
+  await page.locator('[data-research-edit=paper-decision]').click();
+  await projectChoices.getByRole('checkbox', { name: /复现实验项目/ }).uncheck();
+  await dialog.getByRole('button', { name: '保存属性' }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  await switchProject(firstPeer.root);
+  await page.locator('[data-research-destination=summaries]').click();
+  await page.locator('.research-entry-title [data-research-record=exploration-review]').waitFor();
+  assert.equal(await shared.count(), 0);
+  assert.deepEqual(command('read', ['paper-decision']).record.relatedProjects, [secondPeer.id]);
+  assert.deepEqual(errors, []);
+  pass('multiple projects open and edit one linked summary with its original evidence and can remove a link independently');
+
   await fs.writeFile(path.join(folder, 'results.json'), JSON.stringify({ results, errors }, null, 2) + '\n');
   console.log(`Timeline screenshot: ${path.join(folder, 'timeline.png')}`);
 } finally {

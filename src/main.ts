@@ -160,11 +160,13 @@ const documents = new DocumentTabs({ editor: () => editor, settings: () => setti
   dispatch: (command, payload) => { void dispatch(command, payload); }, notify });
 const researchUI = new ResearchWorkspace(el('.main-area'), el('#research-sidebar'), {
   root: () => workspace?.root, blocked: () => !ready || busy,
-  open: (root, id, origin, edit) => perform(async () => {
+  open: (root, id, origin, edit, sourceProjectId) => perform(async () => {
     const previous = captureResearchStep();
     if (previous && dirty()) await persistDraft();
-    const doc = await window.meki.openResearchRecord(root, id);
+    const linked = sourceProjectId ? await window.meki.openLinkedResearchSummary(root, sourceProjectId, id) : null;
+    const doc = sourceProjectId ? linked?.document : await window.meki.openResearchRecord(root, id);
     if (!doc) return;
+    if (linked) researchUI.rememberReaderContext(linked.context);
     await loadResearchDocument(doc);
     const followed = rememberResearchStep(previous);
     researchUI.openReader(origin);
@@ -679,9 +681,10 @@ async function dispatch(action: string, payload?: unknown) {
     if (action === 'workspace-open') await openLocation(payload as OpenLocation);
     if (action === 'open-folder') { if (typeof payload !== 'string') throw new Error(t("无效的最近文件夹路径。")); await openRecentFolder(payload); }
     if (action === 'document-link') {
-      if (!current.path) throw new Error(t("请先保存文稿，再打开相对文件链接。"));
-      const location = await window.meki.resolveDocumentLink(String(payload),current.path);
-      if ('evidenceId' in location) await researchUI.openEvidence(location.evidenceId);
+      const source = current.path;
+      if (!source) throw new Error(t("请先保存文稿，再打开相对文件链接。"));
+      const location = await window.meki.resolveDocumentLink(String(payload), source);
+      if ('evidenceId' in location) await researchUI.openEvidence(location.evidenceId, source);
       else await openLocation(location, true);
     }
     if (action === 'reload-document' && current.path && await mayReplace()) { const doc = await window.meki.openDocument(current.path); if (doc) await documents.reload(doc); }
@@ -746,7 +749,7 @@ document.addEventListener('click', event => {
   if (action) { void dispatch(action.dataset.action!); return; }
   const related = target.closest<HTMLButtonElement>('[data-research-related]');
   if (related && ready && !busy) {
-    void researchUI.openReference(related.dataset.researchRelated!).catch(error => notify(String(error), true)); return;
+    void dispatch('document-link', `mekir:${related.dataset.researchRelated}`); return;
   }
   const format = target.closest<HTMLElement>('[data-format]'); if (format && ready && !busy && mayEditDocument()) { editor.format(format.dataset.format!); return; }
   const mode = target.closest<HTMLElement>('[data-mode]'); if (mode && ready && !busy && mayEditDocument()) { switchMode(mode.dataset.mode as 'visual' | 'source'); return; }

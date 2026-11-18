@@ -7,7 +7,7 @@ const { WorkspaceStore, documentStatus } = require('./workspace-store.cjs');
 const { ResearchStore } = require('./research-store.cjs');
 const { previewEvidence, sourceDirectory } = require('./research-evidence.cjs');
 const { DOCUMENT_SCHEME, researchLinkId } = require('./research-links.mjs');
-const { exampleProject, exampleRecords } = require('./research-example.cjs');
+const { newExampleProject, exampleRecords } = require('./research-example.cjs');
 const { PRODUCT_NAME } = require('./app-identity.cjs');
 const { validateSession } = require('./lifecycle-store.cjs');
 const { validateTarget } = require('./snapshot-store.cjs');
@@ -38,6 +38,7 @@ const rendererFile = path.join(rendererDirectory, 'index.html');
 async function createEditorWindow(options) {
 const { store, lifecycle, snapshots, updates, coordinator, id } = options;
 const authorizedDocuments = new Set();
+const linkedDocumentRoots = new Map();
 const pendingCommands = [];
 const launchPaths = [];
 let mainWindow = null;
@@ -245,16 +246,29 @@ async function currentResearch(root = workspaceStore?.root) {
   return project;
 }
 
-async function listResearchProjects() {
-  const projects = await Promise.all(store.metadata.recentFolders.map(async folder => {
+async function knownResearchProjects(activeRoot) {
+  const roots = new Map(store.metadata.recentFolders.map(folder => [pathKey(folder.path), folder.path]));
+  if (activeRoot) roots.set(pathKey(activeRoot), activeRoot);
+  const projects = await Promise.all([...roots.values()].map(async root => {
     try {
-      const project = await ResearchStore.open(folder.path);
-      if (!project || pathKey(project.root) !== pathKey(folder.path)) return null;
-      const { project: config } = await project.manifest();
-      return { root: project.root, title: config.title };
+      const library = await ResearchStore.open(root);
+      if (!library || pathKey(library.root) !== pathKey(root)) return null;
+      const { project: config } = await library.manifest();
+      return { library, config, info: { id: config.id, root: library.root, title: config.title } };
     } catch { return null; }
   }));
   return projects.filter(Boolean);
+}
+
+async function listResearchProjects() {
+  return (await knownResearchProjects()).map(project => project.info);
+}
+
+async function uniqueResearchProjects(activeRoot) {
+  const projects = await knownResearchProjects(activeRoot);
+  const counts = new Map();
+  for (const { info } of projects) counts.set(info.id, (counts.get(info.id) || 0) + 1);
+  return projects.filter(({ info }) => counts.get(info.id) === 1);
 }
 
 async function openResearchProject(root) {
@@ -283,10 +297,55 @@ async function requireResearch(root) {
 }
 
 async function researchLocation(project, selected, documentId) {
+  const active = workspaceStore;
   const reference = await project.resolveDocument(documentId);
   const file = reference.sourceId ? null : await selected.existing(path.join(project.root, reference.relativePath), { document: true });
-  if (selected !== workspaceStore) throw new Error(t("项目目录已移动，请重新打开。"));
+  if (active !== workspaceStore) throw new Error(t("项目目录已移动，请重新打开。"));
   return file ? { path: file.path } : { evidenceId: documentId };
+}
+
+async function researchSnapshot(filter, includeLinked) {
+  const project = await currentResearch();
+  if (!project) return null;
+  const state = await project.snapshot(filter);
+  const known = await uniqueResearchProjects(project.root);
+  const active = known.find(({ info }) => info.id === state.project.id && pathKey(info.root) === pathKey(project.root));
+  const peers = active ? known.filter(candidate => candidate !== active) : [];
+  const linkedSummaries = includeLinked === true ? await Promise.all(peers.map(async ({ library, config, info }) => {
+    // A detached source can be reopened later while the active project stays usable.
+    const summaries = await library.linkedSummaries(state.project.id, config, filter).catch(() => []);
+    return summaries.map(summary => ({ ...summary, project: info }));
+  })) : [];
+  return { ...state, knownProjects: peers.map(({ info }) => info), linkedSummaries: linkedSummaries.flat() };
+}
+
+async function openLinkedResearchSummary(root, ownerId, recordId) {
+  const selected = workspaceStore;
+  const target = await requireResearch(root);
+  const known = await uniqueResearchProjects(target.root);
+  const active = known.find(({ info }) => pathKey(info.root) === pathKey(target.root));
+  const owner = known.find(({ info }) => info.id === ownerId);
+  const unavailable = () => new Error(t("这份阶段总结在当前项目中暂不可用。"));
+  if (!active || !owner || active === owner) throw unavailable();
+  const context = await owner.library.snapshot();
+  const summary = context.records.find(({ record }) => record.id === recordId);
+  if (context.project.id !== ownerId || !summary?.record.coverage || !summary.record.relatedProjects?.includes(active.info.id) ||
+      !context.project.recordTypes.some(type => type.id === summary.record.type && type.kind === 'summary')) throw unavailable();
+  const file = await new WorkspaceStore(context.root).existing(path.join(context.root, summary.relativePath), { document: true });
+  if (selected !== workspaceStore) throw unavailable();
+  const document = await openKnownDocument(authorize(file.path));
+  if (!document) return null;
+  linkedDocumentRoots.set(pathKey(file.path), context.root);
+  return { document, context: { ...context, knownProjects: known.filter(project => project !== owner).map(({ info }) => info) } };
+}
+
+async function linkedDocumentProject(file) {
+  if (!file) return null;
+  const root = linkedDocumentRoots.get(pathKey(requireAuthorized(file)));
+  if (!root) return null;
+  const project = await ResearchStore.open(root);
+  if (!project || pathKey(project.root) !== pathKey(root)) throw new Error(t("项目目录已移动，请重新打开。"));
+  return project;
 }
 
 async function createResearchDemo() {
@@ -295,10 +354,11 @@ async function createResearchDemo() {
   })).filePaths[0];
   if (!selected) return null;
   const parent = await fs.promises.realpath(validateAbsolutePath(selected));
+  const definition = newExampleProject();
   for (let attempt = 0; attempt < 100; attempt++) {
     const root = path.join(parent, `research-example${attempt ? `-${attempt + 1}` : ''}`);
     try {
-      const project = await ResearchStore.initialize(root, exampleProject, exampleRecords);
+      const project = await ResearchStore.initialize(root, definition, exampleRecords);
       return await setWorkspace(project.root, true);
     } catch (error) { if (error.code !== 'EEXIST' || error.path !== root) throw error; }
   }
@@ -618,7 +678,7 @@ function registerIpc() {
     return selected ? setWorkspace(validateAbsolutePath(selected)) : null;
   });
   register('refresh-workspace', refreshWorkspace);
-  register('research-snapshot', async filter => (await currentResearch())?.snapshot(filter) ?? null);
+  register('research-snapshot', researchSnapshot);
   register('list-research-projects', listResearchProjects);
   register('open-research-project', openResearchProject);
   register('create-research-demo', createResearchDemo);
@@ -630,6 +690,7 @@ function registerIpc() {
     if (!location.path) throw new Error(t("请通过只读预览打开证据。"));
     return openKnownDocument(authorize(location.path));
   });
+  register('open-linked-research-summary', openLinkedResearchSummary);
   register('bind-research-source', async (root, sourceId, label) => {
     await requireResearch(root);
     const directory = TEST_MODE ? process.env.MEKI_TEST_EVIDENCE_FOLDER : (await dialog.showOpenDialog(mainWindow, {
@@ -647,12 +708,16 @@ function registerIpc() {
     return (await requireResearch(root)).indexEvidence(fileId, { sourceId, title: label || path.basename(file),
       relativePath: path.relative(directory, file).split(path.sep).join('/') });
   });
-  register('open-research-evidence', async (root, id) => {
-    const { source, reference, file } = await (await requireResearch(root)).evidenceFile(id);
+  register('open-research-evidence', async (root, id, sourceDocument) => {
+    const active = await requireResearch(root);
+    const project = await linkedDocumentProject(sourceDocument) || active;
+    const { source, reference, file } = await project.evidenceFile(id);
     return previewEvidence(file, reference, source);
   });
-  register('reveal-research-evidence', async (root, id) => {
-    const { file } = await (await requireResearch(root)).evidenceFile(id);
+  register('reveal-research-evidence', async (root, id, sourceDocument) => {
+    const active = await requireResearch(root);
+    const project = await linkedDocumentProject(sourceDocument) || active;
+    const { file } = await project.evidenceFile(id);
     if (!TEST_MODE) shell.showItemInFolder(file.path);
   });
   register('research-import-preview', async (root, sourceId) => (await requireResearch(root)).importArchive(sourceId));
@@ -706,11 +771,14 @@ function registerIpc() {
   });
   register('resolve-document-link', async (href, documentPath) => {
     requireAuthorized(documentPath);
-    const selected = workspaceStore && isWithin(documentPath, workspaceStore.root) ? workspaceStore : null;
+    const linkedProject = await linkedDocumentProject(documentPath);
+    const selected = linkedProject ? new WorkspaceStore(linkedProject.root) :
+      workspaceStore && isWithin(documentPath, workspaceStore.root) ? workspaceStore : null;
+    let result;
     if (typeof href === 'string' && href.startsWith(DOCUMENT_SCHEME)) {
       const documentId = researchLinkId(href);
       if (!documentId) throw new TypeError(t("无效的 Markdown 链接。"));
-      const project = selected && await currentResearch(selected.root);
+      const project = linkedProject || (selected && await currentResearch(selected.root));
       if (!project) throw new Error(t("请先打开要编辑的研究项目。"));
       await selected.existing(documentPath, { document: true });
       const hash = href.indexOf('#');
@@ -718,11 +786,15 @@ function registerIpc() {
       try { if (hash >= 0) anchor = decodeURIComponent(href.slice(hash + 1)); }
       catch { throw new Error(t("链接包含无效的 URL 编码。")); }
       const location = await researchLocation(project, selected, documentId);
-      return location.path ? { path: authorize(location.path), anchor } : location;
+      result = location.path ? { path: location.path, anchor } : location;
+    } else {
+      const boundary = selected || await WorkspaceStore.open(path.dirname(documentPath));
+      result = await boundary.resolveLink(href, documentPath);
     }
-    const boundary = selected || await WorkspaceStore.open(path.dirname(documentPath));
-    const result = await boundary.resolveLink(href, documentPath);
-    authorize(result.path);
+    if (result.path) {
+      authorize(result.path);
+      if (linkedProject) linkedDocumentRoots.set(pathKey(result.path), linkedProject.root);
+    }
     return result;
   });
   register('check-document', (filePath, revision) => documentStatus(requireAuthorized(filePath), revision));
@@ -763,8 +835,8 @@ function registerIpc() {
   register('import-document', exporting.importDocument);
   register('save-diagram', exporting.saveDiagram);
   register('asset-url', (source, documentPath) => {
-    if (documentPath !== null) requireAuthorized(documentPath);
-    return store.assetUrl(source, documentPath, workspace?.root);
+    const linkedRoot = documentPath === null ? undefined : linkedDocumentRoots.get(pathKey(requireAuthorized(documentPath)));
+    return store.assetUrl(source, documentPath, linkedRoot || workspace?.root);
   });
   register('save-attachment', (input) => {
     if (!input || !input.documentPath) throw new Error(t("先保存文档，再添加图片。"));
