@@ -10,7 +10,6 @@ const PROFILE_NAME = PRODUCT_NAME;
 const WINDOWS_EXECUTABLE = PRODUCT_NAME;
 const UPDATE_PREFIX = PRODUCT_NAME;
 const REPOSITORY = 'Irk2wd/Meki';
-const ENABLE_RELEASE_UPDATES = false;
 
 function installerName(version, platform) {
   if (!/^(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})$/.test(version) || !['win32', 'darwin'].includes(platform)) throw new Error('Invalid installer target.');
@@ -25,4 +24,4 @@ function configureApp(app, { productName = require('../package.json').productNam
   app.setAppUserModelId(APP_ID);
 }
 
-module.exports = { APP_ID, PROFILE_NAME, UPDATE_PREFIX, REPOSITORY, PRODUCT_NAME, WINDOWS_EXECUTABLE, ENABLE_RELEASE_UPDATES, installerName, configureApp };
+module.exports = { APP_ID, PROFILE_NAME, UPDATE_PREFIX, REPOSITORY, PRODUCT_NAME, WINDOWS_EXECUTABLE, installerName, configureApp };

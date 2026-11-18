@@ -1,4 +1,5 @@
 import { ht, t } from '../electron/i18n.mjs';
+import { productName } from '../package.json';
 import type { UpdateState } from '../shared/updates';
 import './updates.css';
 
@@ -11,7 +12,7 @@ export class UpdateDialog {
   private dismissedVersion: string | null = null;
   constructor(private apply: () => Promise<void>) {
     this.dialog.id = 'update-dialog'; this.dialog.setAttribute('aria-labelledby', 'update-title');
-    this.dialog.innerHTML = `<div class="dialog-heading"><div><span class="eyebrow">${ht("MEKI · 更新")}</span><h2 id="update-title">${ht("让Meki保持新鲜")}</h2></div><button type="button" data-update="close" class="icon-button" aria-label="${ht("关闭更新窗口")}">×</button></div>
+    this.dialog.innerHTML = `<div class="dialog-heading"><h2 id="update-title">${ht("{0} 更新", productName)}</h2><button type="button" data-update="close" class="icon-button" aria-label="${ht("关闭更新窗口")}">×</button></div>
       <p id="update-version"></p><p id="update-message" role="status" aria-live="polite"></p>
       <div id="update-progress-row" hidden><progress id="update-progress" max="100" value="0" aria-label="${ht("更新下载进度")}"></progress><span id="update-progress-text"></span></div>
       <details id="update-release-notes" hidden><summary>${ht("版本说明")}</summary><pre id="update-notes"></pre></details>
@@ -58,7 +59,7 @@ export class UpdateDialog {
     if (this.dialog.open) this.dismissNotice();
     this.notice.hidden = !version || version === this.dismissedVersion || this.state?.status !== 'available' ||
       !document.hasFocus() || document.visibilityState === 'hidden' || !!document.querySelector('dialog[open]');
-    if (version) this.notice.querySelector('#update-notice-title')!.textContent = t("Meki {0} 已发布", version);
+    if (version) this.notice.querySelector('#update-notice-title')!.textContent = t("{0} {1} 已发布", productName, version);
   }
   private element<T extends HTMLElement = HTMLElement>(selector: string) { return this.dialog.querySelector<T>(selector)!; }
   async open() {

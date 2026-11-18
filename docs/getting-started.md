@@ -6,7 +6,7 @@ mekiR 在本地编辑 Markdown，并以研究项目组织实验记录和阶段�
 
 ## 获取与安装
 
-在版本发布页选择以 `mekiR-` 开头的安装包。[版本列表](https://github.com/Irk2wd/Meki/releases) · [mekiR 1.1.4](https://github.com/Irk2wd/Meki/releases/tag/mekir-v1.1.4)
+在版本发布页选择以 `mekiR-` 开头的安装包。[版本列表](https://github.com/Irk2wd/Meki/releases) · [mekiR 1.2.0](https://github.com/Irk2wd/Meki/releases/tag/v1.2.0)
 
 | 平台 | 安装方式 |
 | --- | --- |
@@ -59,7 +59,7 @@ Pandoc 和 PicGo 均需单独安装，不包含在 Meki 中。
 
 ## 更新与本地数据
 
-研究版通过完整安装包更新。[安装更新](updates.md)
+在帮助菜单或侧栏选择「检查更新」来获取 mekiR 的新版本。[更新说明](updates.md)
 
 设置、恢复数据、快照和文件历史保存在系统应用数据目录中的 `mekiR` 文件夹。
 

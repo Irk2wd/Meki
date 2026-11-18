@@ -4,7 +4,8 @@ const { t } = require('./i18n.mjs');
 const fs = require('node:fs');
 const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
-const { REPOSITORY, digest, names, newer, releaseInfo } = require('./update-policy.cjs');
+const { UPDATE_PREFIX } = require('./app-identity.cjs');
+const { REPOSITORY, asset, digest, names, newer, releaseInfo } = require('./update-policy.cjs');
 const crypto = require('node:crypto');
 
 class GithubUpdates {
@@ -21,7 +22,7 @@ class GithubUpdates {
     for (let redirects = 0; redirects < 5; redirects++) {
       let response;
       try { response = await fetch(url, { signal: combined, redirect: 'manual', headers: {
-        Accept: binary ? 'application/octet-stream' : 'application/vnd.github+json', 'User-Agent': 'Meki-updates', 'Cache-Control': 'no-cache',
+        Accept: binary ? 'application/octet-stream' : 'application/vnd.github+json', 'User-Agent': `${UPDATE_PREFIX}-updates`, 'Cache-Control': 'no-cache',
       } }); } catch { if (signal.aborted) throw new Error(t("更新已取消。")); throw new Error(t("无法连接更新服务，请检查网络后重试。")); }
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         const location = response.headers.get('location'); await response.body?.cancel();
@@ -51,25 +52,30 @@ class GithubUpdates {
     return Buffer.concat(parts);
   }
   async latest(signal, platform) {
-    let latest;
-    try { latest = JSON.parse((await this.bytes('releases/latest', signal, 1024 * 1024)).toString('utf8')); }
-    catch (error) { if (error instanceof SyntaxError) throw new Error(t("更新服务返回了无效清单。")); throw error; }
-    if (!platform || this.hasPlatformAssets(latest, platform)) return latest;
-    // A Windows-only release must not break a Mac's update check.
-    let releases;
-    try { releases = JSON.parse((await this.bytes('releases?per_page=20', signal, 2 * 1024 * 1024)).toString('utf8')); }
-    catch (error) { if (error instanceof SyntaxError) throw new Error(t("更新服务返回了无效清单。")); throw error; }
-    if (!Array.isArray(releases) || releases.length > 100) throw new Error(t("更新服务返回了无效清单。"));
-    const candidates = releases.filter(release => this.hasPlatformAssets(release, platform));
-    candidates.sort((left, right) => newer(releaseInfo(left).version, releaseInfo(right).version) ? -1 : newer(releaseInfo(right).version, releaseInfo(left).version) ? 1 : 0);
-    if (!candidates.length) throw Object.assign(new Error(t("尚无适用于当前平台的完整正式更新。")), { code: 'NO_RELEASE' });
-    return candidates[0];
-  }
-  hasPlatformAssets(release, platform) {
-    let info;
-    try { info = releaseInfo(release, this.repository); } catch { return false; }
-    const expected = Object.values(names(info.version, platform));
-    return expected.every(name => release.assets.some(asset => asset.name === name && asset.state === 'uploaded'));
+    const pageSize = 20;
+    let latestRelease, latestVersion;
+    // The repository's featured release and creation order can both differ from the mekiR version order.
+    for (let page = 1; ; page++) {
+      const bytes = await this.bytes(`releases?per_page=${pageSize}&page=${page}`, signal, 2 * 1024 * 1024);
+      let releases;
+      try { releases = JSON.parse(bytes.toString('utf8')); }
+      catch { throw new Error(t("更新服务返回了无效清单。")); }
+      if (!Array.isArray(releases) || releases.length > pageSize) throw new Error(t("更新服务返回了无效清单。"));
+      for (const release of releases) {
+        let info;
+        try {
+          info = releaseInfo(release, this.repository);
+          for (const name of Object.values(names(info.version, platform))) asset(release, name);
+        } catch { continue; }
+        if (!latestVersion || newer(info.version, latestVersion)) {
+          latestRelease = release;
+          latestVersion = info.version;
+        }
+      }
+      if (releases.length < pageSize) break;
+    }
+    if (!latestRelease) throw Object.assign(new Error(t("尚无适用于当前平台的完整正式更新。")), { code: 'NO_RELEASE' });
+    return latestRelease;
   }
   async manifest(asset, signal) {
     const bytes = await this.bytes(`releases/assets/${asset.id}`, signal, 65536, true);

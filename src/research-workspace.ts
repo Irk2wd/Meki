@@ -59,19 +59,28 @@ function fieldValue(rule: ResearchField, value: ResearchValue) {
   return rule.unit ? `${value} ${rule.unit}` : String(value);
 }
 
-function fieldControl(rule: ResearchField, value: ResearchValue | undefined) {
-  const name = `name="field-${rule.id}"${rule.required ? ' required' : ''}`;
+function fieldControl(rule: ResearchField, value: ResearchValue | undefined, validate: boolean) {
+  const name = `name="field-${rule.id}"${validate && rule.required ? ' required' : ''}`;
   const text = value === undefined ? '' : String(value);
   if (rule.type === 'choice' || rule.type === 'boolean') {
-    const options = rule.type === 'boolean'
-      ? option('true', t("是"), text) + option('false', t("否"), text)
-      : rule.options!.map(value => option(value, value, text)).join('');
-    return `<select ${name}>${option('', t("未填写"), text)}${options}</select>`;
+    const values = rule.type === 'boolean' ? ['true', 'false'] : rule.options!;
+    const options = values.map(value => option(value, rule.type === 'boolean' ? fieldValue(rule, value === 'true') : value, text)).join('');
+    const historical = !validate && text && !values.includes(text) ? option(text, t("历史值 {0}", text), text) : '';
+    return `<select ${name}>${option('', t("未填写"), text)}${historical}${options}</select>`;
   }
-  const number = rule.type === 'number' ? ` step="any"${rule.min === undefined ? '' : ` min="${rule.min}"`}${rule.max === undefined ? '' : ` max="${rule.max}"`}` : '';
+  const bounds = validate ? `${rule.min === undefined ? '' : ` min="${rule.min}"`}${rule.max === undefined ? '' : ` max="${rule.max}"`}` : '';
+  const number = rule.type === 'number' ? ` step="any"${bounds}` : '';
   return `<input ${name} type="${rule.type}" value="${escape(text)}" maxlength="1000"${number}>`;
 }
 
+function fieldRuleDetails(rule: ResearchField) {
+  return [rule.type, rule.unit, rule.required ? t("必填") : t("可选字段"),
+    rule.min === undefined ? undefined : t("最小值 {0}", rule.min),
+    rule.max === undefined ? undefined : t("最大值 {0}", rule.max),
+    rule.options && t("选项 {0}", rule.options.join(' / ')),
+    rule.default === undefined ? undefined : t("新记录默认值 {0}", String(rule.default)),
+    rule.description].filter(Boolean).join(' · ');
+}
 interface TimelineOptions {
   activePhase: string;
   today: string;
@@ -213,6 +222,7 @@ export class ResearchWorkspace {
   private loadNumber = 0;
   private editing: ResearchEntry | undefined;
   private formProject: ResearchSnapshot | null = null;
+  private initialFieldValues = new Map<string, string>();
   private submitting = false;
 
   constructor(private host: HTMLElement, private sidebar: HTMLElement, private hooks: Hooks) {
@@ -710,10 +720,11 @@ export class ResearchWorkspace {
         <button type="button" class="secondary-button" data-research-copy-root>${ht("复制项目路径")}</button>
       </div>
       <p>${escape(root)}</p>
+      <p>${ht("字段和模板按记录类型定义。Agent 通过 {0} 读取当前规则。", 'describe')}</p>
       ${project.instructions?.length ? `<ul>${project.instructions.map(rule => `<li>${escape(rule)}</li>`).join('')}</ul>` : ''}
       ${project.recordTypes.map(type => `<details><summary>${escape(type.label)} <code>${type.id}</code></summary>
         ${type.description ? `<p>${escape(type.description)}</p>` : ''}
-        <ul>${type.fields.map(field => `<li>${escape(field.label)} <code>${field.id}</code> · ${escape(field.unit || field.type)}${field.required ? ` · ${ht("必填")}` : ''}${field.description ? ` · ${escape(field.description)}` : ''}</li>`).join('')}</ul>
+        ${type.fields.length ? `<ul>${type.fields.map(field => `<li>${escape(field.label)} <code>${field.id}</code> · ${escape(fieldRuleDetails(field))}</li>`).join('')}</ul>` : ''}
         <pre>${escape(type.template)}</pre></details>`).join('')}
     </section>`;
   }
@@ -855,7 +866,8 @@ export class ResearchWorkspace {
         <button type="button" class="icon-button" data-research-cancel aria-label="${ht("关闭") }">${icon('close', 15)}</button></div>
       <div class="research-form-grid">
         <label class="wide">${ht("记录标题")}<input name="title" required maxlength="240" value="${escape(record?.title || '')}" autofocus></label>
-        <label>${ht("记录类型")}<select name="type"${record && project.recordTypes.some(item => item.id === record.type) ? ' disabled' : ''}>${typeOptions.join('')}</select></label>
+        <label>${ht("记录类型")}<select name="type"${record && project.recordTypes.some(item => item.id === record.type) ? ' disabled' : ''}>${typeOptions.join('')}</select>
+          <small data-research-type-description></small></label>
         <label><span data-research-date-label></span><input name="date" type="date" required value="${escape(record?.date || (kind === 'summary' ? projectToday(project.timezone) : this.date || projectToday(project.timezone)))}"></label>
         <label class="wide">${ht("关联阶段")}<select name="phaseId">
           ${option('', t("未分配阶段"), record ? record.phaseId || '' : this.phaseId)}${project.phases.map(phase => option(phase.id, phase.title, record ? record.phaseId || '' : this.phaseId)).join('')}
@@ -924,15 +936,22 @@ export class ResearchWorkspace {
 
   private renderFields() {
     const type = this.selectedType(), summary = type.kind === 'summary';
+    const description = this.dialog.querySelector<HTMLElement>('[data-research-type-description]')!;
+    description.textContent = type.description || '';
+    description.hidden = !type.description;
     this.dialog.querySelector<HTMLElement>('[data-research-date-label]')!.textContent = summary ? t("撰写日期") : t("发生日期");
     this.dialog.querySelector<HTMLElement>('[data-research-summary]')!.hidden = !summary;
     for (const key of ['start', 'end']) this.input(key).required = summary;
     const record = this.editing?.record;
+    const editingSameType = record?.type === type.id;
     this.dialog.querySelector<HTMLElement>('[data-research-fields]')!.innerHTML = type.fields.map(rule => {
       const value = record ? (Object.hasOwn(record.fields, rule.id) ? record.fields[rule.id] : undefined) : rule.default;
       return `<label><span>${escape(rule.label)}${rule.unit ? ` (${escape(rule.unit)})` : ''}</span>
-        ${fieldControl(rule, value)}${rule.description ? `<small>${escape(rule.description)}</small>` : ''}</label>`;
+        ${fieldControl(rule, value, !editingSameType)}${rule.description ? `<small>${escape(rule.description)}</small>` : ''}</label>`;
     }).join('');
+    // Preserve historical values and missing fields when only other properties are edited.
+    this.initialFieldValues.clear();
+    if (editingSameType) for (const rule of type.fields) this.initialFieldValues.set(rule.id, this.input(`field-${rule.id}`).value);
   }
 
   private async submit() {
@@ -942,6 +961,7 @@ export class ResearchWorkspace {
     const fields: Record<string, ResearchValue | null> = Object.create(null);
     for (const rule of type.fields) {
       const control = this.input(`field-${rule.id}`);
+      if (control.value === this.initialFieldValues.get(rule.id)) continue;
       const value = rule.type === 'text' ? control.value.trim() : control.value;
       fields[rule.id] = !value ? null : rule.type === 'number' ? Number(value) : rule.type === 'boolean' ? value === 'true' : value;
     }

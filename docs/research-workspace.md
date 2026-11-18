@@ -66,7 +66,7 @@ node electron/research-cli.cjs resolve /path/to/project forest-canopy --local
 
 ## Agent 批量写入
 
-从 mekiR 源码目录运行以下命令。项目初始化时生成的 `AGENTS.md` 也说明了这一流程。
+从 mekiR 源码目录运行下列命令。每批写入前先运行 `describe`，并阅读项目根目录的 `AGENTS.md`（如有）。
 
 ```sh
 node electron/research-cli.cjs describe /path/to/project
@@ -75,13 +75,17 @@ node electron/research-cli.cjs read /path/to/project forest-validation
 node electron/research-cli.cjs batch /path/to/project --input batch.json
 ```
 
-`describe` 返回当前项目的字段类型、必填项、枚举、数值限制、默认值和模板。Agent 完成一批实验后，应读取最新规则，从实际产物提取字段，再提交如下结构。示例值只适用于自带的渲染研究项目。
+从 `describe.project.recordTypes` 按 ID 选择 `record.type`。`fields` 以所选类型的字段 ID 为键。按每个字段的说明、单位、类型、取值范围和枚举从实际产物提取值。`project.instructions` 说明本项目的记录口径。各项目可以定义自己的类型、字段和正文模板。例如，渲染实验记录场景和帧时间，论文分析记录章节和稿件版本。
+
+新记录使用同一轮实验的稳定 ID，并在 `date` 写项目时区的实际发生日期。总结用 `date` 写撰写日期，用 `coverage` 写覆盖区间。下例使用渲染研究样例的类型和字段。执行前将 `ifProjectRevision` 替换为 `describe` 返回的 `revision`。
 
 ```json
 {
+  "ifProjectRevision": "<describe.revision>",
   "records": [
     {
       "id": "forest-repeat",
+      "ifRevision": null,
       "type": "experiment",
       "title": "树林同视角复测",
       "date": "2026-11-18",
@@ -91,6 +95,7 @@ node electron/research-cli.cjs batch /path/to/project --input batch.json
     },
     {
       "id": "validation-review",
+      "ifRevision": null,
       "type": "stage-summary",
       "title": "复测阶段总结",
       "date": "2026-11-18",
@@ -102,11 +107,17 @@ node electron/research-cli.cjs batch /path/to/project --input batch.json
 }
 ```
 
-同一批次的新来源记录写在引用它的总结前面。可以把 `describe` 返回的 `revision` 作为 `ifProjectRevision` 提交，确保使用读到的规则。更新已有记录时提交 `read` 返回的 `revision` 作为 `ifRevision`，以及需要修改的字段。省略正文会保留已有正文，新建时会应用模板。相同批次可重试。若其他进程先更新了同一份文件，重新读取后合并修改。
+同一批次的新来源记录写在引用它的总结前面。更新已有记录时，用 `read` 返回的 `revision` 作为 `ifRevision`，只提交要修改的属性。省略字段或正文会保留已有内容。用 `fields` 中的 `null` 清除可选字段。
+
+新建时可以省略有默认值的字段，省略 `body` 会套用所选类型的模板。缺失数据和原因可写入正文，必填项需要有效值或项目配置的默认值。相同批次可重试。收到 `RESEARCH_CONFLICT` 后，重新 `describe` 并读取相关记录，再合并修改。
 
 ## 调整项目方案
 
-从 `describe` 的 `project` 开始编辑，将结果连同其 `revision` 保存成 `{"ifRevision":"…","project":{…}}`，再运行 `node electron/research-cli.cjs configure /path/to/project --input configuration.json`。可增减字段、修改模板、设置按日期或时间线显示的视图，也可调整视图过滤的记录类型和阶段、展示字段、排序和默认视图。项目页会在打开时刷新变更。新增必填字段时，旧记录仍可阅读，项目页会提示哪些字段待补。
+复制 `describe` 返回的 `project`，连同该次读取的 `revision` 提交 `{"ifRevision":"…","project":{…}}`，再运行 `node electron/research-cli.cjs configure /path/to/project --input configuration.json`。项目级记录口径写在 `instructions`，协作流程写在项目根目录的 `AGENTS.md`。
+
+改显示名称时沿用原 ID。字段的含义或单位变化时使用新 ID。增减字段时同步修改模板里的 `{{field.<ID>}}` 和视图的 `fieldIds`。视图还可以设置显示的记录类型、阶段、布局和排序。
+
+保存配置后重新 `describe`，再用新修订写记录。查看 `list` 返回的 `issues` 可找到待补的必填项和不再匹配的历史值。已有正文和字段仍可阅读，可在有依据时用 `batch` 补录。
 
 从一份配置创建新项目时可用 `init <新目录> --input <配置文件>`，从自带示例创建可用 `init-demo <新目录>`。用 `node electron/research-cli.cjs --help` 查看完整命令。验证界面和 CLI 联动可运行 `npm run test:research`。
 

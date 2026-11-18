@@ -11,10 +11,10 @@ function keys() {
   const pair = crypto.generateKeyPairSync('ed25519');
   return { privateKey: pair.privateKey, publicKey: pair.publicKey.export({ type: 'spki', format: 'pem' }) };
 }
-function fixture(pair, { version = '0.12.0', platform = process.platform, electron = '45.0.0', payload = Buffer.from('synthetic application'), bootstrap = BOOTSTRAP_VERSION,
+function fixture(pair, { appId = APP_ID, version = '0.12.0', platform = process.platform, electron = '45.0.0', payload = Buffer.from('synthetic application'), bootstrap = BOOTSTRAP_VERSION,
   nativeIcon = nativeIconHash(path.resolve(__dirname, '..'), platform) } = {}) {
   const files = names(version, platform), compressed = zlib.gzipSync(payload), installer = Buffer.from('synthetic installer; never execute');
-  const manifest = { appId: APP_ID, version, bootstrap, electron, platform, arch: platform === 'darwin' ? 'universal' : 'x64', nativeIcon,
+  const manifest = { appId, version, bootstrap, electron, platform, arch: platform === 'darwin' ? 'universal' : 'x64', nativeIcon,
     asarSize: payload.length, asarSha256: digest(payload), payload: { name: files.payload, size: compressed.length, sha256: digest(compressed) },
     installer: { name: files.installer, size: installer.length, sha256: digest(installer) } };
   const body = Buffer.from(JSON.stringify(manifest)), envelope = { schema: 1, body: body.toString('base64'), signature: crypto.sign(null, body, pair.privateKey).toString('base64') };
@@ -24,7 +24,7 @@ function fixture(pair, { version = '0.12.0', platform = process.platform, electr
   return { manifest, envelope, payload, compressed, installer, blobs, release };
 }
 async function server(initial) {
-  const context = { current: initial, requests: [], holdDownloads: false, errorStatus: null, redirect: null, publicAvailable: true, latest: null, releases: null };
+  const context = { current: initial, requests: [], holdDownloads: false, errorStatus: null, redirect: null, publicAvailable: true, releases: null };
   const instance = http.createServer(async (request, response) => {
     if (request.url === '/__fixture_ready__') { response.writeHead(204).end(); return; }
     context.requests.push({ path: request.url, authorization: request.headers.authorization });
@@ -32,8 +32,13 @@ async function server(initial) {
       if (!request.url.startsWith('/repos/Irk2wd/Meki/') || !context.publicAvailable) { response.writeHead(404).end(); return; }
       if (request.headers.authorization) { response.writeHead(401).end(); return; }
       if (context.errorStatus) { response.writeHead(context.errorStatus).end(); return; }
-      if (request.url.endsWith('/releases/latest')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(context.latest || context.current.release)); return; }
-      if (request.url.includes('/releases?')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(context.releases || [context.current.release])); return; }
+      if (request.url.includes('/releases?')) {
+        const { searchParams } = new URL(request.url, context.origin);
+        const size = Number(searchParams.get('per_page')), page = Number(searchParams.get('page'));
+        const releases = context.releases || [context.current.release];
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify(releases.slice((page - 1) * size, page * size))); return;
+      }
       const id = Number(request.url.split('/').pop());
       response.writeHead(302, { Location: context.redirect || `/blob/${id}` }).end(); return;
     }

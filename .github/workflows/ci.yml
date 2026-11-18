@@ -42,8 +42,10 @@ jobs:
       - name: Install official Electron runtime
         run: node node_modules/electron/install.js
       - name: Build native installer
-        run: npm run package:installer
-      - name: Preserve exact installer and build manifest
+        env:
+          MEKI_UPDATE_SIGN_KEY: ${{ secrets.MEKI_UPDATE_SIGN_KEY }}
+        run: npm run package:installer -- --release
+      - name: Preserve exact installer and signed update assets
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installer-${{ matrix.artifact }}
@@ -51,6 +53,8 @@ jobs:
             release/installers/*.exe
             release/installers/*.dmg
             release/installers/*-build.json
+            release/installers/mekiR-update-*.json
+            release/installers/mekiR-*-app.asar.gz
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

@@ -603,19 +603,33 @@ function encodeJson(value, limit = MAX_JSON_BYTES) {
   return bytes;
 }
 
-const projectGuide = `# 为 mekiR 研究项目工作的 agent
+const projectGuide = `# mekiR 研究项目的 Agent 指引
 
-每批实验完成后，先运行 \`node <mekiR 源码目录>/electron/research-cli.cjs describe <本项目目录>\`，读取本项目当前的记录类型、字段规则、模板、视图和 instructions。用 \`list\` 查询已有记录，用 \`read <目录> <ID>\` 查看正文与 revision。
+## 读取当前项目
 
-将实测结果整理成 JSON，再用 \`batch <目录> --input <JSON 文件>\` 写入。为同一次运行保留稳定 ID，使用当天实际发生的日期，新建时可省略正文以套用模板。更新已有记录时传入由 read 返回的 ifRevision。用 describe 返回的 revision 作为 ifProjectRevision。资料缺失时保留缺失信息，正文可链接原始结果。
+每批写入前先运行 \`node "<mekiR 源码目录>/electron/research-cli.cjs" describe "<项目根目录>"\`。读取 \`project.instructions\`，按 \`project.recordTypes\` 中的 ID 选择记录类型，再使用该类型的字段和模板。项目可以各自定义实验、分析、写作记录或总结。
 
-阶段总结使用该项目配置的 summary 类型。date 是撰写日期，coverage 是回顾区间，sources 是作为依据的文档 ID。若来源与总结一起提交，将来源放在 batch.records 中的前面。来源 ID 可通过 list 的 documents 或 \`resolve <目录> <ID>\` 查找。用 \`index <目录> <ID> --path <项目内相对路径>\` 登记普通文档。正文可用 \`[标题](mekir:<ID>)\` 引用同一项目的已索引文档。
+在 \`fields\` 中使用字段 ID。按字段说明从实际产物取值，遵守类型、单位、范围与必填要求。枚举使用 \`options\` 中的原值。用正文说明缺失数据及原因。若必填项缺少有效值和可用默认值，先补证据。
 
-用阶段总结的 relatedProjects 关联多个项目。填入从各目标项目 describe 读取的项目 ID，在总结的原项目执行 batch，继续使用同一个记录 ID 和正文文件。
+## 写入记录
 
-外部论文和归档目录用 \`bind-source\` 登记，用 \`index --source <来源 ID>\` 登记证据。记录的 evidence 保存证据 ID，relations 保存 kind、target 和可选 note。kind 的可选值从 describe 读取。实验归档用 \`import-archive\` 预览，核对新增、变化和缺件后再用返回的 token 确认。用 \`list --query\`、\`--month\`、\`--field\` 或 \`--filter\` 查找相关实验。
+1. 用 \`list\` 查找同一轮运行，复用稳定记录 ID。用 \`read <目录> <ID>\` 获取已有的字段、正文和 \`revision\`。发生日期采用项目时区的实际日期。
+2. 用 \`batch <目录> --input <文件或 ->\` 提交 \`ifProjectRevision\` 和 \`records\`。前者取自 \`describe.revision\`。新记录提交 \`id\`、\`ifRevision: null\`、\`type\`、\`title\`、\`date\` 及所需属性。已有记录提交 \`id\`、\`read.revision\` 作为 \`ifRevision\`，以及要修改的内容。
+3. 新建时，省略已配置默认值的字段会使用默认值，省略 \`body\` 会套用模板。更新时，省略的字段和正文保留原值。要主动清除可选字段，在 \`fields\` 中把该字段设为 \`null\`。收到 \`RESEARCH_CONFLICT\` 后重新读取规则和相关记录，再合并重试。
 
-调整项目方案时，从 describe 的 project 开始，按需修改 recordTypes、fields、template、phases、views 或 defaultView，再用 \`configure <目录> --input <JSON 文件>\` 提交包含 ifRevision 和 project 的对象。冲突时重新读取最新内容并合并。已写入的正文可以继续用 mekiR 打开编辑。
+## 引用依据和撰写总结
+
+用 \`list\` 的 \`documents\` 或 \`resolve <目录> <ID>\` 查找文档。用 \`index <目录> <ID> --path <相对路径>\` 登记普通文档，正文用 \`[标题](mekir:<ID>)\` 引用。外部目录用 \`bind-source\` 绑定，外部证据用 \`index --source <来源 ID>\` 登记。记录可用 \`evidence\` 保存证据 ID，并用 \`relations\` 保存 \`kind\`、\`target\` 和可选的 \`note\`。
+
+总结的 \`type\` 取自本项目 \`kind\` 为 \`summary\` 的记录类型 ID。用 \`date\` 记撰写日期，用 \`coverage.start\` 和 \`coverage.end\` 记覆盖区间，首尾日期均计入。用 \`sources\` 引用依据，同一批次先写入新来源，再写总结。用 \`relatedProjects\` 保存其他项目的 ID，在总结的原项目更新同一条记录。
+
+导入归档时用 \`import-archive\` 预览，核对新增、变化和缺件后提交返回的 token。导入信息保存在 \`run\` 中，项目字段可按现有规则用 \`batch\` 补录。用 \`list --query\`、\`--month\`、\`--field\` 或 \`--filter\` 查询相关记录。
+
+## 修改字段、模板和视图
+
+从 \`describe.project\` 复制配置，按任务需求修改 \`instructions\`、记录类型、字段、模板、阶段或视图。用 \`configure <目录> --input <文件或 ->\` 提交包含 \`ifRevision\` 和 \`project\` 的对象，\`ifRevision\` 取自 \`describe.revision\`。
+
+调整显示名称时沿用原 ID。字段的含义或单位变化时使用新 ID，并同步更新模板里的 \`{{field.<ID>}}\` 和视图的 \`fieldIds\`。配置保存后重新 \`describe\`，用 \`list\` 的 \`issues\` 检查历史记录，再按需用 \`batch\` 补录。项目规则放在配置的 \`instructions\`，项目协作流程可在这份 \`AGENTS.md\` 中维护。
 `;
 
 module.exports = { ResearchStore };

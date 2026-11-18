@@ -47,12 +47,15 @@ test('release versions are ordered numerically; drafts, prereleases and malforme
   const update = fixture(keys());
   assert.throws(() => policy.releaseInfo({ ...update.release, draft: true }));
   assert.throws(() => policy.releaseInfo({ ...update.release, prerelease: true }));
+  assert.throws(() => policy.releaseInfo({ ...update.release, tag_name: 'other-v0.12.0' }));
   assert.throws(() => policy.asset({ ...update.release, assets: [...update.release.assets, update.release.assets[0]] }, update.release.assets[0].name));
 });
 
 test('signed manifests bind the code, installer, platform and release; substituted signatures fail', () => {
   const pair = keys(), update = fixture(pair);
   assert.deepEqual(policy.verifyManifest(update.envelope, pair.publicKey), update.manifest);
+  const meki = fixture(pair, { appId: 'io.meki.editor' });
+  assert.throws(() => policy.verifyManifest(meki.envelope, pair.publicKey), /不符/);
   assert.throws(() => policy.verifyManifest(update.envelope, keys().publicKey));
   const changed = { ...update.envelope, body: Buffer.from(JSON.stringify({ ...update.manifest, version: '0.13.0' })).toString('base64') };
   assert.throws(() => policy.verifyManifest(changed, pair.publicKey));
@@ -171,7 +174,7 @@ test('automatic polling never replaces a busy download or a verified ready updat
   await service.download();
   const readyCount = remote.requests.length;
   await service.checkAutomatically(); assert.equal(service.snapshot().status, 'ready'); assert.equal(remote.requests.length, readyCount);
-  assert.equal(remote.requests.filter(request => request.path.endsWith('/releases/latest')).length, 1);
+  assert.equal(remote.requests.filter(request => request.path.includes('/releases?')).length, 1);
 });
 
 test('untrusted redirects are rejected before following them', async t => {
@@ -234,7 +237,7 @@ test('a missing release is reported without falling back to another repository',
   const state = await service.check();
   assert.equal(state.status, 'error'); assert.match(state.message, /尚无/);
   assert.equal(remote.requests.length, 1);
-  assert.equal(remote.requests[0].path, '/repos/Irk2wd/Meki/releases/latest');
+  assert.match(remote.requests[0].path, /^\/repos\/Irk2wd\/Meki\/releases\?/);
   assert.equal(runtime.readState().current, null);
 });
 
@@ -250,7 +253,11 @@ test('unrelated saved credentials are neither required nor sent during public up
 
 test('the update fixture uses the application signing identity and canonical asset names', async t => {
   const pair = keys(), update = fixture(pair), runtime = setup(t, pair), remote = await server(update);
-  remote.publicAvailable = true; t.after(() => remote.close());
+  t.after(() => remote.close());
+  remote.releases = [{ ...update.release, assets: [
+    ...update.release.assets.map(({ name, ...file }) => ({ ...file, name: name.replace(/^mekiR-/, 'Meki-'), id: file.id + 3 })),
+    ...update.release.assets,
+  ] }];
   const service = new UpdateService({ runtime, network: new GithubUpdates({ testOrigin: remote.origin }) });
   assert.equal((await service.check()).status, 'available');
   assert.equal(service.snapshot().repository, 'Irk2wd/Meki');
@@ -259,6 +266,24 @@ test('the update fixture uses the application signing identity and canonical ass
   assert.equal(service.prepareApply().manifest.appId, APP_ID);
   assert.ok(remote.requests.every(item => !item.authorization));
   assert.ok(update.release.assets.every(item => item.name.startsWith(`${UPDATE_PREFIX}-`)));
+  assert.deepEqual(remote.requests.filter(item => item.path.includes('/assets/')).map(item => item.path.split('/').pop()), ['1', '2']);
+});
+
+test('mekiR finds the newest research version across pages of Meki releases', async t => {
+  const { pair, service, remote } = await connected(t, { version: '0.13.0' });
+  remote.current.release.tag_name = 'mekir-v0.13.0';
+  const combined = fixture(pair, { version: '0.12.0' });
+  const mekiOnly = Array.from({ length: 20 }, (_, index) => {
+    const { release } = fixture(pair, { version: `2.0.${index}` });
+    return { ...release, assets: release.assets.map(file => ({ ...file, name: file.name.replace(/^mekiR-/, 'Meki-') })) };
+  });
+  remote.releases = [...mekiOnly, combined.release, remote.current.release];
+  const state = await service.check();
+  assert.equal(state.status, 'available');
+  assert.equal(state.latestVersion, '0.13.0');
+  assert.match(state.releaseUrl, /\/tag\/mekir-v0\.13\.0$/);
+  assert.equal(remote.requests.filter(item => item.path.includes('/releases?')).length, 2);
+  assert.equal((await service.download()).status, 'ready');
 });
 
 test('update repository and loopback test origin cannot be redirected by callers', () => {
@@ -272,14 +297,14 @@ test('an invalid public signature never falls back to a different release', asyn
   const forged = fixture(keys()); remote.current.blobs.set(1, forged.blobs.get(1));
   remote.current.release.assets[0].digest = `sha256:${policy.digest(forged.blobs.get(1))}`;
   assert.match((await service.check()).message, /签名/);
-  assert.equal(remote.requests.some(item => item.path.includes('/releases?')), false);
+  assert.equal(remote.requests.filter(item => item.path.includes('/releases?')).length, 1);
   assert.equal(remote.requests.some(item => item.path.endsWith('/assets/2')), false);
 });
 
 test('a Windows-only latest release keeps Mac updates on the newest complete Mac release', async t => {
   const pair = keys(), mac = fixture(pair, { platform: 'darwin' }), windows = fixture(pair, { platform: 'win32', version: '0.12.2' });
   const runtime = setup(t, pair, { platform: 'darwin', arch: 'arm64' }), remote = await server(mac);
-  remote.publicAvailable = true; remote.latest = windows.release; remote.releases = [windows.release, mac.release];
+  remote.releases = [windows.release, mac.release];
   t.after(() => remote.close());
   const service = new UpdateService({ runtime, network: new GithubUpdates({ testOrigin: remote.origin }) });
   assert.equal((await service.check()).status, 'available');

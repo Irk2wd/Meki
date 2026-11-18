@@ -62,7 +62,7 @@ for platform in ['windows', 'macos']:
     require(manifest['installer'] == expected_name, 'Unexpected installer filename')
     installer = files[0].parent / expected_name
     require(sha256(installer) == manifest['sha256'], 'Installer digest mismatch')
-    require(manifest['updateAssets'] == [], 'Research editions are delivered as full installers')
+    subprocess.run(['node', str(ROOT / 'scripts' / 'verify-update-assets.mjs'), str(files[0])], cwd=ROOT, check=True)
     manifests[platform] = manifest
     installers[platform] = installer
 
@@ -91,6 +91,12 @@ output.mkdir(parents=True, exist_ok=True)
 for installer in installers.values():
     shutil.copy2(installer, output / installer.name)
     require(sha256(output / installer.name) == sha256(installer), 'Copied installer changed')
+for platform, manifest in manifests.items():
+    for entry in manifest['updateAssets']:
+        update_file = installers[platform].parent / entry['name']
+        require(update_file.name == entry['name'] and sha256(update_file) == entry['sha256'], 'Invalid update asset')
+        shutil.copy2(update_file, output / update_file.name)
+        require(sha256(output / update_file.name) == entry['sha256'], 'Copied update asset changed')
 source = output / f'mekiR-{version}-source.zip'
 with zipfile.ZipFile(args.source_archive) as archive:
     names = [name for name in archive.namelist() if not name.endswith('/')]

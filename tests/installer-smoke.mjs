@@ -6,6 +6,7 @@ import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { root } from '../scripts/stage-application.mjs';
+import { verifyUpdateAssets } from '../scripts/update-assets.mjs';
 import { APP_ID, PROFILE_NAME, WINDOWS_EXECUTABLE } from '../electron/app-identity.cjs';
 import installerConfig from '../electron-builder.cjs';
 
@@ -31,7 +32,7 @@ assert.equal(path.dirname(installer), artifactFolder);
 assert.equal(manifest.version, pkg.version);
 assert.equal(manifest.sourceCommit, await runFile('git', ['rev-parse', 'HEAD']));
 assert.equal(await hash(installer), manifest.sha256);
-assert.deepEqual(manifest.updateAssets, []);
+await verifyUpdateAssets(manifest, artifactFolder);
 const resultRoot = path.join(root, 'test-results');
 await fs.mkdir(resultRoot, { recursive: true });
 const run = await fs.mkdtemp(path.join(resultRoot, 'installer-'));

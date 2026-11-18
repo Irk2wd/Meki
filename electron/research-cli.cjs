@@ -27,6 +27,7 @@ const usage = `${PRODUCT_NAME} research projects
   configure <folder> --input <configuration.json|->
 
 Results are JSON. Use --input - to read JSON from stdin.
+Run describe before writing to discover the project's current fields, templates, instructions, and revision.
 `;
 
 async function readInput(input) {
@@ -76,6 +77,13 @@ async function main(args) {
         ...(store.indexPath ? { index: INDEX, documentLink: `${DOCUMENT_SCHEME}<id>` } : {}),
         dateFormat: 'YYYY-MM-DD',
         fieldTypes: FIELD_TYPES, templateVariables: [...TEMPLATE_KEYS, 'field.<id>'],
+        rules: {
+          guide: 'AGENTS.md in the project root, when present',
+          instructions: 'project.instructions',
+          recordTypes: 'Read project.recordTypes. Match record.type to the record type ID, then read its fields and template.',
+          fields: 'Use field IDs as keys. Read each field’s type, description, unit, required, min, max, options and default. Use JSON numbers in the configured unit, JSON booleans, YYYY-MM-DD date strings and exact choice values.',
+          views: 'Read project.views and project.defaultView. Fields listed in a view affect display only.',
+        },
         relationKinds: RELATION_KINDS, archiveFilterFields: RUN_FILTER_FIELDS,
         summary: { date: 'date written', coverage: { start: 'inclusive date', end: 'inclusive date' }, sources: 'document IDs from list or resolve',
           relatedProjects: 'IDs from the other projects’ describe output' },
@@ -83,9 +91,14 @@ async function main(args) {
       writes: {
         batch: {
           input: { ifProjectRevision: 'revision from describe (optional)', records: [{ id: 'stable record ID', ifRevision: 'revision from read or null for creation', type: 'configured type ID', title: 'single line', date: 'date of record', phaseId: 'configured phase ID or null', coverage: 'summary interval or null', sources: 'document IDs', fields: 'patch keyed by field ID; null clears a value', body: 'Markdown; omission keeps the existing body or applies the template on creation' }] },
+          fieldRules: 'Defaults fill omitted fields on creation only. Omitted fields on update keep their current values. Use null to clear an optional value. New or changed values must meet the current rules. List records to see issues on historical values.',
+          revisionConflict: 'On RESEARCH_CONFLICT, run describe again, read affected records, and merge changes before retrying.',
           relationships: 'Use evidence: [indexed file ID], relations: [{kind, target, note?}], and relatedProjects: [other project IDs] for summaries. Place new source records before summaries that cite them.',
         },
-        configure: { input: { ifRevision: 'revision from describe', project: 'updated copy of project' } },
+        configure: {
+          input: { ifRevision: 'revision from describe', project: 'updated copy of project' },
+          fieldRules: 'Keep existing IDs when changing labels. Add a new field ID for a new meaning or unit. Update references in templates and views, then read the new revision before batching records.',
+        },
       },
     };
   }

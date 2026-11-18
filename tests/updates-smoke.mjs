@@ -27,8 +27,8 @@ delete env.ELECTRON_RUN_AS_NODE;
 let app, page; const results = [], errors = [], modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 const pass = name => { results.push(name); console.log(`PASS ${name}`); };
 const action = name => page.locator(`[data-update="${name}"]`).click();
-async function launch() {
-  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', documentPath] : [root, '--open', documentPath], env, timeout: 30000 });
+async function launch(environment = env) {
+  app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', documentPath] : [root, '--open', documentPath], env: environment, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); });
   await page.waitForSelector('#shell[data-ready="true"]');
@@ -37,11 +37,21 @@ async function exit() { if (app) { await app.evaluate(({ app }) => app.exit(0)).
 async function status(value) { await page.waitForFunction(async expected => (await window.meki.updateState()).status === expected, value); }
 async function waitApply() { await page.locator('[data-update="apply"]:not(:disabled)').waitFor({ state: 'visible' }); }
 try {
+  const productionProfile = path.join(run, 'production-profile'), productionUpdates = path.join(productionProfile, 'updates-v1');
+  await fs.mkdir(productionUpdates, { recursive: true });
+  await fs.writeFile(path.join(productionUpdates, 'notifications-v1.json'), JSON.stringify({ version: 1, automatic: false, dismissedVersion: null }));
+  await launch({ ...env, MEKI_TEST: '0', MEKI_USER_DATA: productionProfile });
+  await page.locator('[data-action="updates"]').click();
+  assert.equal(await page.locator('#update-title').textContent(), `${pkg.productName} 更新`);
+  await exit();
+  pass('the production app exposes its updater without test mode');
+
   await launch();
   assert.equal(remote.requests.length, 0, 'opening the editor must not contact GitHub');
   const menu = await app.evaluate(({ Menu }) => { const walk = items => items.some(item => item.label === '检查更新…' || item.submenu && walk(item.submenu.items)); return walk(Menu.getApplicationMenu().items); });
   assert.equal(menu, true);
   await page.locator('[data-action="updates"]').click(); await action('check'); await status('available');
+  assert.equal(await page.locator('#update-notice-title').textContent(), `${pkg.productName} ${updateVersion} 已发布`);
   assert.equal(await page.locator('#update-auth').count(), 0);
   assert.equal(await page.locator('#update-notes script').count(), 0);
   assert.equal(await page.evaluate(() => window.untrustedRelease), undefined);
@@ -104,7 +114,7 @@ try {
   await action('download'); await status('ready');
   assert.ok(remote.requests.every(item => !item.authorization));
   assert.ok((await fs.readFile(documentPath, 'utf8')).includes('更新前的新内容'));
-  pass('public Meki updates recover after a server error and preserve the profile and saved document');
+  pass('public mekiR updates recover after a server error and preserve the profile and saved document');
 
   await exit();
   await fs.writeFile(path.join(profile, 'updates-v1', 'payloads', `${update.manifest.asarSha256}.asar`), 'damaged cache');

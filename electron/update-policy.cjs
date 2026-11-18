@@ -54,8 +54,10 @@ function compatible(manifest, { electron, arch, bootstrap = BOOTSTRAP_VERSION, n
 function releaseInfo(release, repository = REPOSITORY) {
   if (repository !== REPOSITORY) throw new Error(t("更新仓库无效。"));
   if (!release || release.draft || release.prerelease || !release.published_at || !Array.isArray(release.assets) || release.assets.length > 100) throw new Error(t("未找到可用的正式更新。"));
-  const value = String(release.tag_name || '').replace(/^v/, ''); version(value);
-  return { version: value, notes: String(release.body || '').slice(0, 16000), url: `https://github.com/${repository}/releases/tag/v${value}` };
+  const tag = String(release.tag_name || '');
+  const value = /^(?:mekir-)?v([\d.]+)$/.exec(tag)?.[1];
+  version(value);
+  return { version: value, notes: String(release.body || '').slice(0, 16000), url: `https://github.com/${repository}/releases/tag/${tag}` };
 }
 function asset(release, name) {
   const matches = release.assets.filter(item => item.name === name && item.state === 'uploaded');

@@ -1,9 +1,21 @@
-# 安装研究版更新
+# mekiR 应用内更新
 
 [使用说明](README.md)
 
-从版本发布页下载以 `mekiR-` 开头的完整安装包。Windows 运行 EXE 安装器，macOS 将 DMG 中的 mekiR 拖入 Applications 并替换已有的 mekiR。[版本列表](https://github.com/Irk2wd/Meki/releases)
+## 检查与安装
 
-后续标准版和研究版共用 `v<版本>` 发布页。mekiR 1.1.4 从当时的研究版发布页下载。[mekiR 1.1.4](https://github.com/Irk2wd/Meki/releases/tag/mekir-v1.1.4)
+从帮助菜单或侧栏打开「检查更新」。默认在启动后及每 6 小时检查一次，只在发现适用于当前平台的 mekiR 正式更新时提醒。下载和安装由你确认，自动提醒可以在更新窗口关闭。
+
+mekiR 在联合发布 `v<版本>` 和研究版发布 `mekir-v<版本>` 中检查自己的签名清单、代码包和安装器。应用按 mekiR 版本号选择最新版本，并校验清单内的应用 ID。更新缓存和提醒偏好保存在 mekiR 的应用数据目录中。
+
+通常只需下载代码包并重启。运行环境或原生图标变更时，应用会下载完整安装包。Windows 运行 EXE，macOS 将 DMG 中的 mekiR 拖入 Applications 并替换已有应用。
+
+## 从 1.1.4 升级
+
+mekiR 1.1.4 需要先用带更新功能的新安装包升级。请从发布页下载以 `mekiR-` 开头、对应系统的安装包。[版本列表](https://github.com/Irk2wd/Meki/releases)
 
 研究项目与附件保存在你选择的项目目录。应用设置、恢复数据和历史记录位于系统应用数据目录中的 `mekiR` 文件夹。
+
+## 构建与发布
+
+研究版通过 `mekir-v<版本>` 标签触发安装包构建。发布构建使用 `MEKI_UPDATE_SIGN_KEY` 签署研究版清单，为 Windows 和 macOS 生成各自的 `mekiR-update-*.json` 与对应代码包。联合发布将这两套更新文件和研究版安装包一起上传到对应的 `v<版本>`。

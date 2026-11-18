@@ -6,8 +6,11 @@ import { createRequire } from 'node:module';
 import { build, Platform, Arch } from 'electron-builder';
 import config from '../electron-builder.cjs';
 import { root, stageApplication } from './stage-application.mjs';
+import { createUpdateAssets } from './update-assets.mjs';
 
 if (!['win32', 'darwin'].includes(process.platform)) throw new Error('Build installers on native Windows or macOS.');
+const signingKey = process.env.MEKI_UPDATE_SIGN_KEY;
+if (process.argv.includes('--release') && !signingKey) throw new Error('MEKI_UPDATE_SIGN_KEY is required for release update assets.');
 const platform = process.platform === 'win32' ? 'windows' : 'macos';
 const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
 const { stage, pkg, release } = await stageApplication();
@@ -29,5 +32,9 @@ const manifest = { version: pkg.version, sourceCommit, platform, arch: process.p
   installer: path.basename(installer), sha256: await sha256(installer), asarSha256: await sha256(asar),
   signing: process.platform === 'win32' ? 'unsigned' : 'ad-hoc, not notarized',
   builtOn: `${process.platform}-${process.arch}`, updateAssets: [] };
+if (signingKey) {
+  manifest.updateAssets = await createUpdateAssets({ directory: output, asar, installer, version: pkg.version,
+    platform: process.platform, electron: pkg.devDependencies.electron, signingKey });
+}
 await fs.writeFile(path.join(output, `${platform}-build.json`), JSON.stringify(manifest, null, 2) + '\n');
 console.log(JSON.stringify(manifest, null, 2));

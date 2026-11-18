@@ -84,6 +84,9 @@ try {
   await projectPicker.waitFor({ state: 'hidden' });
   pass('fresh and resumed windows start in the project shell, with project-only switching');
   assert.equal(command('describe').format.manifest, '.mekir/project.json');
+  assert.equal(command('describe').format.rules.instructions, 'project.instructions');
+  const agentGuide = await fs.readFile(path.join(project, 'AGENTS.md'), 'utf8');
+  assert.match(agentGuide, /读取当前项目[\s\S]*ifProjectRevision[\s\S]*修改字段、模板和视图/);
   assert.equal(command('read', ['exploration-review']).relativePath, '.mekir/summaries/r-exploration-review.md');
   assert.equal(command('read', ['tile-culling']).relativePath, 'records/r-tile-culling.md');
   assert.ok((await page.evaluate(() => window.meki.refreshWorkspace())).tree.every(entry => !entry.relativePath.startsWith('.mekir')));
@@ -274,6 +277,9 @@ try {
   assert.equal(config.recordTypes.find(type => type.id === 'experiment').fields.find(field => field.id === 'gpu_ms').min, 0);
   const experiment = config.recordTypes.find(type => type.id === 'experiment');
   experiment.fields.push({ id: 'build', label: '渲染构建', type: 'text', required: true, description: '渲染器 commit 或制品 ID。' });
+  const outcome = experiment.fields.find(field => field.id === 'outcome');
+  outcome.options = ['有效', '待复核', '无效'];
+  outcome.default = '待复核';
   experiment.template += '\n## 渲染构建\n\n{{field.build}}\n';
   config.views.push({ id: 'verification', label: '复测结果', layout: 'journal', order: 'newest', typeIds: ['experiment'], phaseIds: ['validation'], fieldIds: ['build', 'gpu_ms'] });
   config.defaultView = 'verification';
@@ -281,6 +287,23 @@ try {
   command('configure', [], { ifRevision: discovery.revision, project: config });
   const updated = command('describe');
   assert.notEqual(updated.revision, discovery.revision);
+  const verificationView = page.getByRole('button', { name: '复测结果', exact: true });
+  await verificationView.waitFor();
+  await page.locator('[data-research-destination=rules]').click();
+  await page.locator('.research-rules summary').filter({ hasText: 'experiment' }).click();
+  await page.locator('.research-rules').getByText(/最小值 0/).waitFor();
+  await page.locator('.research-rules').getByText(/新记录默认值 待复核/).waitFor();
+  await verificationView.click();
+  await page.locator('[data-research-edit=forest-validation]').click();
+  assert.equal(await dialog.locator('[name=field-build]').inputValue(), '');
+  assert.equal(await dialog.locator('[name=field-outcome] option:checked').innerText(), '历史值 需复测');
+  await dialog.locator('[name=field-gpu_ms]').fill('11.5');
+  await dialog.getByRole('button', { name: '保存属性' }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  const historical = command('read', ['forest-validation']).record.fields;
+  assert.equal(historical.gpu_ms, 11.5);
+  assert.equal(historical.outcome, '需复测');
+  assert.equal(Object.hasOwn(historical, 'build'), false);
   const original = command('read', [manual.id]);
   const run = {
     id: 'agent-verification', type: experiment.id, title: 'Agent 批次复测', date: '2026-11-18', phaseId: 'validation',
@@ -300,15 +323,15 @@ try {
   assert.equal(command('read', [manual.id]).body, original.body);
   assert.match(command('read', [run.id]).body, /render-9c217/);
   assert.match(command('read', ['agent-review']).body, /mekir:agent-verification/);
-  await page.getByRole('button', { name: '复测结果', exact: true }).waitFor();
-  assert.equal(await page.getByRole('button', { name: '复测结果', exact: true }).getAttribute('aria-pressed'), 'true');
+  assert.equal(await verificationView.getAttribute('aria-pressed'), 'true');
   await page.locator('.research-entry-title [data-research-record=agent-verification]').waitFor();
   assert.equal(await page.locator('.research-entry').count(), 2);
   assert.match(await page.locator('.research-entry-meta').first().innerText(), /渲染构建 render-9c217/);
   await page.getByRole('button', { name: '新建研究记录' }).click();
+  await dialog.waitFor({ state: 'visible' });
   assert.equal(await dialog.locator('[name=field-build]').getAttribute('required'), '');
   await dialog.getByRole('button', { name: '取消', exact: true }).click();
-  pass('CLI rule discovery, batch validation and retry, project fields, templates and views refreshed in mekiR');
+  pass('project rules refresh fields, templates and views, while editing an older record preserves its historical values');
 
   await page.getByRole('button', { name: '时间线', exact: true }).click();
   await page.locator('[data-research-phase=validation]').click();
@@ -510,7 +533,37 @@ try {
 
   const ownerId = command('describe').project.id;
   const firstPeer = await createPeer('复现实验项目');
-  const secondPeer = await createPeer('论文分析项目');
+  const secondPeer = { root: path.join(folder, 'paper-analysis'), id: 'paper-analysis', title: '论文分析项目' };
+  commandAt(secondPeer.root, 'init', [], {
+    version: 1, id: secondPeer.id, title: secondPeer.title, timezone: 'Asia/Shanghai', phases: [],
+    instructions: ['稿件版本使用 Git 提交号。'],
+    recordTypes: [{ id: 'writing', label: '写作记录', kind: 'entry', description: '追踪稿件的章节修改。',
+      fields: [{ id: 'chapter', label: '章节', type: 'text', required: true }, { id: 'draft', label: '稿件版本', type: 'text' }],
+      template: '# {{title}}\n\n{{field.chapter}} · {{field.draft}}\n' }],
+    views: [{ id: 'timeline', label: '时间线', layout: 'timeline', order: 'newest', fieldIds: ['chapter'] }], defaultView: 'timeline',
+  });
+  const paperRules = commandAt(secondPeer.root, 'describe');
+  assert.deepEqual(paperRules.project.instructions, ['稿件版本使用 Git 提交号。']);
+  commandAt(secondPeer.root, 'batch', [], { ifProjectRevision: paperRules.revision, records: [{
+    id: 'methods', ifRevision: null, type: 'writing', title: '方法章节修改', date: '2026-11-18',
+    fields: { chapter: '方法', draft: 'commit-d17' },
+  }] });
+  assert.match(commandAt(secondPeer.root, 'read', ['methods']).body, /方法 · commit-d17/);
+  await app.evaluate((_electron, target) => { process.env.MEKI_TEST_FOLDER_PATH = target; }, secondPeer.root);
+  await showProjectPicker();
+  await projectPicker.locator('[data-action=research-open-project]').click();
+  await page.getByRole('heading', { name: secondPeer.title, exact: true }).waitFor();
+  const paperEntry = page.locator('.research-entry').filter({ hasText: '方法章节修改' });
+  assert.match(await paperEntry.locator('.research-entry-meta').innerText(), /章节 方法/);
+  assert.doesNotMatch(await paperEntry.locator('.research-entry-meta').innerText(), /稿件版本/);
+  await page.getByRole('button', { name: '新建研究记录' }).click();
+  await dialog.waitFor({ state: 'visible' });
+  assert.equal(await dialog.locator('[name=type]').inputValue(), 'writing');
+  assert.equal(await dialog.locator('[name=field-chapter]').getAttribute('required'), '');
+  assert.equal(await dialog.locator('[name=field-draft]').count(), 1);
+  assert.equal(await dialog.locator('[name=field-gpu_ms]').count(), 0);
+  await dialog.getByRole('button', { name: '取消', exact: true }).click();
+  pass('a project with its own record type uses its own fields, template, instructions and view');
   assert.equal(new Set([ownerId, firstPeer.id, secondPeer.id]).size, 3);
   await switchProject(project);
   await page.locator('[data-research-destination=summaries]').click();
