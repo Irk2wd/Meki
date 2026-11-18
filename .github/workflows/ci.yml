@@ -3,7 +3,7 @@ name: Desktop CI
 on:
   workflow_dispatch:
   push:
-    tags: ['v*']
+    tags: ['mekir-v*']
 
 permissions:
   contents: read
@@ -42,10 +42,8 @@ jobs:
       - name: Install official Electron runtime
         run: node node_modules/electron/install.js
       - name: Build native installer
-        env:
-          MEKI_UPDATE_SIGN_KEY: ${{ secrets.MEKI_UPDATE_SIGN_KEY }}
         run: npm run package:installer
-      - name: Preserve exact installer and payload manifest
+      - name: Preserve exact installer and build manifest
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installer-${{ matrix.artifact }}
@@ -53,8 +51,6 @@ jobs:
             release/installers/*.exe
             release/installers/*.dmg
             release/installers/*-build.json
-            release/installers/Meki-update-*.json
-            release/installers/*.asar.gz
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -97,9 +93,6 @@ jobs:
         run: npm ci
       - name: Install verified optional Pandoc for conversion tests
         run: node scripts/setup-pandoc-ci.mjs
-      - name: Download previous Windows installer for upgrade regression
-        if: matrix.artifact == 'windows'
-        run: node scripts/setup-upgrade-ci.mjs
       - name: Download installer from this run
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:

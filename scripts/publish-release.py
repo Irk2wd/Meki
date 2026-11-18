@@ -22,9 +22,12 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
-version = json.loads((ROOT / 'package.json').read_text())['version']
+package = json.loads((ROOT / 'package.json').read_text())
+version, product = package['version'], package['productName']
 require(re.fullmatch(r'\d+\.\d+\.\d+', version), 'Invalid release version')
-tag = 'v' + version
+require(product in {'Meki', 'mekiR'}, 'Unknown release edition')
+tag = ('v' if product == 'Meki' else 'mekir-v') + version
+title = product + ' ' + version
 directory = pathlib.Path(sys.argv[1]).resolve()
 notes = ROOT / 'docs' / 'releases' / (version + '.md')
 verification = json.loads((directory / 'verification.json').read_text())
@@ -51,8 +54,8 @@ existing = gh('release', 'view', tag, '--json', 'isDraft', check=False)
 if existing.returncode == 0:
     require(json.loads(existing.stdout)['isDraft'], 'Refusing to replace an already published release')
 else:
-    gh('release', 'create', tag, '--verify-tag', '--draft', '--title', 'Meki ' + version, '--notes-file', str(notes))
-gh('release', 'edit', tag, '--title', 'Meki ' + version, '--notes-file', str(notes))
+    gh('release', 'create', tag, '--verify-tag', '--draft', '--title', title, '--notes-file', str(notes))
+gh('release', 'edit', tag, '--title', title, '--notes-file', str(notes))
 gh('release', 'upload', tag, *(str(file) for file in files), '--clobber')
 
 repository = gh('repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner').stdout.strip()
@@ -66,7 +69,7 @@ for asset in assets:
     require(asset['state'] == 'uploaded' and asset['size'] == file.stat().st_size, 'Incomplete release upload')
     require(asset.get('digest') == 'sha256:' + checksums[file.name], 'Uploaded release checksum mismatch: ' + file.name)
 
-gh('release', 'edit', tag, '--draft=false', '--latest')
+gh('release', 'edit', tag, '--draft=false', '--latest=' + str(product == 'Meki').lower())
 published = json.loads(gh('release', 'view', tag, '--json', 'isDraft,isPrerelease,url').stdout)
 require(not published['isDraft'] and not published['isPrerelease'], 'Release was not published')
 print(published['url'])

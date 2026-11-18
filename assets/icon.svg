@@ -1,1 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><g transform="translate(64 64) scale(28)"><svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><rect x=".5" y=".5" width="31" height="31" rx="6.5" fill="#24342e" stroke="#5d7869" stroke-opacity=".6"/><path d="M7 24V8h4l5 6.5L21 8h4v16h-4V14l-5 6.5L11 14v10Z" fill="#edf4ef"/></svg></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><g transform="translate(64 64) scale(28)"><svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="mekir-surface" x1="2" y1="1" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF6E9"/>
+      <stop offset=".28" stop-color="#FADBF2"/>
+      <stop offset=".54" stop-color="#E1D9FF"/>
+      <stop offset=".76" stop-color="#D4F0FF"/>
+      <stop offset="1" stop-color="#BEF2E3"/>
+    </linearGradient>
+    <radialGradient id="mekir-warm" cx="3" cy="25" r="23" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE0AD"/>
+      <stop offset="1" stop-color="#FFEBD2" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="mekir-cool" cx="28" cy="3" r="20" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#CEF6FD"/>
+      <stop offset="1" stop-color="#CEF6FD" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mekir-ink" x1="8" y1="8" x2="23" y2="24" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#303053"/>
+      <stop offset="1" stop-color="#38346A"/>
+    </linearGradient>
+  </defs>
+  <rect x=".5" y=".5" width="31" height="31" rx="7.5" fill="url(#mekir-surface)" stroke="#898CB8" stroke-opacity=".45"/>
+  <rect x="1" y="1" width="30" height="30" rx="7" fill="url(#mekir-warm)"/>
+  <rect x="1" y="1" width="30" height="30" rx="7" fill="url(#mekir-cool)"/>
+  <rect x="1.5" y="1.5" width="29" height="29" rx="6.5" stroke="#FFF" stroke-opacity=".58"/>
+  <path d="M6.1 22.9V7.7h3.8l5 6.5 5-6.5h3.8v15.2h-3.8v-9.1l-5 6.3-5-6.3v9.1Z" fill="url(#mekir-ink)"/>
+  <rect x="20.1" y="19.1" width="10.3" height="10.4" rx="3.05" fill="#F8F3FF" stroke="#FFF" stroke-width=".8"/>
+  <path d="M22.45 27.6v-6.55h2.89c1.51 0 2.43.79 2.43 2.1 0 .92-.45 1.56-1.2 1.87l1.57 2.58h-1.69l-1.39-2.32h-1.09v2.32h-1.52Zm1.52-3.56h1.21c.67 0 1.05-.29 1.05-.86s-.38-.84-1.05-.84h-1.21v1.7Z" fill="#57356E"/>
+</svg></g></svg>

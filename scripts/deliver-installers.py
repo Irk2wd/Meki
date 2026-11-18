@@ -58,11 +58,11 @@ for platform in ['windows', 'macos']:
     manifest = read(files[0])
     require(manifest['version'] == version and manifest['sourceCommit'] == commit, 'Stale build manifest')
     require(manifest['platform'] == platform, 'Wrong build platform')
-    expected_name = f'Meki-{version}-' + ('Setup-x64.exe' if platform == 'windows' else 'macOS-universal.dmg')
+    expected_name = f'mekiR-{version}-' + ('Setup-x64.exe' if platform == 'windows' else 'macOS-universal.dmg')
     require(manifest['installer'] == expected_name, 'Unexpected installer filename')
     installer = files[0].parent / expected_name
     require(sha256(installer) == manifest['sha256'], 'Installer digest mismatch')
-    subprocess.run(['node', str(ROOT / 'scripts' / 'verify-update-assets.mjs'), str(files[0])], cwd=ROOT, check=True)
+    require(manifest['updateAssets'] == [], 'Research editions are delivered as full installers')
     manifests[platform] = manifest
     installers[platform] = installer
 
@@ -91,13 +91,7 @@ output.mkdir(parents=True, exist_ok=True)
 for installer in installers.values():
     shutil.copy2(installer, output / installer.name)
     require(sha256(output / installer.name) == sha256(installer), 'Copied installer changed')
-for platform, manifest in manifests.items():
-    for entry in manifest['updateAssets']:
-        update_file = installers[platform].parent / entry['name']
-        require(update_file.name == entry['name'] and sha256(update_file) == entry['sha256'], 'Invalid update asset')
-        shutil.copy2(update_file, output / update_file.name)
-        require(sha256(output / update_file.name) == entry['sha256'], 'Copied update asset changed')
-source = output / f'Meki-{version}-source.zip'
+source = output / f'mekiR-{version}-source.zip'
 with zipfile.ZipFile(args.source_archive) as archive:
     names = [name for name in archive.namelist() if not name.endswith('/')]
     require(len(set(names)) == len(names), 'Duplicate source archive entries')
@@ -108,7 +102,7 @@ with zipfile.ZipFile(args.source_archive) as archive:
         require(not (set(parts) & forbidden) and not any(part.startswith('.env.') for part in parts), 'Non-distributable source archive content')
     require({'package.json', 'package-lock.json', 'LICENSE', 'THIRD_PARTY_NOTICES.txt', 'README.md'} <= set(names), 'Incomplete source archive')
     package = json.loads(archive.read('package.json'))
-    require(package['version'] == version and package['productName'] == 'Meki' and package['license'] == 'MIT', 'Wrong source archive version or license')
+    require(package['version'] == version and package['productName'] == 'mekiR' and package['license'] == 'MIT', 'Wrong source archive version or license')
     public_readme = archive.read('README.md')
     release_notes = archive.read(f'docs/releases/{version}.md')
 shutil.copy2(args.source_archive, source)

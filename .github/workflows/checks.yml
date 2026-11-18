@@ -2,7 +2,7 @@ name: Source CI
 
 on:
   push:
-    branches: [main]
+    branches: [research]
   pull_request:
 
 permissions:

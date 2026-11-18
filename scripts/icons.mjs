@@ -32,7 +32,13 @@ const icnsParts = await Promise.all([[128, 'ic07'], [256, 'ic08'], [512, 'ic09']
 const header = Buffer.alloc(8); header.write('icns'); header.writeUInt32BE(8 + icnsParts.reduce((n, b) => n + b.length, 0), 4);
 await fs.writeFile(path.join(assets, 'icon.icns'), Buffer.concat([header, ...icnsParts]));
 // Original DMG artwork. Finder supplies the app and Applications icons above it.
-const background = '<svg xmlns="http://www.w3.org/2000/svg" width="540" height="380" viewBox="0 0 540 380"><rect width="540" height="380" fill="#faf9f4"/><text x="270" y="64" text-anchor="middle" font-family="Arial,sans-serif" font-size="30" fill="#294b3e">Meki</text><text x="270" y="96" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" fill="#68746c">A quiet place to write.</text><path d="M238 200h64m-13-13 13 13-13 13" fill="none" stroke="#416b5b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><text x="270" y="320" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#416b5b">Drag Meki to Applications</text></svg>';
+const background = `<svg xmlns="http://www.w3.org/2000/svg" width="540" height="380" viewBox="0 0 540 380">
+  <defs><linearGradient id="paper" x2="1" y2="1"><stop stop-color="#FFF5F0"/><stop offset=".52" stop-color="#F3EDFB"/><stop offset="1" stop-color="#E7F6F5"/></linearGradient></defs>
+  <rect width="540" height="380" fill="url(#paper)"/>
+  <text x="270" y="76" text-anchor="middle" font-family="Arial,sans-serif" font-size="32" fill="#303053">mekiR</text>
+  <path d="M238 200h64m-13-13 13 13-13 13" stroke="#6D608D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <text x="270" y="320" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#51466D">Drag mekiR to Applications</text>
+</svg>`;
 await fs.writeFile(path.join(assets, 'installer-background.png'), await sharp(Buffer.from(background)).png().toBuffer());
 
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -48,4 +54,4 @@ const manifest = {
   }))),
 };
 await fs.writeFile(path.join(assets, 'provenance.json'), JSON.stringify(manifest, null, 2) + '\n');
-console.log('Generated original Meki icons and provenance.');
+console.log('Generated mekiR icons and provenance.');

@@ -32,7 +32,8 @@ function command(name, args = [], input, errorPattern) {
 }
 
 let app, page;
-const errors = [];
+const results = [], errors = [];
+const pass = name => { results.push(name); console.log(`PASS ${name}`); };
 async function idle() { await page.waitForFunction(() => !document.body.classList.contains('is-busy')); }
 async function showProject() {
   await page.locator('[data-action="research"]').click();
@@ -86,7 +87,7 @@ try {
   await page.locator('[data-action=save]').click();
   await idle();
   assert.match(command('read', [manual.id]).body, /在 Meki 中完成记录/);
-  console.log('PASS date filter, configured form, Markdown template and Meki editing');
+  pass('date filter, configured form, Markdown template and mekiR editing');
 
   const notes = path.join(project, 'notes');
   await fs.mkdir(notes);
@@ -135,7 +136,7 @@ try {
   await dialog.getByRole('button', { name: '保存属性' }).click();
   await page.locator('.research-entry-meta').getByText('覆盖 2026-11-05 – 2026-11-12').waitFor();
   assert.equal(command('read', [summary.id]).record.coverage.end, '2026-11-12');
-  console.log('PASS hidden summaries, indexed Markdown links, workspace rename and timeline coverage');
+  pass('hidden summaries, indexed Markdown links, workspace rename and timeline coverage');
 
   const discovery = command('describe');
   const config = discovery.project;
@@ -177,7 +178,7 @@ try {
   await page.getByRole('button', { name: '新建研究记录' }).click();
   assert.equal(await dialog.locator('[name=field-build]').getAttribute('required'), '');
   await dialog.getByRole('button', { name: '取消', exact: true }).click();
-  console.log('PASS CLI rule discovery, batch validation and retry, project fields, templates and views refreshed in Meki');
+  pass('CLI rule discovery, batch validation and retry, project fields, templates and views refreshed in mekiR');
 
   await page.getByRole('button', { name: '时间线', exact: true }).click();
   await page.locator('.research-timeline-summary').filter({ hasText: 'Agent 复测总结' }).waitFor();
@@ -196,7 +197,8 @@ try {
   assert.match(await page.locator('#source-editor .cm-content').innerText(), /尚未保存的人工修改/);
   assert.match(command('read', [run.id]).body, /Agent 写入的新结果/);
   assert.deepEqual(errors, []);
-  console.log('PASS concurrent agent edits preserve disk changes and the unsaved Meki draft');
+  pass('concurrent agent edits preserve disk changes and the unsaved mekiR draft');
+  await fs.writeFile(path.join(folder, 'results.json'), JSON.stringify({ results, errors }, null, 2) + '\n');
   console.log(`Timeline screenshot: ${path.join(folder, 'timeline.png')}`);
 } finally {
   if (app) {

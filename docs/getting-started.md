@@ -1,17 +1,17 @@
-# 开始使用 Meki
+# 开始使用 mekiR
 
 [文档目录](README.md) · [项目首页](../README.md)
 
-Meki 直接编辑本地 Markdown 文件，适用于 Windows 和 macOS。无需创建账户。
+mekiR 在本地编辑 Markdown，并以研究项目组织实验记录和阶段总结，适用于 Windows 和 macOS。
 
 ## 获取与安装
 
-从 [GitHub Releases](https://github.com/Irk2wd/Meki/releases) 获取对应平台的文件：
+从研究版发布页获取对应平台的安装包。[mekiR 1.1.4](https://github.com/Irk2wd/Meki/releases/tag/mekir-v1.1.4)
 
 | 平台 | 安装方式 |
 | --- | --- |
-| Windows x64 | 双击 `Meki-<版本>-Setup-x64.exe`，按向导选择安装目录和用户范围。 |
-| macOS Apple Silicon / Intel | 打开 `Meki-<版本>-macOS-universal.dmg`，将 Meki 拖入 Applications，再从“应用程序”启动。 |
+| Windows x64 | 双击 `mekiR-<版本>-Setup-x64.exe`，按向导选择安装目录和用户范围。 |
+| macOS Apple Silicon / Intel | 打开 `mekiR-<版本>-macOS-universal.dmg`，将 mekiR 拖入 Applications，再从“应用程序”启动。 |
 
 签名状态与平台验证范围见对应 Release。卸载应用会保留本地文稿和用户数据。
 
@@ -59,8 +59,8 @@ Pandoc 和 PicGo 均需单独安装，不包含在 Meki 中。
 
 ## 更新与本地数据
 
-发现新版本时，右下角会显示小提醒；也可从帮助菜单或侧栏的“检查更新”查看版本说明并下载更新，再自行选择重启。默认每次启动后检查一次，此后每 6 小时检查，可在更新窗口关闭自动提醒。运行时升级需要完整安装器。详细流程见 [应用内更新](updates.md#检查与安装)。
+研究版通过完整安装包更新。[安装更新](updates.md)
 
-设置、恢复数据、快照、文件历史与更新缓存保存在系统应用数据目录中的 `Meki` 文件夹。
+设置、恢复数据、快照和文件历史保存在系统应用数据目录中的 `mekiR` 文件夹。
 
-应用没有账户、云同步或遥测。默认定期联网检查更新，可关闭自动提醒；手动检查更新、加载网络图片、打开外部链接、PicGo 上传，以及启用拼写检查后的词典下载会按需联网。
+研究项目数据保存在项目目录中。[研究项目使用说明](research-workspace.md)

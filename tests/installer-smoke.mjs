@@ -6,12 +6,11 @@ import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { root } from '../scripts/stage-application.mjs';
-import { verifyUpdateAssets } from '../scripts/update-assets.mjs';
-import { previousWindows } from '../scripts/setup-upgrade-ci.mjs';
+import { APP_ID, PROFILE_NAME, WINDOWS_EXECUTABLE } from '../electron/app-identity.cjs';
 import installerConfig from '../electron-builder.cjs';
 
 // Installation mutates OS registration. Use only disposable GitHub-hosted runners,
-// never the developer's real profile or an existing Meki installation.
+// never the developer's real profile or an existing installation.
 assert.equal(process.env.GITHUB_ACTIONS, 'true', 'Installer lifecycle tests require a disposable CI runner.');
 assert.ok(['win32', 'darwin'].includes(process.platform));
 const require = createRequire(import.meta.url);
@@ -32,13 +31,13 @@ assert.equal(path.dirname(installer), artifactFolder);
 assert.equal(manifest.version, pkg.version);
 assert.equal(manifest.sourceCommit, await runFile('git', ['rev-parse', 'HEAD']));
 assert.equal(await hash(installer), manifest.sha256);
-await verifyUpdateAssets(manifest, artifactFolder);
+assert.deepEqual(manifest.updateAssets, []);
 const resultRoot = path.join(root, 'test-results');
 await fs.mkdir(resultRoot, { recursive: true });
 const run = await fs.mkdtemp(path.join(resultRoot, 'installer-'));
 const report = { ...manifest, testedOn: `${process.platform}-${process.arch}`, checks: [], ui: [], errors: [] };
 const pass = name => { report.checks.push(name); console.log(`PASS ${name}`); };
-const profile = path.join(process.platform === 'win32' ? process.env.APPDATA : path.join(process.env.HOME, 'Library', 'Application Support'), 'Meki');
+const profile = path.join(process.platform === 'win32' ? process.env.APPDATA : path.join(process.env.HOME, 'Library', 'Application Support'), PROFILE_NAME);
 assert.equal(await exists(profile), false, 'Refuse to test against an existing user profile.');
 await fs.mkdir(profile, { recursive: true });
 const marker = path.join(profile, 'installer-preservation-check.txt');
@@ -46,22 +45,24 @@ const document = path.join(run, '我的文稿.md');
 const preserved = '\uFEFF# Installer preservation\r\n\r\n$x^2$\r\n';
 await fs.writeFile(marker, preserved);
 await fs.writeFile(document, preserved);
-const profileMarkers = [marker];
-const preservedFiles = async () => { for (const file of [...profileMarkers, document]) assert.equal(await fs.readFile(file, 'utf8'), preserved); };
+const preservedFiles = async () => { for (const file of [marker, document]) assert.equal(await fs.readFile(file, 'utf8'), preserved); };
 let executable, application, mount;
 const installDirectory = path.join(run, 'Applications', pkg.productName);
 process.env.MEKI_INSTALLER_PATH = installer;
 process.env.MEKI_INSTALL_DIRECTORY = installDirectory;
+process.env.MEKI_INSTALL_PRODUCT = pkg.productName;
 const registry = String.raw`
-$found = @(Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue | Get-ItemProperty | Where-Object { $_.DisplayName -eq 'Meki' })
+$product = $env:MEKI_INSTALL_PRODUCT
+$progId = "$product.Markdown"
+$found = @(Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue | Get-ItemProperty | Where-Object { $_.DisplayName -eq $product })
 $installed = @($found | Select-Object DisplayVersion,UninstallString,@{Name='RegistryKey';Expression={$_.PSChildName}},@{Name='InstallLocation';Expression={(Get-ItemProperty -LiteralPath ("HKCU:\Software\" + $_.PSChildName)).InstallLocation}})
-$open = Get-Item 'HKCU:\Software\Classes\Meki.Markdown\shell\open\command' -ErrorAction SilentlyContinue
+$open = Get-Item -LiteralPath "HKCU:\Software\Classes\$progId\shell\open\command" -ErrorAction SilentlyContinue
 $md = Get-Item 'HKCU:\Software\Classes\.md\OpenWithProgids' -ErrorAction SilentlyContinue
 $links = @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs')) | ForEach-Object {
-  $link = Join-Path $_ 'Meki.lnk'
+  $link = Join-Path $_ "$product.lnk"
   if (Test-Path -LiteralPath $link) { (New-Object -ComObject WScript.Shell).CreateShortcut($link).TargetPath }
 }
-@{ installed = $installed; command = $(if ($open) { $open.GetValue('') } else { $null }); openWith = $(if ($md) { $md.GetValueNames() -contains 'Meki.Markdown' } else { $false }); shortcuts = @($links) } | ConvertTo-Json -Depth 4 -Compress
+@{ installed = $installed; command = $(if ($open) { $open.GetValue('') } else { $null }); openWith = $(if ($md) { $md.GetValueNames() -contains $progId } else { $false }); shortcuts = @($links) } | ConvertTo-Json -Depth 4 -Compress
 `;
 const defaultAssociation = () => powershell(String.raw`
 $values = @()
@@ -79,15 +80,17 @@ if ($installerProcess.ExitCode -ne 0) { throw "Installer exit: $($installerProce
 async function verifyPayload() {
   const archive = process.platform === 'win32' ? path.join(application, 'resources', 'app.asar') : path.join(application, 'Contents', 'Resources', 'app.asar');
   assert.equal(await hash(archive), manifest.asarSha256);
-  // Upgrading replaces this path; discard the previous archive's cached index.
+  // Reinstalling replaces this path; discard the previous archive's cached index.
   asar.uncache(archive);
-  assert.equal(JSON.parse(asar.extractFile(archive, 'package.json').toString()).version, pkg.version);
+  const installed = JSON.parse(asar.extractFile(archive, 'package.json').toString());
+  assert.equal(installed.version, pkg.version);
+  assert.equal(installed.productName, pkg.productName);
   assert.ok(await exists(executable));
   if (process.platform === 'darwin') {
     await runFile('codesign', ['--verify', '--deep', '--strict', application]);
     const architectures = (await runFile('lipo', ['-archs', executable])).split(/\s+/).sort();
     assert.deepEqual(architectures, ['arm64', 'x86_64']);
-    assert.equal(await runFile('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleIdentifier', path.join(application, 'Contents', 'Info.plist')]), 'io.meki.editor');
+    assert.equal(await runFile('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleIdentifier', path.join(application, 'Contents', 'Info.plist')]), APP_ID);
     assert.equal(await runFile('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleShortVersionString', path.join(application, 'Contents', 'Info.plist')]), pkg.version);
   }
 }
@@ -106,47 +109,21 @@ try {
     assert.equal(before.installed.length, 0, 'Refuse to replace an existing installation.');
     assert.equal(before.command, null);
     assert.equal(before.shortcuts.length, 0);
-    const previousInstaller = process.env.MEKI_UPGRADE_INSTALLER;
-    assert.ok(previousInstaller, 'Previous installer is required for the Windows upgrade regression.');
-    assert.equal((await fs.stat(previousInstaller)).size, previousWindows.size);
-    assert.equal(await hash(previousInstaller), previousWindows.sha256);
-    process.env.MEKI_INSTALLER_PATH = previousInstaller;
-    await installWindows();
-    process.env.MEKI_INSTALLER_PATH = installer;
-    const previous = JSON.parse(await powershell(registry));
-    assert.equal(previous.installed.length, 1);
-    assert.equal(previous.installed[0].DisplayVersion, previousWindows.version);
-    assert.equal(previous.installed[0].RegistryKey, installerConfig.nsis.guid);
-    const previousExecutable = previous.shortcuts[0];
-    assert.equal(path.dirname(previousExecutable), installDirectory);
-    assert.ok(await exists(previousExecutable));
-    const previousIdentity = asar.extractFile(path.join(installDirectory, 'resources', 'app.asar'), 'electron/app-identity.cjs').toString();
-    const previousProfileName = previousIdentity.match(/const PROFILE_NAME = '([A-Za-z][A-Za-z0-9-]{0,63})';/)?.[1];
-    assert.ok(previousProfileName);
-    const previousProfile = path.join(path.dirname(profile), previousProfileName);
-    if (previousProfile !== profile) {
-      assert.equal(await exists(previousProfile), false, 'Refuse to change an existing previous-version profile.');
-      await fs.mkdir(previousProfile);
-      const previousMarker = path.join(previousProfile, 'installer-upgrade-preservation-check.txt');
-      await fs.writeFile(previousMarker, preserved); profileMarkers.push(previousMarker);
-    }
     await installWindows();
     application = installDirectory;
-    executable = path.join(application, 'Meki.exe');
+    executable = path.join(application, `${WINDOWS_EXECUTABLE}.exe`);
     await verifyPayload();
     const state = JSON.parse(await powershell(registry));
     assert.equal(state.installed.length, 1);
     assert.equal(state.installed[0].DisplayVersion, pkg.version);
-    assert.equal(state.installed[0].RegistryKey, previous.installed[0].RegistryKey);
+    assert.equal(state.installed[0].RegistryKey, installerConfig.nsis.guid);
     assert.equal(path.resolve(state.installed[0].InstallLocation), application);
-    assert.equal(state.installed[0].UninstallString, `"${path.join(application, 'Uninstall Meki.exe')}" /currentuser`);
+    assert.equal(state.installed[0].UninstallString, `"${path.join(application, `Uninstall ${pkg.productName}.exe`)}" /currentuser`);
     assert.equal(state.command, `"${executable}" --open "%1"`);
     assert.equal(state.openWith, true);
     assert.deepEqual(state.shortcuts, [executable, executable]);
-    if (previousExecutable !== executable) assert.equal(await exists(previousExecutable), false);
     assert.equal(await defaultAssociation(), defaults);
     await preservedFiles();
-    pass('upgrade from the previous release replaces the executable, keeps one uninstall registration and preserves documents and both profile directories');
     pass('EXE installs to a chosen directory, registers uninstall/shortcuts/Open with, and preserves default associations');
     await installWindows();
     await verifyPayload();
@@ -199,7 +176,7 @@ try {
   pass(`${report.uiChecks} desktop checks against the installed application, including real Pandoc conversion`);
   if (process.platform === 'win32') {
     await powershell(`
-$uninstaller = Join-Path $env:MEKI_INSTALL_DIRECTORY 'Uninstall Meki.exe'
+$uninstaller = Join-Path $env:MEKI_INSTALL_DIRECTORY ('Uninstall ' + $env:MEKI_INSTALL_PRODUCT + '.exe')
 $uninstallProcess = Start-Process -FilePath $uninstaller -ArgumentList '/S /currentuser' -WindowStyle Hidden -Wait -PassThru
 if ($uninstallProcess.ExitCode -ne 0) { throw "Uninstaller exit: $($uninstallProcess.ExitCode)" }`);
     for (let attempt = 0; await exists(executable) && attempt < 120; attempt++) await new Promise(resolve => setTimeout(resolve, 500));
