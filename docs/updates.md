@@ -31,4 +31,4 @@
 | `main` | `v<版本>` | 构建 Meki，创建两种应用共用的 GitHub Release。 |
 | `research` | `mekir-v<版本>` | 构建 mekiR，记录研究版安装包的源码提交。 |
 
-两套安装包都通过 Windows x64、macOS Apple Silicon 和 Intel 的验证后，`Publish release` 会把四个安装包、两份源码和合并校验表放到 `v<版本>`。Meki 的签名更新文件也随该 Release 发布。需要重试发布时，在 `main` 上手动运行 `Publish release` 并填写 `v<版本>`。
+两套安装包都通过 Windows x64、macOS Apple Silicon 和 Intel 的验证后，`Publish release` 会把四个安装包、两份源码、各自的签名更新文件和合并校验表放到 `v<版本>`。应用按各自的文件前缀和签名清单中的应用 ID 检查、安装更新。需要重试发布时，在 `main` 上手动运行 `Publish release` 并填写 `v<版本>`。

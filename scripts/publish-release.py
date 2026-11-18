@@ -49,9 +49,8 @@ def collect_delivery(directory, output, product, version, tag):
     shared = {'README.md', 'ReleaseNotes.md', 'verification.json'}
     required = shared | {f'{product}-{version}-Setup-x64.exe', f'{product}-{version}-macOS-universal.dmg',
                          f'{product}-{version}-source.zip'}
-    if product == 'Meki':
-        required |= {f'Meki-{version}-{platform}-app.asar.gz' for platform in ['windows', 'macos']}
-        required |= {f'Meki-update-{platform}.json' for platform in ['windows', 'macos']}
+    required |= {f'{product}-{version}-{platform}-app.asar.gz' for platform in ['windows', 'macos']}
+    required |= {f'{product}-update-{platform}.json' for platform in ['windows', 'macos']}
     require(set(checksums) == required, f'{product} delivery has an unexpected asset inventory')
 
     combined = {}
