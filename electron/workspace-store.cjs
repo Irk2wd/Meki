@@ -6,6 +6,7 @@ const { constants } = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { validateAbsolutePath, isWithin, pathKey, isDocumentPath, MAX_DOCUMENT_BYTES } = require('./file-store.cjs');
+const { METADATA } = require('./research-model.cjs');
 
 const EXCLUDED = new Set(['.git', '.hg', '.svn', 'node_modules', '.meki', '.next', '.cache', '$RECYCLE.BIN', 'System Volume Information']);
 const MAX_TREE_FILES = 500;
@@ -14,10 +15,15 @@ const MAX_OPERATION_NODES = 5000;
 const MAX_COPY_BYTES = 256 * 1024 * 1024;
 const MAX_SEARCH_BYTES = 32 * 1024 * 1024;
 const excluded = name => [...EXCLUDED].some(entry => entry.toLowerCase() === name.toLowerCase());
+const researchMetadata = name => name.toLowerCase() === METADATA;
+
+function checkMutablePath(root, target) {
+  if (path.relative(root, target).split(path.sep).some(researchMetadata)) throw new Error(t("不能操作受保护的目录。"));
+}
 
 function allowedName(name) {
   // Keep names portable across Windows/macOS, and reject device names and alternate data streams.
-  if (typeof name !== 'string' || !name || name.length > 240 || /[<>:"/\\|?*\x00-\x1f]/.test(name) || /[. ]$/.test(name) || ['.', '..'].includes(name) || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(name) || excluded(name)) throw new Error(t("请输入有效的文件或文件夹名称，不能包含路径或系统保留名称。"));
+  if (typeof name !== 'string' || !name || name.length > 240 || /[<>:"/\\|?*\x00-\x1f]/.test(name) || /[. ]$/.test(name) || ['.', '..'].includes(name) || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(name) || excluded(name) || researchMetadata(name)) throw new Error(t("请输入有效的文件或文件夹名称，不能包含路径或系统保留名称。"));
   return name;
 }
 
@@ -52,6 +58,7 @@ class WorkspaceStore {
   async target(parent, name) {
     allowedName(name);
     const directory = await this.existing(parent, { root: true });
+    checkMutablePath(this.root, directory.path);
     if (!directory.stat.isDirectory()) throw new Error(t("目标位置必须是文件夹。"));
     const target = path.join(directory.path, name);
     const entry = await fs.lstat(target).catch(error => { if (error.code !== 'ENOENT') throw error; return null; });
@@ -70,7 +77,7 @@ class WorkspaceStore {
       children.sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name, 'en', { numeric: true }));
       for (const child of children) {
         if (entries.length >= limit || tree.length >= MAX_TREE_NODES) { truncated = true; return; }
-        if (child.isSymbolicLink() || excluded(child.name) || child.name.toLowerCase().endsWith('.assets') || (!child.isDirectory() && !isDocumentPath(child.name))) continue;
+        if (child.isSymbolicLink() || excluded(child.name) || researchMetadata(child.name) || child.name.toLowerCase().endsWith('.assets') || (!child.isDirectory() && !isDocumentPath(child.name))) continue;
         const candidate = path.join(directory, child.name);
         let item;
         try { item = await this.existing(candidate); } catch { continue; }
@@ -88,6 +95,7 @@ class WorkspaceStore {
     let nodes = 0, bytes = 0;
     const visit = async file => {
       if (++nodes > MAX_OPERATION_NODES) throw new Error(t("目录超过 5,000 项，请在系统文件管理器中操作。"));
+      checkMutablePath(this.root, file);
       const entry = await this.existing(file);
       if (entry.stat.isDirectory()) {
         for (const name of await fs.readdir(entry.path)) await visit(path.join(entry.path, name));

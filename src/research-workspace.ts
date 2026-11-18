@@ -175,7 +175,7 @@ export class ResearchWorkspace {
   private render(error?: string) {
     const state = this.snapshot;
     if (!state) {
-      const message = error || (this.loading ? t("正在读取研究项目…") : t("打开包含 meki-project.json 的项目，或创建一个渲染研究示例。"));
+      const message = error || (this.loading ? t("正在读取研究项目…") : t("打开包含 .mekir/project.json 的项目，或创建一个渲染研究示例。"));
       this.content.innerHTML = `<div class="research-empty"><h1 tabindex="-1">${ht("研究项目")}</h1>
         <p${error ? ' role="alert"' : ''}>${escape(message)}</p>
         ${this.loading ? '' : `<button type="button" class="primary-button" data-action="research-demo">${ht("创建渲染研究示例")}</button>`}
@@ -204,7 +204,7 @@ export class ResearchWorkspace {
         <button type="button" class="secondary-button" data-research-rules aria-expanded="${this.rules}">${ht("项目规则")}</button>
       </div>
       ${this.rules ? this.renderRules(state) : ''}
-      ${problems.length ? `<details class="research-problems"><summary>${ht("{0} 份记录无法读取", problems.length)}</summary><ul>${problems.map(item => `<li><code>${escape(item.file)}</code> · ${escape(item.message)}</li>`).join('')}</ul></details>` : ''}
+      ${problems.length ? `<details class="research-problems"><summary>${ht("{0} 份文档无法读取", problems.length)}</summary><ul>${problems.map(item => `<li><code>${escape(item.file)}</code> · ${escape(item.message)}</li>`).join('')}</ul></details>` : ''}
       ${view.layout === 'timeline' ? timeline(viewPhases, inView, this.phaseId) : ''}
       <section class="research-journal" aria-labelledby="research-journal-title">
         <div class="research-section-heading"><h2 id="research-journal-title">${ht("研究记录")} <span>${entries.length}</span></h2>
@@ -218,9 +218,9 @@ export class ResearchWorkspace {
       </section>`;
   }
 
-  private renderRules({ project, root }: ResearchSnapshot) {
+  private renderRules({ project, root, manifestFile }: ResearchSnapshot) {
     return `<section class="research-rules" aria-label="${ht("项目规则")}">
-      <div><code>meki-project.json</code> · ${escape(project.timezone)}
+      <div><code>${escape(manifestFile)}</code> · ${escape(project.timezone)}
         <button type="button" class="secondary-button" data-research-copy-root>${ht("复制项目路径")}</button>
       </div>
       <p>${escape(root)}</p>
@@ -239,7 +239,7 @@ export class ResearchWorkspace {
       if (group) group.push(item);
       else byDate.set(item.record.date, [item]);
     }
-    const titles = new Map(state.records.map(({ record }) => [record.id, record.title]));
+    const titles = new Map(state.documents.map(({ id, title }) => [id, title]));
     return Array.from(byDate, ([date, items]) => `<div class="research-date-group">
       <time datetime="${date}">${escape(date)}</time>
       <ul>${items.map(({ record, issues }) => {
@@ -257,7 +257,7 @@ export class ResearchWorkspace {
             ${record.coverage ? `<span>${ht("覆盖 {0}", escape(rangeText(record.coverage)))}</span>` : ''}
             ${fields.map(rule => `<span>${escape(rule.label)} <strong>${escape(fieldValue(rule, record.fields[rule.id]))}</strong></span>`).join('')}
           </div>` : ''}
-          ${sources.length ? `<div class="research-sources"><span>${ht("来源记录")}</span>${sources.map(id => `<button type="button" data-research-record="${id}">${escape(titles.get(id)!)}</button>`).join('')}</div>` : ''}
+          ${sources.length ? `<div class="research-sources"><span>${ht("来源文档")}</span>${sources.map(id => `<button type="button" data-research-record="${id}">${escape(titles.get(id)!)}</button>`).join('')}</div>` : ''}
           ${issues.length ? `<p class="research-issues">${escape(issues.join(' '))}</p>` : ''}
         </li>`;
       }).join('')}</ul></div>`).join('');
@@ -305,6 +305,10 @@ export class ResearchWorkspace {
     const type = record ? project.recordTypes.find(type => type.id === record.type) ?? project.recordTypes[0]
       : available.find(type => view?.typeIds?.includes(type.id)) ?? available[0];
     const typeOptions = (record ? project.recordTypes : available).map(item => option(item.id, item.label, type.id));
+    const sources = state.documents.filter(source => source.id !== record?.id)
+      .sort((a, b) => Number(!a.date) - Number(!b.date) || (a.date || '').localeCompare(b.date || '') || a.title.localeCompare(b.title, getLocale()));
+    const availableIds = new Set(sources.map(source => source.id));
+    const missingSources = (record?.sources || []).filter(id => !availableIds.has(id));
     this.dialog.innerHTML = `<form>
       <div class="dialog-heading"><h2>${escape(record ? t("编辑记录属性") : kind === 'summary' ? t("插入阶段总结") : t("新建研究记录"))}</h2>
         <button type="button" class="icon-button" data-research-cancel aria-label="${ht("关闭") }">${icon('close', 15)}</button></div>
@@ -321,8 +325,9 @@ export class ResearchWorkspace {
           <label>${ht("覆盖开始")}<input name="start" type="date" value="${escape(record?.coverage?.start || '')}"></label>
           <label>${ht("覆盖结束")}<input name="end" type="date" value="${escape(record?.coverage?.end || '')}"></label>
         </div>
-        <details class="research-source-choices"><summary>${ht("关联来源记录")}</summary>
-          ${state.records.filter(item => item.record.id !== record?.id).sort(sortEntries).map(({ record: source }) => `<label><input type="checkbox" name="source" value="${source.id}"${record?.sources?.includes(source.id) ? ' checked' : ''}> <time>${source.date}</time> ${escape(source.title)}</label>`).join('')}
+        <details class="research-source-choices"><summary>${ht("关联来源文档")}</summary>
+          ${sources.map(source => `<label title="${escape(source.relativePath)}"><input type="checkbox" name="source" value="${source.id}"${record?.sources?.includes(source.id) ? ' checked' : ''}> ${source.date ? `<time>${source.date}</time> ` : ''}${escape(source.title)}</label>`).join('')}
+          ${missingSources.map(id => `<label><input type="checkbox" name="source" value="${id}" checked> ${ht("{0}（文档暂不可用）", id)}</label>`).join('')}
         </details>
       </div>
       <div class="research-form-grid" data-research-fields></div>

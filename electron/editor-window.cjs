@@ -5,6 +5,7 @@ const { app, BrowserWindow, Menu, dialog, shell, screen, clipboard, session } = 
 const bootstrap = globalThis[Symbol.for('meki.bootstrap')];
 const { WorkspaceStore, documentStatus } = require('./workspace-store.cjs');
 const { ResearchStore } = require('./research-store.cjs');
+const { DOCUMENT_SCHEME, researchLinkId } = require('./research-links.mjs');
 const { exampleProject, exampleRecords } = require('./research-example.cjs');
 const { PRODUCT_NAME } = require('./app-identity.cjs');
 const { validateSession } = require('./lifecycle-store.cjs');
@@ -243,6 +244,13 @@ async function currentResearch(root = workspaceStore?.root) {
   return project;
 }
 
+async function researchDocumentPath(project, selected, documentId) {
+  const { relativePath } = await project.resolveDocument(documentId);
+  const file = await selected.existing(path.join(project.root, relativePath), { document: true });
+  if (selected !== workspaceStore) throw new Error(t("项目目录已移动，请重新打开。"));
+  return file.path;
+}
+
 async function createResearchDemo() {
   const selected = TEST_MODE ? process.env.MEKI_TEST_RESEARCH_PARENT : (await dialog.showOpenDialog(mainWindow, {
     title: t("选择渲染研究示例的存放位置"), defaultPath: app.getPath('documents'), properties: ['openDirectory', 'createDirectory'],
@@ -352,6 +360,10 @@ async function mutateWorkspace(input) {
     let refreshed = workspace;
     try { refreshed = await refreshWorkspace(); }
     catch (error) { warning = t("文件操作已完成，请刷新文件树：{0}", error.message); }
+    if (project && ['rename', 'move'].includes(result.action)) {
+      try { await project.remapIndexedDocuments(result.previousPath, result.path); }
+      catch (error) { warning = t("文件已移动，文档索引更新失败：{0}", error.message); }
+    }
     // Report the new path even if optional metadata/refresh fails after a successful filesystem operation.
     return { ...result, workspace: refreshed, warning };
   });
@@ -566,10 +578,10 @@ function registerIpc() {
     return project.writeBatch(input);
   });
   register('open-research-record', async (root, recordId) => {
+    const selected = workspaceStore;
     const project = await currentResearch(root);
     if (!project) throw new Error(t("请先打开要编辑的研究项目。"));
-    const file = project.recordPath(recordId);
-    await workspaceStore.existing(file, { document: true });
+    const file = await researchDocumentPath(project, selected, recordId);
     return openKnownDocument(authorize(file));
   });
   register('list-recent-folders', () => store.metadata.recentFolders);
@@ -617,7 +629,20 @@ function registerIpc() {
   });
   register('resolve-document-link', async (href, documentPath) => {
     requireAuthorized(documentPath);
-    const boundary = workspaceStore && isWithin(documentPath, workspaceStore.root) ? workspaceStore : await WorkspaceStore.open(path.dirname(documentPath));
+    const selected = workspaceStore && isWithin(documentPath, workspaceStore.root) ? workspaceStore : null;
+    if (typeof href === 'string' && href.startsWith(DOCUMENT_SCHEME)) {
+      const documentId = researchLinkId(href);
+      if (!documentId) throw new TypeError(t("无效的 Markdown 链接。"));
+      const project = selected && await currentResearch(selected.root);
+      if (!project) throw new Error(t("请先打开要编辑的研究项目。"));
+      await selected.existing(documentPath, { document: true });
+      const hash = href.indexOf('#');
+      let anchor = '';
+      try { if (hash >= 0) anchor = decodeURIComponent(href.slice(hash + 1)); }
+      catch { throw new Error(t("链接包含无效的 URL 编码。")); }
+      return { path: authorize(await researchDocumentPath(project, selected, documentId)), anchor };
+    }
+    const boundary = selected || await WorkspaceStore.open(path.dirname(documentPath));
     const result = await boundary.resolveLink(href, documentPath);
     authorize(result.path);
     return result;

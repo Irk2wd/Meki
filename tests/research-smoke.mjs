@@ -57,6 +57,10 @@ try {
   await page.getByRole('button', { name: '创建渲染研究示例' }).click();
   await page.getByRole('heading', { name: '实时渲染性能研究', exact: true }).waitFor();
   await idle();
+  assert.equal(command('describe').format.manifest, '.mekir/project.json');
+  assert.equal(command('read', ['exploration-review']).relativePath, '.mekir/summaries/r-exploration-review.md');
+  assert.equal(command('read', ['tile-culling']).relativePath, 'records/r-tile-culling.md');
+  assert.ok((await page.evaluate(() => window.meki.refreshWorkspace())).tree.every(entry => !entry.relativePath.startsWith('.mekir')));
   assert.equal(await page.locator('.research-timeline [data-research-phase]').count(), 3);
   const summaries = page.locator('.research-timeline-summary');
   assert.match(await summaries.first().innerText(), /撰写于.*16/);
@@ -84,6 +88,10 @@ try {
   assert.match(command('read', [manual.id]).body, /在 Meki 中完成记录/);
   console.log('PASS date filter, configured form, Markdown template and Meki editing');
 
+  const notes = path.join(project, 'notes');
+  await fs.mkdir(notes);
+  await fs.writeFile(path.join(notes, '测量方法.md'), '# 测量方法\n\n使用固定镜头轨迹。\n');
+  assert.equal(command('index', ['measurement-notes', '--path', 'notes/测量方法.md']).id, 'measurement-notes');
   await showProject();
   await page.locator('[data-research-clear]').click();
   await page.locator('[data-research-phase="exploration"]').click();
@@ -92,15 +100,34 @@ try {
   await dialog.locator('[name=date]').fill('2026-11-17');
   assert.equal(await dialog.locator('[name=start]').inputValue(), '2026-11-05');
   assert.equal(await dialog.locator('[name=end]').inputValue(), '2026-11-13');
-  await dialog.getByText('关联来源记录', { exact: true }).click();
+  await dialog.getByText('关联来源文档', { exact: true }).click();
   await dialog.locator(`[name=source][value="${manual.id}"]`).check();
+  await dialog.locator('[name=source][value=measurement-notes]').check();
   await dialog.getByRole('button', { name: '创建并编辑' }).click();
   await page.locator('#visual-editor h1').filter({ hasText: '阈值阶段回顾' }).waitFor();
   await idle();
   const summary = command('list', ['--from', '2026-11-17', '--type', 'stage-summary']).records[0].record;
   assert.deepEqual(summary.coverage, { start: '2026-11-05', end: '2026-11-13' });
-  assert.deepEqual(summary.sources, [manual.id]);
-  assert.ok(command('read', [summary.id]).body.includes(`(r-${manual.id}.md)`));
+  assert.deepEqual(summary.sources, [manual.id, 'measurement-notes']);
+  const written = command('read', [summary.id]);
+  assert.equal(written.relativePath, `.mekir/summaries/r-${summary.id}.md`);
+  assert.ok(written.body.includes(`(mekir:${manual.id})`));
+  await sourceAppend('\n阶段总结正文已保存。');
+  await page.locator('[data-action=save]').click();
+  await idle();
+  const summaryBody = command('read', [summary.id]).body;
+  assert.match(summaryBody, /阶段总结正文已保存/);
+  assert.ok(summaryBody.includes('(mekir:measurement-notes)'));
+
+  const rename = await page.evaluate(notes => window.meki.workspaceOperation({ action: 'rename', path: notes, name: 'materials' }), notes);
+  assert.equal(rename.path, path.join(project, 'materials'));
+  assert.equal(rename.warning, undefined);
+  assert.equal(command('resolve', ['measurement-notes']).relativePath, 'materials/测量方法.md');
+  assert.equal(command('read', [summary.id]).body, summaryBody);
+  await page.locator('[data-mode=visual]').click();
+  await page.locator('#visual-editor a[href="mekir:measurement-notes"]').click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
+  await page.locator('#visual-editor h1').filter({ hasText: '测量方法' }).waitFor();
+  await idle();
   await showProject();
   await page.locator('.research-timeline-summary').filter({ hasText: '阈值阶段回顾' }).waitFor();
   await page.locator(`[data-research-edit="${summary.id}"]`).click();
@@ -108,7 +135,7 @@ try {
   await dialog.getByRole('button', { name: '保存属性' }).click();
   await page.locator('.research-entry-meta').getByText('覆盖 2026-11-05 – 2026-11-12').waitFor();
   assert.equal(command('read', [summary.id]).record.coverage.end, '2026-11-12');
-  console.log('PASS distinct summary dates, source links and timeline coverage');
+  console.log('PASS hidden summaries, indexed Markdown links, workspace rename and timeline coverage');
 
   const discovery = command('describe');
   const config = discovery.project;
@@ -140,7 +167,7 @@ try {
   assert.deepEqual(command('batch', [], batch).records.map(item => item.changed), [false, false, false]);
   assert.equal(command('read', [manual.id]).body, original.body);
   assert.match(command('read', [run.id]).body, /render-9c217/);
-  assert.match(command('read', ['agent-review']).body, /r-agent-verification.md/);
+  assert.match(command('read', ['agent-review']).body, /mekir:agent-verification/);
   await page.getByRole('button', { name: '复测结果', exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: '复测结果', exact: true }).getAttribute('aria-pressed'), 'true');
   await page.locator('[data-research-clear]').click();

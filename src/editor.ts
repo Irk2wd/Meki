@@ -1,5 +1,6 @@
 import { textPointerSelection } from './editor-selection';
 import { t } from '../electron/i18n.mjs';
+import { researchLinkId } from '../electron/research-links.mjs';
 import { Crepe } from '@milkdown/crepe';
 import { editorViewCtx, parserCtx, serializerCtx } from '@milkdown/kit/core';
 import { codeBlockConfig } from '@milkdown/kit/component/code-block';
@@ -8,7 +9,7 @@ import { tableBlockView } from '@milkdown/kit/component/table-block';
 import { blockService } from '@milkdown/kit/plugin/block';
 import { remarkGFMPlugin, strikethroughInputRule, addRowAfterCommand } from '@milkdown/kit/preset/gfm';
 import { callCommand, insert, replaceAll } from '@milkdown/kit/utils';
-import { toggleStrongCommand, toggleEmphasisCommand, wrapInBulletListCommand, createCodeBlockCommand } from '@milkdown/kit/preset/commonmark';
+import { toggleStrongCommand, toggleEmphasisCommand, wrapInBulletListCommand, createCodeBlockCommand, linkAttr, linkSchema } from '@milkdown/kit/preset/commonmark';
 import { type EditorState as RichState } from '@milkdown/kit/prose/state';
 import { closeHistory } from '@milkdown/kit/prose/history';
 import { EditorView, basicSetup } from 'codemirror';
@@ -107,6 +108,12 @@ export class WritingEditor {
     this.crepe.editor.config(ctx => {
       ctx.set(blockService.key, () => this.blocks);
       ctx.set(remarkGFMPlugin.options.key, { singleTilde: false });
+      ctx.update(linkSchema.key, previous => ctx => {
+        const schema = previous(ctx);
+        return { ...schema, toDOM: (mark, inline) => researchLinkId(mark.attrs.href)
+          ? ['a', { ...ctx.get(linkAttr.key)(mark), ...mark.attrs }]
+          : schema.toDOM!(mark, inline) };
+      });
       // Pixel dimensions are separate from alt/title and survive the Markdown and clipboard paths.
       ctx.update(imageBlockSchema.key, previous => ctx => ({
         ...previous(ctx),

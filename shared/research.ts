@@ -65,11 +65,20 @@ export interface ResearchEntry {
   issues: string[];
 }
 
+export interface ResearchReference {
+  id: string;
+  title: string;
+  relativePath: string;
+  date?: string;
+}
+
 export interface ResearchSnapshot {
   root: string;
   project: ResearchProject;
   revision: string;
+  manifestFile: string;
   records: ResearchEntry[];
+  documents: ResearchReference[];
   problems: Array<{ file: string; message: string }>;
 }
 

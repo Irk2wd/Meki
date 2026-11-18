@@ -1,4 +1,5 @@
 import { t } from '../electron/i18n.mjs';
+import { researchLinkId } from '../electron/research-links.mjs';
 import { TextSelection, type Transaction } from '@milkdown/kit/prose/state';
 import { Fragment, Slice, type Node as ProseNode } from '@milkdown/kit/prose/model';
 import type { EditorView as ProseView } from '@milkdown/kit/prose/view';
@@ -66,7 +67,8 @@ export class EditorActions {
     const selected = this.selectedText();
     if (kind === 'link') {
       const href = (data.href || '').trim();
-      if (!href || /[\u0000-\u0020<>]/.test(href) || /^(?!https?:|mailto:)[a-z][a-z0-9+.-]*:/i.test(href)) throw new Error(t("请输入网页、邮件、相对文件地址或章节锚点。"));
+      const otherScheme = /^(?!https?:|mailto:)[a-z][a-z0-9+.-]*:/i.test(href);
+      if (!href || /[\u0000-\u0020<>]/.test(href) || (otherScheme && !researchLinkId(href))) throw new Error(t("请输入网页、邮件、相对文件地址或章节锚点。"));
       const text = data.text || selected || href;
       if (point.mode === 'source') return this.sourceInsert(`[${escapeMarkdownLabel(text)}](${href.replace(/[()]/g, c => c === '(' ? '%28' : '%29')})`);
       const view = this.visual(), mark = view.state.schema.marks.link.create({ href, title: null });

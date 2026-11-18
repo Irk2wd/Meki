@@ -4,7 +4,18 @@
 
 在项目里按日期筛选，再点「新建研究记录」，表单会带入该日期。提交后用 mekiR 编辑并保存正文。点「插入阶段总结」可分别填写撰写日期、覆盖开始与结束、关联阶段和来源记录。时间线用横条表示阶段和总结覆盖时段，用圆点表示记录日期。点击阶段横条筛选记录，点击总结打开正文。记录行末的设置按钮可调整属性。
 
-项目的 `meki-project.json` 定义阶段、记录类型、字段规则、创建模板、视图和 agent 指引。每条记录保存在 `records/r-<id>.md`，包含 JSON 格式的文档头和 Markdown 正文。日期使用 `YYYY-MM-DD`，所有时段包含首尾两日。引用使用记录 ID，模板在创建时展开，之后可像普通 Markdown 一样编辑。
+项目的 `.mekir/project.json` 定义阶段、记录类型、字段规则、创建模板、视图和 agent 指引。普通实验写入 `records/r-<id>.md`，新建的阶段总结写入 `.mekir/summaries/r-<id>.md`。两者都包含 JSON 文档头和可编辑的 Markdown 正文。时间线读取阶段区间、总结覆盖区间和记录日期生成。日期使用 `YYYY-MM-DD`，所有时段包含首尾两日。
+
+## 引用项目内的文档
+
+实验与阶段总结自动以记录 ID 加入文档索引。用 CLI 给已有 Markdown 或文本文件登记 ID，然后在阶段总结里勾选它作为来源。
+
+```sh
+node electron/research-cli.cjs index /path/to/project capture-notes --path notes/capture.md
+node electron/research-cli.cjs resolve /path/to/project capture-notes
+```
+
+`list` 返回 `documents`，可查询每条来源的 ID 和相对路径。总结将来源 ID 保存在 `sources`，模板可生成 `[抓帧说明](mekir:capture-notes)`。在项目内按住 Ctrl 或 Command 点击正文链接，可跳到索引中的文档。用文件侧栏移动或重命名普通文档时，mekiR 会更新 `.mekir/index.json`。在系统文件管理器中移位后，用同一个 ID 和新路径再运行一次 `index`。
 
 ## Agent 批量写入
 
@@ -52,10 +63,6 @@ node electron/research-cli.cjs batch /path/to/project --input batch.json
 
 从一份配置创建新项目时可用 `init <新目录> --input <配置文件>`，从自带示例创建可用 `init-demo <新目录>`。用 `node electron/research-cli.cjs --help` 查看完整命令。验证界面和 CLI 联动可运行 `npm run test:research`。
 
-## 项目数据的存储方向
+## 归档
 
-建议让一份研究项目对应一个可独立复制的普通目录，可放在源码工作区之外。实验和总结继续存为 `records/r-<id>.md`。发生日期、阶段 ID、覆盖区间和来源 ID 随 Markdown 文件保存，移动一条记录时正文和元数据能一起带走，也方便用 Git 查看同一次修改。
-
-项目级配置目前只有一个 `meki-project.json`，放在根目录便于打开和检查。如果后续有多份模板和视图定义，可把阶段、字段规则、共享模板和视图集中在项目内的 `.mekir/`，应用和 CLI 读取同一份有版本号的配置。在 Git 中应保留这些配置。参考 [Obsidian 的文件、配置与缓存分层](https://obsidian.md/help/Files%2Band%2Bfolders/How%2BObsidian%2Bstores%2Bdata)。
-
-最近打开的位置、窗口布局、草稿和可重建索引适合保存在本机应用数据目录。项目归档包含正文、项目规则和实际纳入的附件。附件优先用相对路径引用，大体积结果留在既有存储时可在归档清单里标明外部依赖。
+归档或用 Git 跟踪项目时，保留整个项目目录，包括 `.mekir/`、实验记录、索引引用的文档和附件。`.mekir/` 在应用的普通文件树中隐藏，从「研究项目」打开阶段总结。根目录包含 `meki-project.json` 的旧版项目仍可按原布局读写。

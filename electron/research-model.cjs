@@ -1,10 +1,14 @@
 'use strict';
 
 const { isDeepStrictEqual } = require('node:util');
+const { DOCUMENT_SCHEME, RESEARCH_ID } = require('./research-links.mjs');
 
-const MANIFEST = 'meki-project.json';
+const METADATA = '.mekir';
+const MANIFEST = `${METADATA}/project.json`;
+const LEGACY_MANIFEST = 'meki-project.json';
+const INDEX = `${METADATA}/index.json`;
+const SUMMARIES = `${METADATA}/summaries`;
 const RECORDS = 'records';
-const ID = /^[a-z][a-z0-9_-]{0,63}$/;
 const RECORD_FILE = /^r-([a-z][a-z0-9_-]{0,63})\.md$/;
 const REVISION = /^[a-f0-9]{64}$/;
 const FIELD_TYPES = ['text', 'number', 'boolean', 'date', 'choice'];
@@ -25,7 +29,7 @@ function string(value, label, { limit = 240, empty = false } = {}) {
 }
 
 function id(value, label) {
-  assert(typeof value === 'string' && ID.test(value), `${label} must be a lowercase identifier such as render-a.`);
+  assert(typeof value === 'string' && RESEARCH_ID.test(value), `${label} must be a lowercase identifier such as render-a.`);
 }
 
 function date(value, label) {
@@ -213,11 +217,11 @@ function fieldIssues(record, type) {
   return checks;
 }
 
-function validateChange(record, previous, project, records) {
+function validateChange(record, previous, project, documents) {
   const issues = relationshipIssues(record, project);
   if (issues.length) throw new Error(issues.join(' '));
   for (const source of record.sources || []) {
-    assert(records.has(source) || previous?.sources?.includes(source), `Source record does not exist: ${source}.`);
+    assert(documents.has(source) || previous?.sources?.includes(source), `Source document does not exist: ${source}.`);
   }
   const type = project.recordTypes.find(item => item.id === record.type);
   for (const { field, message } of fieldIssues(record, type)) {
@@ -246,13 +250,13 @@ function fileName(recordId) {
   return `r-${recordId}.md`;
 }
 
-function templateBody(record, project, records) {
+function templateBody(record, project, documents, sourceHref) {
   const type = project.recordTypes.find(item => item.id === record.type);
   const title = value => value.replace(/[\\\[\]]/g, '\\$&');
   const values = {
     title: record.title, date: record.date, phase: project.phases.find(phase => phase.id === record.phaseId)?.title || '',
     coverage_start: record.coverage?.start || '', coverage_end: record.coverage?.end || '',
-    sources: (record.sources || []).map(source => `- [${title(records.get(source)?.record.title || source)}](${fileName(source)})`).join('\n'),
+    sources: (record.sources || []).map(source => `- [${title(documents.get(source)?.title || source)}](${sourceHref(source)})`).join('\n'),
   };
   return type.template.replace(TOKEN, (_, key) => key.startsWith('field.')
     ? String(Object.hasOwn(record.fields, key.slice(6)) ? record.fields[key.slice(6)] : '')
@@ -260,7 +264,8 @@ function templateBody(record, project, records) {
 }
 
 module.exports = {
-  MANIFEST, RECORDS, RECORD_FILE, REVISION, FIELD_TYPES, TEMPLATE_KEYS,
+  METADATA, MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, RECORDS, DOCUMENT_SCHEME,
+  RECORD_FILE, REVISION, FIELD_TYPES, TEMPLATE_KEYS,
   assert, object, array, id, date, listOfIds, validateProject, validateRecord, relationshipIssues,
   fieldIssues, validateChange, parseMarkdown, formatMarkdown, fileName, templateBody,
 };
