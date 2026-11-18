@@ -1,0 +1,42 @@
+:root {
+  --editor-selection:#dbe8f3;
+  --editor-selection-inactive:#e7edf2;
+  --editor-block-selection:#edf3f8;
+  --editor-block-border:#b9ccdc;
+}
+:root[data-theme=linen] {
+  --editor-selection:#dce5eb;
+  --editor-selection-inactive:#e8e8e3;
+  --editor-block-selection:#eaf0f1;
+  --editor-block-border:#b8cbd0;
+}
+:root[data-theme=night] {
+  --editor-selection:#38546a;
+  --editor-selection-inactive:#34444f;
+  --editor-block-selection:#293c48;
+  --editor-block-border:#526e82;
+}
+@media screen {
+  .editor-host .milkdown { --crepe-color-selected:var(--editor-selection); }
+  .meki-document::selection,.meki-document ::selection,.source-editor ::selection { background:var(--editor-selection); }
+  .milkdown .ProseMirror .milkdown-code-block:not(:has(.meki-math,.meki-block-diagram)) { background:var(--side); }
+  .milkdown .ProseMirror .milkdown-code-block .cm-gutters { background:transparent; }
+  .milkdown .ProseMirror .milkdown-code-block:focus-within:not(.selected):not(.meki-block-menu-target) { border-color:color-mix(in srgb,var(--accent) 28%,var(--border)); }
+  .milkdown .ProseMirror .milkdown-code-block.selected,
+  .milkdown .ProseMirror .milkdown-code-block.ProseMirror-selectednode,
+  .milkdown > .ProseMirror > :is(p,h1,h2,h3,h4,h5,h6,blockquote,ul,ol).ProseMirror-selectednode,
+  .milkdown .ProseMirror .meki-block-menu-target {
+    outline:none;
+    border-radius:6px;
+    background:var(--editor-block-selection);
+    box-shadow:inset 0 0 0 1px var(--editor-block-border);
+  }
+  .milkdown .ProseMirror .milkdown-code-block:is(.selected,.ProseMirror-selectednode,.meki-block-menu-target) { background:var(--editor-block-selection); border-color:var(--editor-block-border); border-radius:8px; }
+  .milkdown .ProseMirror .milkdown-code-block:is(.selected,.ProseMirror-selectednode,.meki-block-menu-target) .cm-editor,
+  .milkdown .ProseMirror .milkdown-code-block:is(.selected,.ProseMirror-selectednode,.meki-block-menu-target) .cm-gutters { background:transparent; }
+}
+@media print {
+  .milkdown .ProseMirror .meki-block-menu-target,
+  .milkdown .ProseMirror .milkdown-code-block:is(.selected,.ProseMirror-selectednode) { outline:none!important; box-shadow:none!important; }
+  .cm-selectionLayer,.cm-cursorLayer { display:none!important; }
+}

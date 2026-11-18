@@ -42,6 +42,8 @@ import './markdown-extensions.css';
 import './diagrams.css';
 import './editor-block-handle.css';
 import './editor-lists.css';
+import './editor-highlights.css';
+import { editorHighlights } from './editor-highlights';
 
 export interface EditorSnapshot {
   rich: RichState; source: EditorState; mode: 'visual' | 'source';
@@ -146,13 +148,13 @@ export class WritingEditor {
   }
 
   private sourceState(content: string) {
-    return EditorState.create({ doc: content, extensions: [basicSetup, markdown(), EditorView.lineWrapping, this.search.sourceExtension, this.writing.sourceConfig, this.typing.sourceExtension,
+    return EditorState.create({ doc: content, extensions: [basicSetup, editorHighlights, markdown(), EditorView.lineWrapping, this.search.sourceExtension, this.writing.sourceConfig, this.typing.sourceExtension,
       keymap.of(searchKeymap), EditorView.contentAttributes.of({ 'aria-label': t("Markdown 源码编辑区"), spellcheck: 'false' }),
       EditorView.updateListener.of(update => {
         if (update.docChanged && !this.updating && this.mode === 'source') { this.onChange(update.state.doc.toString()); this.search.documentChanged(); }
         if (!this.updating && this.mode === 'source' && (update.docChanged || update.selectionSet)) this.writing.updated();
       }),
-      EditorView.theme({ '&': { height: '100%', backgroundColor: 'transparent', color: 'var(--text)' }, '.cm-scroller': { fontFamily: 'var(--mono)', fontSize: '15px', lineHeight: '1.85' }, '.cm-content': { padding: '32px 28px 100px' }, '.cm-gutters': { background: 'transparent', color: 'var(--muted)', border: 'none' }, '.cm-activeLine': { background: 'var(--hover)' }, '.cm-activeLineGutter': { background: 'var(--hover)' }, '.cm-cursor': { borderLeftColor: 'var(--accent)' }, '.cm-selectionBackground': { background: 'var(--selection) !important' }, '.cm-focused': { outline: 'none' } }),
+      EditorView.theme({ '&': { height: '100%', backgroundColor: 'transparent', color: 'var(--text)' }, '.cm-scroller': { fontFamily: 'var(--mono)', fontSize: '15px', lineHeight: '1.85' }, '.cm-content': { padding: '32px 28px 100px' }, '.cm-gutters': { background: 'transparent', color: 'var(--muted)', border: 'none' }, '.cm-cursor': { borderLeftColor: 'var(--accent)' }, '.cm-focused': { outline: 'none' } }),
     ] });
   }
 
