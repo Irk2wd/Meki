@@ -9,6 +9,7 @@ import { isHistoryTransaction } from '@milkdown/kit/prose/history';
 import type { Node } from '@milkdown/kit/prose/model';
 import { codeDefaults, newCodeLanguage, validCodeLanguage, type CodeOptions } from './code-options';
 import type { Settings } from '../shared/meki';
+import { editorHighlights } from './editor-highlights';
 
 export class EditorCode {
   private settings = { ...codeDefaults };
@@ -20,9 +21,7 @@ export class EditorCode {
   readonly theme = EditorView.theme({
     '&': { backgroundColor: 'var(--side)', color: 'var(--text)' },
     '.cm-gutters': { backgroundColor: 'var(--side)', color: 'var(--soft)', border: 'none' },
-    '.cm-activeLine,.cm-activeLineGutter': { backgroundColor: 'var(--hover)' },
     '.cm-cursor,.cm-dropCursor': { borderLeftColor: 'var(--accent)' },
-    '.cm-selectionBackground,&.cm-focused .cm-selectionBackground,::selection': { backgroundColor: 'var(--selection)' },
   });
   language() { return newCodeLanguage(this.settings); }
   updateSettings(settings: Settings) {
@@ -42,7 +41,7 @@ export class EditorCode {
   // Crepe destroys offscreen CodeMirror views. Newly mounted views must get current settings.
   readonly extension: Extension = (() => {
     const owner = this;
-    return [syntaxHighlighting(codeHighlightStyle), this.compartment.of(this.configuration()), ViewPlugin.fromClass(class {
+    return [editorHighlights, syntaxHighlighting(codeHighlightStyle), this.compartment.of(this.configuration()), ViewPlugin.fromClass(class {
       constructor(readonly view: EditorView) {
         owner.views.add(view);
         queueMicrotask(() => { if (owner.views.has(view)) view.dispatch({ effects: owner.compartment.reconfigure(owner.configuration()) }); });
