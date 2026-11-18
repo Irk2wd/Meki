@@ -1,5 +1,6 @@
 import type { ExportRequest, ExportTools, ImportedDocument, DiagramSaveRequest } from './export';
 import type { UpdateState } from './updates';
+import type { ResearchBatch, ResearchSnapshot, ResearchWriteResult } from './research';
 export interface DocumentFile {
   path: string | null;
   name: string;
@@ -84,6 +85,7 @@ export interface BootState {
   transferred?: boolean;
   platform: string;
   version: string;
+  updatesAvailable: boolean;
   settings: Settings;
   recovery: Draft | null;
   initialDoc?: DocumentFile | null;
@@ -126,6 +128,10 @@ export interface MekiAPI {
   openRecentFolder(path: string): Promise<Workspace>;
   changeRecentFolders(input: RecentFolderChange): Promise<RecentFolder[]>;
   refreshWorkspace(): Promise<Workspace | null>;
+  researchSnapshot(): Promise<ResearchSnapshot | null>;
+  createResearchDemo(): Promise<Workspace | null>;
+  writeResearchBatch(root: string, input: ResearchBatch): Promise<ResearchWriteResult>;
+  openResearchRecord(root: string, id: string): Promise<DocumentFile | null>;
   workspaceOperation(input: WorkspaceRequest): Promise<WorkspaceResult | null>;
   searchWorkspace(query: string, caseSensitive?: boolean): Promise<WorkspaceSearch>;
   workspacePathAction(action: 'reveal' | 'copy-path', path: string): Promise<void>;

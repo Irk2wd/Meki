@@ -1,57 +1,24 @@
 <p align="center">
-  <img src="assets/icon.svg" width="80" height="80" alt="Meki 图标">
+  <img src="assets/icon.svg" width="80" height="80" alt="mekiR 图标">
 </p>
 
-<h1 align="center">Meki</h1>
+# mekiR
 
-<p align="center">
-  <strong>你的文字，留在本地。</strong><br>
-  适用于 Windows 与 macOS 的 Markdown 编辑器<br>
-  即时预览 · 离线公式与图表 · 自由分栏
-</p>
+Meki 的 `research` 分支，面向科研项目的本地工作区。按日期记录实验、编写带来源的阶段总结，在时间线上查看阶段和总结的覆盖时段。记录正文沿用 Meki 的 Markdown 编辑器、离线公式和图表、附件与导出。
 
-<p align="center">
-  <a href="#写作所需">功能亮点</a> ·
-  <a href="#获取-meki">获取 Meki</a> ·
-  <a href="docs/README.md">文档</a> ·
-  <a href="docs/releases/1.1.3.md">版本说明</a>
-</p>
+## 从源码启动
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/meki-night.png">
-  <img src="docs/images/meki-paper.png" alt="Meki 的真实编辑界面：本地文稿、大纲、任务列表、数学公式与 Mermaid 流程图。" width="1320">
-</picture>
+使用 Node.js 24 和 npm 11，或 Node.js 22.12+ 配合 npm 11。
 
-<p align="center"><sub>从一页笔记，到一篇完整的文章。</sub></p>
+```sh
+npm ci
+node node_modules/electron/install.js
+npm run build
+npm start
+```
 
-## 写作所需
+在左侧选择「研究项目」，可以创建渲染研究示例，或打开包含 `meki-project.json` 的项目目录。mekiR 使用自己的应用配置目录。这个分支从源码更新。
 
-- **流畅写作** — 即时预览与源码编辑随时切换，支持表格、任务列表、脚注、目录和代码高亮。
+项目字段、模板、视图与阶段都可通过本地 CLI 调整。用 `npm --silent run research -- --help` 查看命令，或阅读[研究项目使用说明](docs/research-workspace.md)。
 
-- **公式图表** — MathJax 公式与 Mermaid 图表随应用提供，离线也能写公式、画流程图。
-
-- **自由布局** — 多标签、独立窗口、拖动分栏与块操作，配合大纲、查找替换和工作区搜索。
-
-- **保存恢复** — 可开启自动保存，自动保留草稿和编辑历史；近期版本密集记录，较早版本按小时、按天保留，支持预览与恢复。
-
-- **图片管理** — 粘贴、拖放、调整尺寸、整理本地附件，也可连接 PicGo 上传。
-
-- **外观导出** — 中英文界面、三套主题与正文外观设置；导出 HTML、PDF、PNG，安装 Pandoc 后还可导出 Word 与 EPUB。
-
-## 获取 Meki
-
-从 [GitHub Releases](https://github.com/Irk2wd/Meki/releases) 获取对应平台的安装包：Windows 使用 EXE 安装向导，macOS 使用通用 DMG，打开后将 Meki 拖入 Applications。各版本的可用平台与安装说明见发布页面。
-
-## 文件属于你
-
-Meki 直接读写本地 Markdown 文件，无需账户，没有云同步或遥测。设置、草稿、快照与版本历史也保存在本机。
-
-写作、公式和图表渲染可离线使用。默认定期联网检查更新，可在更新窗口关闭自动提醒；手动检查更新、加载网络图片、打开外部链接、PicGo 上传，以及启用拼写检查后的词典下载会按需联网。
-
-## 继续了解
-
-[打开使用说明 →](docs/README.md) 了解文稿编辑、Markdown 兼容性、图片管理和应用内更新。
-
----
-
-项目自有代码、文档和资源采用 [MIT 许可证](LICENSE)。第三方组件保留各自条款，详见 [组件声明](THIRD_PARTY_NOTICES.txt) 与 [许可文本](licenses/README.md)。
+项目自有代码、文档和资源采用 [MIT 许可证](LICENSE)。第三方组件见[组件声明](THIRD_PARTY_NOTICES.txt)。

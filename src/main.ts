@@ -1,6 +1,8 @@
 import { t, ht, getLocale, isLocale } from '../electron/i18n.mjs';
+import { productName } from '../package.json';
 import type { BootState, DocumentFile, Settings, Workspace, RecentFile, WorkspaceRequest, DocumentStatus } from '../shared/meki';
 import { WorkspaceUI, type OpenLocation } from './workspace-ui';
+import { ResearchWorkspace } from './research-workspace';
 import { WritingEditor } from './editor';
 import { WritingTools } from './writing-tools';
 import { DocumentTabs } from './document-tabs';
@@ -41,9 +43,10 @@ const button = (action: string, label: string, glyph: string, cls = '') => `<but
 document.querySelector('#app')!.innerHTML = `
 <div class="shell" id="shell">
   <aside class="sidebar" aria-label="${ht("文档导航")}">
-    <div class="brand"><button type="button" class="brand-mark" data-action="about" title="${ht("关于 Meki")}" aria-label="${ht("关于 Meki")}">${logo}</button><span class="brand-wordmark" role="img" aria-label="Meki">${brandWordmark}</span></div>
+    <div class="brand"><button type="button" class="brand-mark" data-action="about" title="${ht("关于 {0}", productName)}" aria-label="${ht("关于 {0}", productName)}">${logo}</button><span class="brand-wordmark" role="img" aria-label="${productName}">${brandWordmark}</span></div>
     <div class="file-actions"><button class="open-button" data-action="open">${icon('folder')}<span>${ht("打开文稿")}</span><kbd id="open-shortcut">Ctrl O</kbd></button>${button('new', t("新建文稿"), 'plus')}</div>
     <button class="workspace-label" data-action="recent-folders" aria-haspopup="dialog" aria-label="${ht("切换工作区或管理最近文件夹")}"><span id="workspace-name">${ht("个人写作空间")}</span>${icon('down', 14)}</button>
+    <button type="button" class="research-entry-button" data-action="research" aria-pressed="false">${icon('diagram', 16)}${ht("研究项目")}</button>
     <div class="sidebar-tabs" role="tablist" aria-label="${ht("导航方式")}"><button role="tab" data-tab="files" aria-selected="false">${ht("文件")}</button><button role="tab" class="active" data-tab="outline" aria-selected="true">${ht("大纲")}</button></div>
     <div id="files-panel" hidden><div class="file-filter">${icon('search', 15)}<input id="file-filter" placeholder="${ht("搜索文件")}" aria-label="${ht("搜索本地文件")}"></div><div id="file-list"></div></div>
     <nav id="outline-panel" aria-label="${ht("文档大纲")}"><div id="outline-list"></div></nav>
@@ -93,7 +96,7 @@ document.querySelector('#app')!.innerHTML = `
   <p id="theme-feedback" role="status"></p>
   <div class="dialog-actions"><div><button type="button" class="secondary-button" data-action="import-theme">${ht("导入 CSS")}</button><button type="button" class="text-button" data-action="reset-theme">${ht("恢复默认")}</button></div><button type="button" class="primary-button" data-action="apply-theme">${ht("应用主题")}</button></div>
 </form></dialog>
-<dialog id="help-dialog"><form method="dialog"><div class="dialog-heading"><div><span class="eyebrow">${ht("MEKI")}</span><h2>${ht("开始一页新的想法")}</h2></div><button value="close" class="icon-button" aria-label="${ht("关闭指南")}">${icon('close')}</button></div><p>${ht("直接在编辑区写作，Markdown 标记会自动变成排版。在空白行输入")} <code>/</code> ${ht("插入标题、列表、表格或公式。")}</p><p>${ht("工具栏的“插入 Mermaid 图表”会创建可编辑的流程图。也可用")} <code>\`\`\`mermaid</code> ${ht("代码围栏输入图表，点击预览编辑源码；HTML 和 PDF 会保留图表。")}</p><div class="shortcut-list"><span>${ht("新建文稿")}</span><kbd>Ctrl / ⌘ N</kbd><span>${ht("打开文件")}</span><kbd>Ctrl / ⌘ O</kbd><span>${ht("保存文件")}</span><kbd>Ctrl / ⌘ S</kbd><span>${ht("另存为")}</span><kbd>Ctrl / ⌘ Shift S</kbd><span>${ht("源码与编辑切换")}</span><kbd>Ctrl / ⌘ /</kbd><span>${ht("查找")}</span><kbd>Ctrl / ⌘ F</kbd><span>${ht("专注模式")}</span><kbd>Ctrl / ⌘ Shift F</kbd></div><p class="help-note">${ht("未保存的修改会自动保留为本地恢复草稿。自动写回默认关闭，可在标签栏“文稿与保存”中开启。公式支持常用 LaTeX 数学语法。")}</p><button class="primary-button" value="close">${ht("开始写作")}</button></form></dialog>
+<dialog id="help-dialog"><form method="dialog"><div class="dialog-heading"><div><span class="eyebrow">${productName}</span><h2>${ht("开始一页新的想法")}</h2></div><button value="close" class="icon-button" aria-label="${ht("关闭指南")}">${icon('close')}</button></div><p>${ht("直接在编辑区写作，Markdown 标记会自动变成排版。在空白行输入")} <code>/</code> ${ht("插入标题、列表、表格或公式。")}</p><p>${ht("工具栏的“插入 Mermaid 图表”会创建可编辑的流程图。也可用")} <code>\`\`\`mermaid</code> ${ht("代码围栏输入图表，点击预览编辑源码；HTML 和 PDF 会保留图表。")}</p><div class="shortcut-list"><span>${ht("新建文稿")}</span><kbd>Ctrl / ⌘ N</kbd><span>${ht("打开文件")}</span><kbd>Ctrl / ⌘ O</kbd><span>${ht("保存文件")}</span><kbd>Ctrl / ⌘ S</kbd><span>${ht("另存为")}</span><kbd>Ctrl / ⌘ Shift S</kbd><span>${ht("源码与编辑切换")}</span><kbd>Ctrl / ⌘ /</kbd><span>${ht("查找")}</span><kbd>Ctrl / ⌘ F</kbd><span>${ht("专注模式")}</span><kbd>Ctrl / ⌘ Shift F</kbd></div><p class="help-note">${ht("未保存的修改会自动保留为本地恢复草稿。自动写回默认关闭，可在标签栏“文稿与保存”中开启。公式支持常用 LaTeX 数学语法。")}</p><button class="primary-button" value="close">${ht("开始写作")}</button></form></dialog>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>`;
 
 let current: DocumentFile = { path: null, name: t("开始写作.md"), content: welcome, revision: null };
@@ -131,6 +134,18 @@ const workspaceUI = new WorkspaceUI({ platform: () => platform, document: () => 
 const documents = new DocumentTabs({ editor: () => editor, settings: () => settings, platform: () => platform, panes: () => panes,
   active: doc => { documentId++; outline?.reset(); current = doc; }, updated: () => { renderOutline(); renderFiles(); updateStatus(); renderExternalStatus(); },
   dispatch: (command, payload) => { void dispatch(command, payload); }, notify });
+const researchUI = new ResearchWorkspace(el('.main-area'), {
+  root: () => workspace?.root, blocked: () => !ready || busy,
+  open: (root, id) => perform(async () => {
+    const document = await window.meki.openResearchRecord(root, id);
+    if (!document) return;
+    const existing = documents.findPath(document.path!);
+    const reload = existing && !documents.dirty(existing) && existing.document.revision !== document.revision;
+    await loadDocument(document);
+    if (reload) await documents.reload(document);
+    editor.focus();
+  }, true),
+});
 new DocumentMenu({ current: () => current, document: id => documents.tabs.find(tab => tab.id === id)?.document,
   platform: () => platform, blocked: () => !ready || busy || Boolean(document.querySelector('dialog[open]')), notify });
 const snapshotDialog = new SnapshotDialog({ documents, platform: () => platform, settings: () => settings, run: action => perform(action, true, true), notify });
@@ -226,6 +241,7 @@ async function synchronizeWorkspace() {
       else if (status.value?.state === 'unchanged' && selected.paused === 'external') selected.paused = null;
       renderExternalStatus(); updateStatus();
     }
+    await researchUI.refresh();
   } finally { syncingWorkspace = false; }
 }
 function renderExternalStatus() {
@@ -250,6 +266,7 @@ async function openLocation(location: OpenLocation) {
     const doc = await window.meki.openDocument(location.path); if (!doc) return;
     await loadDocument(doc);
   }
+  hideResearch();
   if (location.line) { switchMode('source'); editor.goToLine(location.line, location.column || 1); }
   else if (location.anchor) {
     switchMode('visual');
@@ -260,6 +277,7 @@ async function openLocation(location: OpenLocation) {
 }
 async function openRecentFolder(path: string) {
   workspace = await window.meki.openRecentFolder(path); setSidebarTab('files'); renderFiles();
+  await researchUI.refresh();
 }
 
 async function workspaceOperation(request: WorkspaceRequest) {
@@ -317,6 +335,7 @@ function switchMode(mode: 'visual' | 'source') {
 async function loadDocument(doc: DocumentFile, recovered = false) {
   clearTimeout(draftTimer);
   await documents.open(doc, recovered);
+  hideResearch();
   if (doc.path) recentFiles = [{ path: doc.path, name: doc.name }, ...recentFiles.filter(f => f.path !== doc.path)].slice(0, 15);
   renderOutline(); renderFiles(); updateStatus();
 }
@@ -356,6 +375,13 @@ async function runExport(options: ExportOptions) {
   });
 }
 const exportDialog = new ExportDialog(runExport);
+const editorActions = new Set(['save', 'saveAs', 'source', 'math', 'diagram', 'image', 'find', 'replace', 'find-next', 'find-prev', 'snapshots', 'history', 'export']);
+function hideResearch() {
+  if (!researchUI.visible) return;
+  researchUI.hide();
+  el('[data-action="research"]').setAttribute('aria-pressed', 'false');
+}
+
 async function dispatch(action: string, payload?: unknown) {
   if (action === 'window-notice') { notify(String(payload)); return; }
   if (action === 'settings-changed' && ready) {
@@ -375,6 +401,14 @@ async function dispatch(action: string, payload?: unknown) {
     await lifecycleSettingsQueue; return;
   }
   if (busy) return;
+  if (action === 'research') {
+    closePopovers();
+    el('[data-action="research"]').setAttribute('aria-pressed', 'true');
+    await researchUI.show();
+    return;
+  }
+  if (action === 'research-close') { hideResearch(); editor.focus(); return; }
+  if (researchUI.visible && (editorActions.has(action) || /^(?:edit-|format-|export-)/.test(action))) return;
   if (action === 'shortcut-settings') { closePopovers(); await shortcuts?.open(); return; }
   if (action === 'window-menu') { closePopovers(); documents.toggleWindows(); return; }
   if (action === 'autosave-blur') {
@@ -488,9 +522,10 @@ async function dispatch(action: string, payload?: unknown) {
       }
     }
     if (action === 'save' || action === 'saveAs') await save(action === 'saveAs');
-    if (action === 'folder' || action === 'refresh') {
-      const result = action === 'folder' ? await window.meki.chooseFolder() : await window.meki.refreshWorkspace();
-      if (result) { workspace = result; setSidebarTab('files'); renderFiles(); }
+    if (action === 'folder' || action === 'refresh' || action === 'research-demo') {
+      const result = action === 'research-demo' ? await window.meki.createResearchDemo()
+        : action === 'folder' ? await window.meki.chooseFolder() : await window.meki.refreshWorkspace();
+      if (result) { workspace = result; setSidebarTab('files'); renderFiles(); await researchUI.refresh(); }
     }
     if (action === 'close-request') {
       clearTimeout(draftTimer);
@@ -566,16 +601,17 @@ document.addEventListener('keydown', event => {
 }, true);
 
 async function start() {
-  if (!window.meki) throw new Error(t("请通过 Meki 桌面应用打开编辑器（npm start）。"));
+  if (!window.meki) throw new Error(t("请通过 {0} 桌面应用打开编辑器（npm start）。", productName));
   const boot: BootState = await window.meki.boot();
-  updateDialog = new UpdateDialog(async () => {
+  if (boot.updatesAvailable) updateDialog = new UpdateDialog(async () => {
     await perform(async () => {
       try { if (await documents.closeAll(true)) await window.meki.applyUpdate(); }
       finally { await persistDraft(); }
     }, true, true);
   });
   platform = boot.platform;
-  aboutDialog = new AboutDialog(boot.version, () => updateDialog!.open());
+  el('[data-action="updates"]').hidden = !boot.updatesAvailable;
+  aboutDialog = new AboutDialog(boot.version, updateDialog ? () => updateDialog!.open() : undefined);
   document.body.classList.add(`platform-${boot.platform}`);
   settings = boot.settings; workspace = boot.workspace; recentFiles = boot.recentFiles; applySettings();
   panes = new PaneWorkspace({ settings: () => settings, blocked: () => busy || !ready || composing || !!document.querySelector('dialog[open]'),

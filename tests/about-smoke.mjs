@@ -25,16 +25,17 @@ try {
     shell.openExternal = async url => { globalThis.aboutOpenedLinks.push(url); };
   });
   await page.waitForSelector('#shell[data-ready="true"]');
-  const menuCount = await app.evaluate(({ Menu }) => {
+  const menuCount = await app.evaluate(({ Menu }, label) => {
     const walk = items => items.flatMap(item => [item, ...(item.submenu ? walk(item.submenu.items) : [])]);
-    const items = walk(Menu.getApplicationMenu().items).filter(item => item.label === '关于 Meki');
+    const items = walk(Menu.getApplicationMenu().items).filter(item => item.label === label);
     items[0].click(); return items.length;
-  });
+  }, `关于 ${pkg.productName}`);
   assert.equal(menuCount, process.platform === 'darwin' ? 2 : 1);
   await page.locator('#about-dialog').waitFor({ state: 'visible' });
-  assert.equal(await page.locator('#about-title').textContent(), '关于 Meki');
-  assert.equal(await app.evaluate(({ app }) => app.getName()), 'Meki');
-  assert.match(await page.title(), /Meki/);
+  assert.equal(await page.locator('#about-title').textContent(), `关于 ${pkg.productName}`);
+  assert.equal(await app.evaluate(({ app }) => app.getName()), pkg.productName);
+  assert.equal(await page.title(), pkg.productName);
+  assert.ok((await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle())).endsWith(` — ${pkg.productName}`));
   assert.equal(await page.locator('#about-version').textContent(), pkg.version);
   assert.equal(await page.locator('#about-developer').textContent(), 'Irk2wd');
   await app.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById('command-about').click());

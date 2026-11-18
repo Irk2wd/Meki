@@ -3,6 +3,7 @@ const { t } = require('./i18n.mjs');
 const { app, ipcMain, screen, Menu } = require('electron');
 const { pathKey, isWithin, validateAbsolutePath } = require('./file-store.cjs');
 const { createEditorWindow } = require('./editor-window.cjs');
+const { PRODUCT_NAME } = require('./app-identity.cjs');
 
 class WindowManager {
   constructor({ store, sessions, snapshots, updates, reopen }) {
@@ -46,9 +47,9 @@ class WindowManager {
   refreshMenus() {
     if (!this.count()) {
       Menu.setApplicationMenu(Menu.buildFromTemplate([
-        ...(process.platform === 'darwin' ? [{ label: 'Meki', submenu: [{ id: 'command-about', label: t("关于 Meki"), click: () => {
+        ...(process.platform === 'darwin' ? [{ label: PRODUCT_NAME, submenu: [{ id: 'command-about', label: t("关于 {0}", PRODUCT_NAME), click: () => {
           void this.reopen().then(() => this.focused()?.sendCommand('about')).catch(error => console.error('Could not open About Meki:', error));
-        } }, { role: 'quit', label: t("退出 Meki") }] }] : []),
+        } }, { role: 'quit', label: t("退出 {0}", PRODUCT_NAME) }] }] : []),
         { label: t("文件"), submenu: [
           { label: t("重新打开窗口"), accelerator: require('./shortcuts.mjs').accelerator(require('./shortcuts.mjs').bindings(this.store.metadata.settings.shortcuts, process.platform)['new-window'], process.platform), click: () => { void this.reopen().catch(error => console.error('Could not reopen Meki:', error)); } },
           ...(process.platform === 'darwin' ? [] : [{ role: 'quit', label: t("退出") }]),

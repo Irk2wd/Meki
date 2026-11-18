@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { keys, fixture, server } = require('./update-fixture.cjs');
+const { APP_ID, UPDATE_PREFIX } = require('../electron/app-identity.cjs');
 const policy = require('../electron/update-policy.cjs');
 const { UpdateRuntime, atomicJson } = require('../electron/update-runtime.cjs');
 const { UpdateService } = require('../electron/update-service.cjs');
@@ -209,7 +210,7 @@ test('runtime changes require the signed installer and its bytes are rechecked b
     const { service, runtime } = await connected(t, change);
     assert.equal((await service.check()).kind, 'installer'); assert.equal((await service.download()).status, 'ready');
     const ready = service.prepareApply(); assert.equal(ready.kind, 'installer');
-    assert.ok(path.basename(ready.path).startsWith('Meki-'));
+    assert.ok(path.basename(ready.path).startsWith(`${UPDATE_PREFIX}-`));
     fs.appendFileSync(ready.path, 'tampered'); assert.throws(() => service.prepareApply()); assert.equal(runtime.readState().current, null);
   }
 });
@@ -247,7 +248,7 @@ test('unrelated saved credentials are neither required nor sent during public up
   assert.equal(fs.readFileSync(saved, 'utf8'), content);
 });
 
-test('public Meki updates use the Meki signing identity and canonical asset names', async t => {
+test('the update fixture uses the application signing identity and canonical asset names', async t => {
   const pair = keys(), update = fixture(pair), runtime = setup(t, pair), remote = await server(update);
   remote.publicAvailable = true; t.after(() => remote.close());
   const service = new UpdateService({ runtime, network: new GithubUpdates({ testOrigin: remote.origin }) });
@@ -255,9 +256,9 @@ test('public Meki updates use the Meki signing identity and canonical asset name
   assert.equal(service.snapshot().repository, 'Irk2wd/Meki');
   assert.equal(service.snapshot().releaseUrl, `https://github.com/Irk2wd/Meki/releases/tag/v${update.manifest.version}`);
   assert.equal((await service.download()).status, 'ready');
-  assert.equal(service.prepareApply().manifest.appId, 'io.meki.editor');
+  assert.equal(service.prepareApply().manifest.appId, APP_ID);
   assert.ok(remote.requests.every(item => !item.authorization));
-  assert.ok(update.release.assets.every(item => item.name.startsWith('Meki-')));
+  assert.ok(update.release.assets.every(item => item.name.startsWith(`${UPDATE_PREFIX}-`)));
 });
 
 test('update repository and loopback test origin cannot be redirected by callers', () => {
@@ -343,7 +344,7 @@ test('release asset generation verifies the key, exact installer and archive, an
   await assert.rejects(() => verifyUpdateAssets(build, runtime.root, pair.publicKey), /checksum/);
 });
 
-test('each platform publishes one canonical Meki installer referenced by its signed update manifest', async t => {
+test('each platform packages one canonical installer in the signed update fixture', async t => {
   const { createUpdateAssets, verifyUpdateAssets } = await import('../scripts/update-assets.mjs');
   const { installerName } = require('../electron/app-identity.cjs');
   for (const platform of ['win32', 'darwin']) {
@@ -357,7 +358,7 @@ test('each platform publishes one canonical Meki installer referenced by its sig
     const build = { version: '1.0.0', platform: platform === 'win32' ? 'windows' : 'macos', installer: path.basename(installer),
       sha256: policy.digest(source.installer), asarSha256: policy.digest(bytes), updateAssets };
     const signed = await verifyUpdateAssets(build, runtime.root, pair.publicKey);
-    assert.equal(signed.installer.name, canonical); assert.equal(signed.appId, 'io.meki.editor'); assert.equal(signed.nativeIcon, nativeIcon);
+    assert.equal(signed.installer.name, canonical); assert.equal(signed.appId, APP_ID); assert.equal(signed.nativeIcon, nativeIcon);
     const generated = fs.readdirSync(runtime.root).filter(name => name.endsWith('.exe') || name.endsWith('.dmg'));
     assert.deepEqual(generated, [canonical]);
     await assert.rejects(verifyUpdateAssets({ ...build, installer: 'unexpected.exe' }, runtime.root, pair.publicKey), /installer name/);

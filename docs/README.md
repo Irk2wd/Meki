@@ -1,15 +1,15 @@
-# Meki 文档
+# mekiR 文档
 
 [返回项目首页](../README.md)
 
-## 使用 Meki
+## 使用 mekiR
 
 | 文档 | 内容 |
 | --- | --- |
 | [开始使用](getting-started.md) | 安装、打开文稿、分栏、保存与恢复、导出及本地数据。 |
 | [Markdown 兼容性](markdown-compatibility.md) | 支持的语法、原文保留与视觉编辑的转换边界。 |
+| [研究项目原型](research-workspace.md) | 按日期记录实验、撰写阶段总结，以及通过 CLI 读写和调整项目。 |
 | [PicGo 图床](image-hosting.md) | 连接 PicGo、上传图片、设置附件目录与单图操作。 |
-| [应用内更新](updates.md#检查与安装) | 检查版本、下载、重启及轻量更新。 |
-| [1.1.3 版本说明](releases/1.1.3.md) | 当前版本的新功能与体验改进。 |
+| [原版 Meki 1.1.3 版本说明](releases/1.1.3.md) | 研究分支所基于的原版编辑器。 |
 
-第三方组件的许可信息见 [许可说明](../licenses/README.md)。安装包的可用平台与安装说明，以 [GitHub Releases](https://github.com/Irk2wd/Meki/releases) 中的实际发布为准。
+第三方组件的许可信息见 [许可说明](../licenses/README.md)。

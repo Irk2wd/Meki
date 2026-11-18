@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { extractFile } from '@electron/asar';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { APP_ID, WINDOWS_EXECUTABLE } from '../electron/app-identity.cjs';
 const require = createRequire(import.meta.url), plist = require('plist');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const digest = data => createHash('sha256').update(data).digest('hex');
@@ -34,7 +35,7 @@ for (const target of ['win32-x64', 'darwin-arm64', 'darwin-x64']) {
   let architecture = 'x64', links = 0;
   if (mac) {
     const info = plist.parse(await fs.readFile(path.join(contents, 'Info.plist'), 'utf8'));
-    assert.equal(info.CFBundleIdentifier, 'io.meki.editor');
+    assert.equal(info.CFBundleIdentifier, APP_ID);
     assert.deepEqual(Object.keys(info.ElectronAsarIntegrity), ['Resources/app.asar']);
     assert.equal(digest(await fs.readFile(path.join(contents, 'Resources', info.CFBundleIconFile))), digest(await fs.readFile(path.join(root, 'assets', 'icon.icns'))));
     const executable = await fs.readFile(path.join(contents, 'MacOS', sourcePackage.productName));
@@ -51,7 +52,7 @@ for (const target of ['win32-x64', 'darwin-arm64', 'darwin-x64']) {
     await walk(contents);
     assert.ok(links >= 5);
   } else {
-    const executable = await fs.readFile(path.join(directory, 'Meki.exe'));
+    const executable = await fs.readFile(path.join(directory, `${WINDOWS_EXECUTABLE}.exe`));
     assert.equal(executable.subarray(0, 2).toString(), 'MZ');
   }
   results.push({ target, sourceCommit, sourceVersion: sourcePackage.version, asarSha256: digest(await fs.readFile(archive)), archiveMatchesSource: true, architecture, relativeSymlinks: links });

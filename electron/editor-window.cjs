@@ -4,6 +4,9 @@ const { t, getLocale } = require('./i18n.mjs');
 const { app, BrowserWindow, Menu, dialog, shell, screen, clipboard, session } = require('electron');
 const bootstrap = globalThis[Symbol.for('meki.bootstrap')];
 const { WorkspaceStore, documentStatus } = require('./workspace-store.cjs');
+const { ResearchStore } = require('./research-store.cjs');
+const { exampleProject, exampleRecords } = require('./research-example.cjs');
+const { PRODUCT_NAME } = require('./app-identity.cjs');
 const { validateSession } = require('./lifecycle-store.cjs');
 const { validateTarget } = require('./snapshot-store.cjs');
 const { registerClipboardText } = require('./clipboard-text.cjs');
@@ -205,7 +208,7 @@ async function saveDocument(input) {
         try { await new Promise(resolve => setTimeout(resolve, Math.min(3000, Number(process.env.MEKI_TEST_SAVE_DELAY) || 0))); }
         finally { delete process.env.MEKI_TEST_SAVE_PENDING; }
       }
-      const saved = await coordinator.saveTarget(id, actualSavePath, input.tabId, () => store.saveDocument(document, { overwrite, formatFrom: originalPath, beforeReplace: (filePath, bytes) => lifecycle.record(filePath, bytes) }));
+      const saved = await coordinator.saveTarget(id, actualSavePath, input.tabId, () => saveToDisk(document, { overwrite, formatFrom: originalPath }));
       if (!originalPath && input.tabId) {
         await snapshots.adopt(input.tabId, saved.path).catch(error => {
           console.warn('Meki saved the file but retained snapshots under their original draft:', error.message);
@@ -223,6 +226,37 @@ async function saveDocument(input) {
     }
   }
   throw new Error('The file keeps changing in another application. Save it under a different name.');
+}
+
+async function saveToDisk(document, options = {}) {
+  const save = () => store.saveDocument(document, { ...options, beforeReplace: (filePath, bytes) => lifecycle.record(filePath, bytes) });
+  const project = await ResearchStore.forDocument(document.path);
+  return project ? project.saveDocument(document, save, options.overwrite) : save();
+}
+
+async function currentResearch(root = workspaceStore?.root) {
+  if (!workspaceStore || typeof root !== 'string' || pathKey(root) !== pathKey(workspaceStore.root)) return null;
+  const selected = workspaceStore;
+  const project = await ResearchStore.open(selected.root);
+  if (selected !== workspaceStore) return null;
+  if (project && pathKey(project.root) !== pathKey(selected.root)) throw new Error(t("项目目录已移动，请重新打开。"));
+  return project;
+}
+
+async function createResearchDemo() {
+  const selected = TEST_MODE ? process.env.MEKI_TEST_RESEARCH_PARENT : (await dialog.showOpenDialog(mainWindow, {
+    title: t("选择渲染研究示例的存放位置"), defaultPath: app.getPath('documents'), properties: ['openDirectory', 'createDirectory'],
+  })).filePaths[0];
+  if (!selected) return null;
+  const parent = await fs.promises.realpath(validateAbsolutePath(selected));
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const root = path.join(parent, attempt ? `meki-render-research-${attempt + 1}` : 'meki-render-research');
+    try {
+      const project = await ResearchStore.initialize(root, exampleProject, exampleRecords);
+      return await setWorkspace(project.root, true);
+    } catch (error) { if (error.code !== 'EEXIST' || error.path !== root) throw error; }
+  }
+  throw new Error(t("无法在该目录中创建新的研究示例。"));
 }
 
 async function setWorkspace(root, requireSamePath = false) {
@@ -254,6 +288,18 @@ async function mutateWorkspace(input) {
   return store.locked('workspace-operation', async () => {
     coordinator.assertWorkspaceOperation(id, input);
     const selected = workspaceStore;
+    const project = await currentResearch();
+    if (project) {
+      const source = validateAbsolutePath(input.path);
+      if (['rename', 'move', 'trash'].includes(input.action) && project.manages(source)) {
+        throw new Error(t("研究记录通过项目管理，以保留记录 ID 和来源链接。"));
+      }
+      if (['create-file', 'copy', 'move', 'rename'].includes(input.action)) {
+        const parent = input.action === 'create-file' ? source : input.action === 'rename' ? path.dirname(source) : validateAbsolutePath(input.destination);
+        const name = input.name || path.basename(source);
+        if (typeof name === 'string' && project.manages(path.join(parent, name))) throw new Error(t("请在研究项目中创建记录。"));
+      }
+    }
     if (input?.action === 'trash') {
       const entry = await selected.existing(input.path);
       let confirmed = false;
@@ -331,7 +377,7 @@ async function askDiscard(name) {
 
 function updateWindowTitle() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.setTitle(`${activeDocument.dirty ? '● ' : ''}${activeDocument.name || t("未命名.md")} — Meki`);
+  mainWindow.setTitle(`${activeDocument.dirty ? '● ' : ''}${activeDocument.name || t("未命名.md")} — ${PRODUCT_NAME}`);
   if (process.platform === 'darwin') {
     mainWindow.setDocumentEdited(activeDocument.dirty);
     mainWindow.setRepresentedFilename(activeDocument.path || '');
@@ -421,7 +467,7 @@ function registerIpc() {
       catch (error) { console.warn('Meki could not restore its last document:', error.message); }
     }
     bootResult = {
-      platform: process.platform, version: bootstrap?.runtime?.version || app.getVersion(), locale: getLocale(), settings: store.metadata.settings,
+      platform: process.platform, version: bootstrap?.runtime?.version || app.getVersion(), updatesAvailable: Boolean(updates), locale: getLocale(), settings: store.metadata.settings,
       recovery: session ? null : recovery, session, initialDoc: initialDoc || (options.fresh ? { path: null, name: t("未命名.md"), content: '', revision: null } : null), transferred: options.transferred === true, windowId: id, recentFiles: store.metadata.recentFiles, recentFolders: store.metadata.recentFolders, workspace,
     };
     rendererBooted = true;
@@ -456,7 +502,7 @@ function registerIpc() {
     saveOperation = (async () => {
       try {
         if (workspaceStore && isWithin(document.path, workspaceStore.root)) await workspaceStore.existing(document.path, { document: true });
-        const saved = await coordinator.saveTarget(id, document.path, input.tabId, () => store.saveDocument(document, { beforeReplace: (filePath, bytes) => lifecycle.record(filePath, bytes) }));
+        const saved = await coordinator.saveTarget(id, document.path, input.tabId, () => saveToDisk(document));
         await rememberDocument(saved).catch(error => console.warn('Meki saved the file but could not update recents:', error.message));
         return { status: 'saved', document: saved };
       } catch (error) {
@@ -512,6 +558,20 @@ function registerIpc() {
     return selected ? setWorkspace(validateAbsolutePath(selected)) : null;
   });
   register('refresh-workspace', refreshWorkspace);
+  register('research-snapshot', async () => (await currentResearch())?.snapshot() ?? null);
+  register('create-research-demo', createResearchDemo);
+  register('write-research-batch', async (root, input) => {
+    const project = await currentResearch(root);
+    if (!project) throw new Error(t("请先打开要编辑的研究项目。"));
+    return project.writeBatch(input);
+  });
+  register('open-research-record', async (root, recordId) => {
+    const project = await currentResearch(root);
+    if (!project) throw new Error(t("请先打开要编辑的研究项目。"));
+    const file = project.recordPath(recordId);
+    await workspaceStore.existing(file, { document: true });
+    return openKnownDocument(authorize(file));
+  });
   register('list-recent-folders', () => store.metadata.recentFolders);
   register('open-recent-folder', async folder => {
     folder = validateAbsolutePath(folder);
@@ -663,7 +723,7 @@ function rebuildMenu() {
   const fileMenu = [
     item(t("新建"), 'new', 'CmdOrCtrl+N'), item(t("新建窗口"), 'new-window', 'CmdOrCtrl+Shift+N'), item(t("打开…"), 'open', 'CmdOrCtrl+O'),
     item(t("快速打开…"), 'quick-open', 'CmdOrCtrl+K'), item(t("搜索工作区…"), 'workspace-search', 'CmdOrCtrl+Shift+K'),
-    item(t("打开文件夹…"), 'folder', 'CmdOrCtrl+Shift+O'),
+    item(t("打开文件夹…"), 'folder', 'CmdOrCtrl+Shift+O'), item(t("研究项目"), 'research'),
     { label: t("最近打开"), submenu: store.metadata.recentFiles.length ? store.metadata.recentFiles.map((entry) => ({
       label: entry.name, sublabel: entry.path, click: () => sendCommand('open-path', authorize(entry.path)),
     })) : [{ label: t("暂无最近文档"), enabled: false }] },
@@ -681,10 +741,10 @@ function rebuildMenu() {
   ];
   if (process.platform !== 'darwin') fileMenu.push({ label: t("退出"), accelerator: 'Alt+F4', click: () => app.quit() });
   const template = [
-    ...(process.platform === 'darwin' ? [{ label: 'Meki', submenu: [
-      item(t("关于 Meki"), 'about'), item(t("检查更新…"), 'updates'), { type: 'separator' }, { role: 'services', label: t("服务") },
-      { type: 'separator' }, { role: 'hide', label: t("隐藏 Meki") }, { role: 'hideOthers', label: t("隐藏其他") },
-      { role: 'unhide', label: t("显示全部") }, { type: 'separator' }, { label: t("退出 Meki"), accelerator: 'Cmd+Q', click: () => app.quit() },
+    ...(process.platform === 'darwin' ? [{ label: PRODUCT_NAME, submenu: [
+      item(t("关于 {0}", PRODUCT_NAME), 'about'), ...(updates ? [item(t("检查更新…"), 'updates')] : []), { type: 'separator' }, { role: 'services', label: t("服务") },
+      { type: 'separator' }, { role: 'hide', label: t("隐藏 {0}", PRODUCT_NAME) }, { role: 'hideOthers', label: t("隐藏其他") },
+      { role: 'unhide', label: t("显示全部") }, { type: 'separator' }, { label: t("退出 {0}", PRODUCT_NAME), accelerator: 'Cmd+Q', click: () => app.quit() },
     ] }] : []),
     { label: t("文件"), submenu: fileMenu },
     { label: t("编辑"), submenu: [
@@ -718,7 +778,7 @@ function rebuildMenu() {
       { type: 'separator' }, item(t("任务列表"), 'edit-task'), item(t("目录"), 'edit-toc'), item(t("提示块"), 'edit-alert'), item(t("数学公式…"), 'math'), item(t("Mermaid 图表"), 'diagram'),
     ] },
     { label: t("窗口"), submenu: [item(t("新建窗口"), 'new-window'), item(t("将当前文稿移至新窗口"), 'detach-document'), item(t("左右并排"), 'tile-windows'), { type: 'separator' }, ...coordinator.windowMenu(id), { type: 'separator' }, { role: 'minimize', label: t("最小化") }, { role: 'zoom', label: t("缩放") }, ...(process.platform === 'darwin' ? [{ role: 'front', label: t("前置全部窗口") }] : [])] },
-    { label: t("帮助"), submenu: [item(t("使用指南与快捷键"), 'help'), item(t("检查更新…"), 'updates'), { type: 'separator' }, item(t("关于 Meki"), 'about')] },
+    { label: t("帮助"), submenu: [item(t("使用指南与快捷键"), 'help'), ...(updates ? [item(t("检查更新…"), 'updates')] : []), { type: 'separator' }, item(t("关于 {0}", PRODUCT_NAME), 'about')] },
   ];
   const menu = Menu.buildFromTemplate(template);
   if (mainWindow && process.platform !== 'darwin') mainWindow.setMenu(menu);
@@ -761,7 +821,7 @@ function createWindow() {
   bootResult = null;
   mainWindow = new BrowserWindow({
     ...restoredBounds(), minWidth: 480, minHeight: 420, show: false,
-    title: 'Meki', backgroundColor: '#faf9f6', icon: path.join(appDirectory, 'assets', 'icon.png'),
+    title: PRODUCT_NAME, backgroundColor: '#faf9f6', icon: path.join(appDirectory, 'assets', 'icon.png'),
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 17 } } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false,

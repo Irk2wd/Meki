@@ -11,7 +11,7 @@ const { WindowSessions } = require('./window-sessions.cjs');
 const { WindowManager } = require('./window-manager.cjs');
 const { UpdateService } = require('./update-service.cjs');
 const { GithubUpdates } = require('./update-network.cjs');
-const { configureApp } = require('./app-identity.cjs');
+const { configureApp, PRODUCT_NAME } = require('./app-identity.cjs');
 const { syncDockIcon } = require('./app-icon.cjs');
 const bootstrap = globalThis[Symbol.for('meki.bootstrap')];
 const TEST_MODE = process.env.MEKI_TEST === '1';
@@ -83,7 +83,7 @@ else {
     app.on('activate', () => { void reopen(); });
   }).catch(error => {
     console.error('Meki could not start:', error);
-    if (!TEST_MODE) dialog.showErrorBox(t("Meki 无法启动"), error.message);
+    if (!TEST_MODE) dialog.showErrorBox(t("{0} 无法启动", PRODUCT_NAME), error.message);
     app.exit(1);
   });
 }

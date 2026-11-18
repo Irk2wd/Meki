@@ -1,25 +1,25 @@
 import { ht, t } from '../electron/i18n.mjs';
 import { logo } from './icons';
-import { author } from '../package.json';
+import { author, productName } from '../package.json';
 import './about.css';
 
 export class AboutDialog {
   private dialog = document.createElement('dialog');
   private notices: Promise<void> | undefined;
 
-  constructor(version: string, private updates: () => Promise<void>) {
+  constructor(version: string, private updates?: () => Promise<void>) {
     this.dialog.id = 'about-dialog';
     this.dialog.setAttribute('aria-labelledby', 'about-title');
     this.dialog.innerHTML = `<div class="dialog-heading">
-      <div class="about-brand"><span class="about-mark" aria-hidden="true">${logo}</span><div><span class="eyebrow">${ht("MEKI")}</span><h2 id="about-title">${ht("关于 Meki")}</h2></div></div>
+      <div class="about-brand"><span class="about-mark" aria-hidden="true">${logo}</span><h2 id="about-title">${ht("关于 {0}", productName)}</h2></div>
       <button type="button" data-about="close" class="icon-button" aria-label="${ht("关闭关于窗口")}" autofocus>×</button>
     </div>
-    <p class="about-description">${ht("安静写作，让想法留在你手中。")}</p>
+    <p class="about-description">${ht("本地研究工作区")}</p>
     <dl class="about-info"><dt>${ht("当前版本")}</dt><dd id="about-version"></dd><dt>${ht("开发者")}</dt><dd id="about-developer"></dd><dt>${ht("项目主页")}</dt><dd><a href="https://github.com/Irk2wd/Meki" data-about="project">Irk2wd / Meki ↗</a></dd></dl>
     <p class="about-note">${ht("开源的跨平台 Markdown 编辑器，支持本地文件、即时预览、公式与图表。")}</p>
     <details id="about-notices"><summary>${ht("开源组件声明")}</summary><p class="about-note">${ht("感谢开源社区。以下声明包含应用依赖和构建工具；Electron / Chromium 的完整许可随安装包附带。")}</p><pre id="about-notices-text" tabindex="0" aria-label="${ht("开源组件许可正文")}"></pre></details>
     <p id="about-feedback" role="status" aria-live="polite"></p>
-    <div class="about-actions"><button type="button" class="primary-button" data-about="updates">${ht("检查更新…")}</button></div>`;
+    ${updates ? `<div class="about-actions"><button type="button" class="primary-button" data-about="updates">${ht("检查更新…")}</button></div>` : ''}`;
     this.element('#about-version').textContent = version;
     this.element('#about-developer').textContent = author;
     this.element<HTMLDetailsElement>('#about-notices').addEventListener('toggle', () => {
@@ -56,7 +56,7 @@ export class AboutDialog {
     if (action === 'close') { this.dialog.close(); return; }
     try {
       if (action === 'project') await window.meki.openExternal('https://github.com/Irk2wd/Meki');
-      if (action === 'updates') { this.dialog.close(); await this.updates(); }
+      if (action === 'updates' && this.updates) { this.dialog.close(); await this.updates(); }
     } catch (error) {
       this.element('#about-feedback').textContent = t("操作未完成：{0}", String(error).replace(/^Error: /, ''));
       if (!this.dialog.open) this.dialog.showModal();

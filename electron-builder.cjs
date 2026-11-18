@@ -19,8 +19,8 @@ module.exports = {
     artifactName: PRODUCT_NAME + '-${version}-Setup-${arch}.${ext}',
   },
   nsis: {
-    // Keep one uninstall registration when upgrading an existing installation.
-    guid: '0c6ece60-3a81-54bc-8f44-5a19f608bb2c',
+    // Give the research edition its own uninstall registration.
+    guid: '4a16f0c5-efce-4653-b677-e35cb5fbac89',
     oneClick: false,
     perMachine: false,
     allowElevation: true,

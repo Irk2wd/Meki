@@ -1,9 +1,10 @@
 import { setLocale, getLocale, t } from '../electron/i18n.mjs';
+import { productName } from '../package.json';
 
 // Set the process-wide UI language before importing components with static labels.
 // A saved preference takes effect on the next application start, in every window.
 async function boot() {
-  if (!window.meki) throw new Error(t('请通过 Meki 桌面应用打开编辑器（npm start）。'));
+  if (!window.meki) throw new Error(t("请通过 {0} 桌面应用打开编辑器（npm start）。", productName));
   const state = await window.meki.boot();
   setLocale(state.locale);
   document.documentElement.lang = getLocale();
