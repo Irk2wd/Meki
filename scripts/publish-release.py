@@ -1,12 +1,14 @@
-"""Upload a verified delivery to a draft, then publish the complete release."""
+"""Publish both verified deliveries together as one GitHub Release."""
 import hashlib
 import json
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 
-# The release workflow runs this pinned publishing tool from the tested source checkout.
+# The workflow runs this tool from the pinned default-branch checkout.
 ROOT = pathlib.Path.cwd().resolve()
 
 
@@ -22,54 +24,93 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
-package = json.loads((ROOT / 'package.json').read_text())
-version, product = package['version'], package['productName']
-require(re.fullmatch(r'\d+\.\d+\.\d+', version), 'Invalid release version')
-require(product in {'Meki', 'mekiR'}, 'Unknown release edition')
-tag = ('v' if product == 'Meki' else 'mekir-v') + version
-title = product + ' ' + version
-directory = pathlib.Path(sys.argv[1]).resolve()
-notes = ROOT / 'docs' / 'releases' / (version + '.md')
-verification = json.loads((directory / 'verification.json').read_text())
-commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-require(verification['version'] == version and verification['sourceCommit'] == commit, 'Delivery does not match this release')
-require(verification['ci']['conclusion'] == 'success', 'Installer verification did not pass')
-require(subprocess.check_output(['git', 'rev-parse', tag + '^{commit}'], cwd=ROOT, text=True).strip() == commit, 'Tag differs from the tested source')
-
-files = sorted(file for file in directory.iterdir() if file.is_file())
-checksums = {}
-for line in (directory / 'SHA256SUMS.txt').read_text().splitlines():
-    digest, name = line.split('  ', 1)
-    require(re.fullmatch(r'[a-f0-9]{64}', digest) and pathlib.Path(name).name == name, 'Invalid checksum entry')
-    require(name not in checksums, 'Duplicate checksum entry')
-    checksums[name] = digest
-require(set(checksums) | {'SHA256SUMS.txt'} == {file.name for file in files}, 'Delivery contains unverified files')
-for file in files:
+def sha256(file):
     with file.open('rb') as stream:
-        actual = hashlib.file_digest(stream, 'sha256').hexdigest()
-    require(file.name == 'SHA256SUMS.txt' or checksums[file.name] == actual, 'Delivery checksum mismatch: ' + file.name)
-    checksums[file.name] = actual
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
 
-existing = gh('release', 'view', tag, '--json', 'isDraft', check=False)
-if existing.returncode == 0:
-    require(json.loads(existing.stdout)['isDraft'], 'Refusing to replace an already published release')
-else:
-    gh('release', 'create', tag, '--verify-tag', '--draft', '--title', title, '--notes-file', str(notes))
-gh('release', 'edit', tag, '--title', title, '--notes-file', str(notes))
-gh('release', 'upload', tag, *(str(file) for file in files), '--clobber')
 
-repository = gh('repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner').stdout.strip()
-release = json.loads(gh('api', '--paginate', 'repos/' + repository + '/releases?per_page=100',
-                        '--jq', '.[] | select(.tag_name == "' + tag + '")').stdout)
-require(release['draft'] and not release['prerelease'], 'Release must remain a draft during upload')
-assets = release['assets']
-require(len(assets) == len(files) and {asset['name'] for asset in assets} == set(checksums), 'Release asset inventory differs from the verified delivery')
-for asset in assets:
-    file = directory / asset['name']
-    require(asset['state'] == 'uploaded' and asset['size'] == file.stat().st_size, 'Incomplete release upload')
-    require(asset.get('digest') == 'sha256:' + checksums[file.name], 'Uploaded release checksum mismatch: ' + file.name)
+def collect_delivery(directory, output, product, version, tag):
+    verification = json.loads((directory / 'verification.json').read_text(encoding='utf-8'))
+    commit = subprocess.check_output(['git', 'rev-parse', f'refs/tags/{tag}^{{commit}}'], cwd=ROOT, text=True).strip()
+    require(verification['version'] == version and verification['sourceCommit'] == commit, f'{product} delivery does not match {tag}')
+    ci = verification['ci']
+    require(ci['headSha'] == commit and ci['status'] == 'completed' and ci['conclusion'] == 'success',
+            f'{product} installer verification did not pass for {tag}')
 
-gh('release', 'edit', tag, '--draft=false', '--latest=' + str(product == 'Meki').lower())
-published = json.loads(gh('release', 'view', tag, '--json', 'isDraft,isPrerelease,url').stdout)
-require(not published['isDraft'] and not published['isPrerelease'], 'Release was not published')
-print(published['url'])
+    checksums = {}
+    for line in (directory / 'SHA256SUMS.txt').read_text(encoding='utf-8').splitlines():
+        digest, name = line.split('  ', 1)
+        require(re.fullmatch(r'[a-f0-9]{64}', digest) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', name),
+                'Invalid checksum entry')
+        require(name not in checksums, 'Duplicate checksum entry')
+        checksums[name] = digest
+    files = {file.name for file in directory.iterdir() if file.is_file()}
+    require(set(checksums) | {'SHA256SUMS.txt'} == files, f'{product} delivery contains unverified files')
+    shared = {'README.md', 'ReleaseNotes.md', 'verification.json'}
+    required = shared | {f'{product}-{version}-Setup-x64.exe', f'{product}-{version}-macOS-universal.dmg',
+                         f'{product}-{version}-source.zip'}
+    if product == 'Meki':
+        required |= {f'Meki-{version}-{platform}-app.asar.gz' for platform in ['windows', 'macos']}
+        required |= {f'Meki-update-{platform}.json' for platform in ['windows', 'macos']}
+    require(set(checksums) == required, f'{product} delivery has an unexpected asset inventory')
+
+    combined = {}
+    for name, digest in checksums.items():
+        asset = 'mekiR-' + name if product == 'mekiR' and name in shared else name
+        target = output / asset
+        require(not target.exists(), f'Duplicate release asset: {asset}')
+        shutil.copy2(directory / name, target)
+        require(sha256(target) == digest, 'Delivery checksum mismatch: ' + asset)
+        combined[asset] = digest
+    return combined
+
+
+def publish(version, directory):
+    require(re.fullmatch(r'\d+\.\d+\.\d+', version), 'Invalid release version')
+    tag = 'v' + version
+    title = 'Meki / mekiR ' + version
+    existing = gh('release', 'view', tag, '--json', 'isDraft', check=False)
+    if existing.returncode == 0 and not json.loads(existing.stdout)['isDraft']:
+        print(tag + ' is already published.')
+        return
+
+    with tempfile.TemporaryDirectory(prefix='meki-release-') as temporary:
+        output = pathlib.Path(temporary) / 'assets'
+        output.mkdir()
+        checksums = collect_delivery(directory / 'Meki' / 'publish', output, 'Meki', version, tag)
+        checksums.update(collect_delivery(directory / 'mekiR' / 'publish', output, 'mekiR', version, 'mekir-' + tag))
+        inventory = output / 'SHA256SUMS.txt'
+        inventory.write_text(''.join(f'{checksums[name]}  {name}\n' for name in sorted(checksums)), encoding='utf-8')
+        checksums[inventory.name] = sha256(inventory)
+
+        notes = pathlib.Path(temporary) / 'release-body.md'
+        stable_notes = (output / 'ReleaseNotes.md').read_text(encoding='utf-8').strip()
+        research_notes = (output / 'mekiR-ReleaseNotes.md').read_text(encoding='utf-8').strip()
+        notes.write_text('标准版的安装包以 `Meki-` 开头，研究版以 `mekiR-` 开头。\n\n'
+                         + stable_notes + '\n\n---\n\n' + research_notes + '\n', encoding='utf-8')
+        if existing.returncode:
+            gh('release', 'create', tag, '--verify-tag', '--draft', '--title', title, '--notes-file', str(notes))
+        else:
+            gh('release', 'edit', tag, '--title', title, '--notes-file', str(notes))
+        gh('release', 'upload', tag, *(str(output / name) for name in sorted(checksums)), '--clobber')
+
+        repository = gh('repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner').stdout.strip()
+        release = json.loads(gh('api', '--paginate', 'repos/' + repository + '/releases?per_page=100',
+                                '--jq', '.[] | select(.tag_name == "' + tag + '")').stdout)
+        require(release['draft'] and not release['prerelease'], 'Release must remain a draft during upload')
+        assets = release['assets']
+        require(len(assets) == len(checksums) and {asset['name'] for asset in assets} == set(checksums),
+                'Release asset inventory differs from the verified delivery')
+        for asset in assets:
+            file = output / asset['name']
+            require(asset['state'] == 'uploaded' and asset['size'] == file.stat().st_size, 'Incomplete release upload')
+            require(asset.get('digest') == 'sha256:' + checksums[file.name], 'Uploaded release checksum mismatch: ' + file.name)
+
+        gh('release', 'edit', tag, '--draft=false', '--latest')
+        published = json.loads(gh('release', 'view', tag, '--json', 'isDraft,isPrerelease,url').stdout)
+        require(not published['isDraft'] and not published['isPrerelease'], 'Release was not published')
+        print(published['url'])
+
+
+if __name__ == '__main__':
+    publish(sys.argv[1], pathlib.Path(sys.argv[2]).resolve())
