@@ -3,6 +3,8 @@ import postcss, { type Container } from 'postcss';
 import selectorParser from 'postcss-selector-parser';
 import type { Settings } from '../shared/meki';
 import { codeAppearance, type CodeOptions } from './code-options.ts';
+import { resolveTheme } from '../electron/theme-format.mjs';
+import { cssDeclarations, themeDocumentCss, themePalette } from './theme-styles.ts';
 
 const properties = new Set((
   'color background-color font font-family font-size font-style font-weight font-variant font-variant-numeric font-feature-settings font-kerning ' +
@@ -69,7 +71,7 @@ export function writingFont(settings: Pick<Settings, 'font' | 'fontFamily'>): st
 }
 
 export const appearanceDefaults = { theme: 'paper', font: 'serif', fontSize: 18, lineWidth: 1040, customCss: '', fontFamily: '' } as const;
-type Appearance = Pick<Settings, 'theme' | 'font' | 'fontSize' | 'lineWidth' | 'customCss' | 'fontFamily'> & Partial<CodeOptions>;
+type Appearance = Pick<Settings, 'theme' | 'installedThemes' | 'font' | 'fontSize' | 'lineWidth' | 'customCss' | 'fontFamily'> & Partial<CodeOptions>;
 
 /** Shared document appearance used by the editor, standalone HTML and printed PDF. */
 export function writingAppearance(input: Partial<Appearance> = {}, options: { scope?: string; exporting?: boolean } = {}): string {
@@ -77,13 +79,10 @@ export function writingAppearance(input: Partial<Appearance> = {}, options: { sc
   const writingSize = Math.min(options.exporting ? 32 : 24, Math.max(options.exporting ? 12 : 14, settings.fontSize));
   const rootScope = options.scope || '.meki-document';
   const scope = `${rootScope}${rootScope}`;
-  const colors = settings.theme === 'night' ? ['#202521', '#d9dfd5', '#a6b09e', '#aac49c', '#343d33', '#1a1f1c']
-    : settings.theme === 'linen' ? ['#faf6ee', '#433f34', '#827760', '#816a40', '#e7e0d2', '#f1ecdf']
-    : ['#ffffff', '#303a35', '#657267', '#416b5b', '#e8ebe5', '#f5f6f3'];
-  const [background, text, soft, accent, border, side] = colors;
+  const theme = resolveTheme(settings.theme, settings.installedThemes);
   let custom = '';
   try { custom = normalizeCustomCss(settings.customCss, rootScope); } catch { /* Invalid saved CSS must not prevent opening a document. */ }
-  return `${scope}{--bg:${background};--text:${text};--soft:${soft};--accent:${accent};--border:${border};--side:${side};--body-font:${writingFont(settings)};--writing-size:${writingSize}px;--mono:'SFMono-Regular',Consolas,'Liberation Mono',monospace;--ui:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);font-family:var(--body-font);font-size:var(--writing-size);line-height:1.95;letter-spacing:.015em;overflow-wrap:anywhere;}
+  return `${scope}{${cssDeclarations(themePalette(theme))}--body-font:${writingFont(settings)};--writing-size:${writingSize}px;--mono:'SFMono-Regular',Consolas,'Liberation Mono',monospace;--ui:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif;background:${theme.background ? 'transparent' : 'var(--bg)'};color:var(--text);font-family:var(--body-font);font-size:var(--writing-size);line-height:1.95;letter-spacing:.015em;overflow-wrap:anywhere;}
 ${scope} :is(h1,h2,h3,h4,h5,h6){color:var(--text);font-family:inherit;line-height:1.5;font-weight:600;scroll-margin-top:30px;}
 ${scope} :is(h1,h2,h3,h4,h5,h6)[data-heading-number]::before{content:attr(data-heading-number) " ";font-variant-numeric:tabular-nums;}
 ${scope} h1{font-size:2.03em;margin:1.3em 0 .75em;letter-spacing:-.025em;}
@@ -106,8 +105,9 @@ ${scope} table{border:1px solid var(--border);border-collapse:collapse;width:100
 ${scope} :is(td,th){border:1px solid var(--border);padding:10px 14px;text-align:left;line-height:1.7;}${scope} :is(td,th) p{margin:0;line-height:1.7;}${scope} th{background:var(--side);font-weight:600;}
 ${scope} img{max-width:100%;height:auto;border-radius:5px;}${scope} hr{border:0;border-top:1px solid var(--border);margin:2.2em 0;padding:0;height:0;background:none;}
 ${scope} .meki-inline-math{display:inline-block;vertical-align:bottom;padding:0 4px;color:var(--accent);}
+${codeAppearance({ ...input, theme: theme.base }, scope)}
+${themeDocumentCss(theme, scope)}
 ${custom}
-${codeAppearance(input, scope)}
 @media print{${scope}{print-color-adjust:exact;-webkit-print-color-adjust:exact;}${scope} :is(pre,blockquote,tr){break-inside:avoid;}${scope} :is(h1,h2,h3,h4,h5,h6){break-after:avoid;}}
 `;
 }

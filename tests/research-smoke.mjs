@@ -350,6 +350,32 @@ try {
   pass('the overview brushes new ranges, resizes either edge, and moves a fixed interval within the project dates');
   pass('custom ranges and bounded pan and zoom clip coverage without opening an experiment list');
 
+  async function selectTheme(id) {
+    await page.locator('#sidebar-settings-button').click();
+    await page.locator('#sidebar-settings-menu').getByRole('menuitem', { name: '外观与排版' }).click();
+    await page.locator(`#theme-choices button[data-theme="${id}"]`).click();
+    await page.locator('.research-toolbar').evaluate(toolbar => toolbar.click());
+  }
+  await selectTheme('graph');
+  const overview = await page.locator('.research-overview').evaluate(header => {
+    const copy = header.firstElementChild;
+    return {
+      background: getComputedStyle(copy).backgroundColor,
+      textOnBacking: Boolean(copy.querySelector('h1') && copy.querySelector('p') && copy.querySelector('.research-overview-stats')),
+      blankToRight: copy.getBoundingClientRect().right < header.getBoundingClientRect().right,
+    };
+  });
+  assert.deepEqual(overview, {
+    background: await page.locator('.research-timeline').evaluate(timeline => getComputedStyle(timeline).backgroundColor),
+    textOnBacking: true,
+    blankToRight: true,
+  });
+  assert.match(await page.locator('.research-content').evaluate(content => getComputedStyle(content).backgroundImage), /linear-gradient/);
+  pass('the project title, description and counts sit on a solid backing with grid in the surrounding blank space');
+  await selectTheme('cyber');
+  assert.match(await page.locator('.research-content').evaluate(content => getComputedStyle(content).backgroundImage), /linear-gradient/);
+  await page.screenshot({ path: path.join(folder, 'theme-timeline.png') });
+
   const tile = command('read', ['tile-culling']);
   const filler = Array.from({ length: 14 }, (_, i) => `第 ${i + 1} 次记录依次检查相机轨迹、可见性与帧时间。`).join('\n\n');
   command('batch', [], { records: [{ id: tile.record.id, ifRevision: tile.revision, body: `${tile.body}\n${filler}\n\n[城市街区基线](mekir:baseline-city)\n` }] });
@@ -369,6 +395,8 @@ try {
   await phaseSummary.click();
   await page.locator('#research-reader-title').getByText('方案探索阶段总结', { exact: true }).waitFor();
   assert.equal(await page.locator('#visual-editor .ProseMirror').getAttribute('contenteditable'), 'false');
+  assert.match(await page.locator('#document-scroll').evaluate(content => getComputedStyle(content).backgroundImage), /linear-gradient/);
+  assert.match(await page.locator('#visual-editor h1').first().evaluate(heading => getComputedStyle(heading).fontFamily), /monospace/);
   await page.locator('#visual-editor a[href="mekir:tile-culling"]').click();
   await page.locator('#research-reader-title').getByText('测试分块遮挡剔除', { exact: true }).waitFor();
   await idle();
@@ -403,6 +431,8 @@ try {
   assert.equal(await phaseSummary.evaluate(button => document.activeElement === button), true);
   pass('linked previews animate back to the timeline and restore scroll, focus and filters');
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1220, 820));
+  await selectTheme('paper');
+  pass('the timeline and record reader share the selected theme');
   await page.locator('[data-research-reset-range]').click();
 
   await page.locator('#research-date').fill('2026-11-10');

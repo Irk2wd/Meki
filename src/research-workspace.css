@@ -96,6 +96,16 @@
 .research-empty { padding-block: 49px; }
 .research-empty p, .research-overview p { color: var(--soft); margin: 9px 0 0; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
 .research-overview p { white-space: pre-wrap; }
+:root[data-theme-background] :is(.research-overview, .research-empty) > div:first-child {
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 6px;
+  background-color: var(--bg);
+  box-shadow: 0 0 0 7px var(--bg);
+}
+:root[data-theme-background] :is(.research-timeline-shortcuts, .research-empty .research-actions) > .secondary-button:not(:hover) {
+  background-color: var(--bg);
+}
 .research-empty .research-actions { margin-top: 21px; }
 .research-overview-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; color: var(--soft); font-size: 12px; }
 .research-overview-stats span + span { padding-inline-start: 14px; border-inline-start: 1px solid var(--border); }
@@ -330,6 +340,7 @@
 .research-sources button { padding: 1px 3px; border-radius: 3px; font-size: 11px; color: var(--accent); text-align: left; overflow-wrap: anywhere; }
 .research-issues, .research-form-error { margin: 5px 0; color: light-dark(#a14436, #f2a28e); font-size: 11px; overflow-wrap: anywhere; }
 .research-problems { margin-top: 12px; padding: 10px 13px; border: 1px solid var(--border); border-radius: 6px; color: var(--soft); overflow-wrap: anywhere; }
+:root[data-theme-background] .research-problems { background-color: var(--bg); }
 .research-settings {
   --settings-inset: clamp(12px, 2vw, 22px);
   margin-top: 19px;

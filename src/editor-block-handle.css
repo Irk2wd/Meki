@@ -42,7 +42,7 @@
 .meki-block-menu button:focus-visible { outline-offset: -2px; background: var(--hover); }
 .meki-block-menu button:disabled { opacity: .4; cursor: default; background: transparent; }
 .meki-block-menu button.danger { color: #b54c46; }
-:root[data-theme=night] .meki-block-menu button.danger { color: #f19489; }
+:root[data-theme-base=night] .meki-block-menu button.danger { color: #f19489; }
 .meki-block-menu-icon { width: 17px; color: var(--soft); display: flex; flex-shrink: 0; }
 .meki-block-menu-arrow { margin-left: auto; color: var(--muted); }
 .meki-block-menu button[data-block-action="copy-markdown"], .meki-block-menu button[data-block-action="delete"] {
@@ -53,7 +53,7 @@
 .meki-block-submenu { width: 230px; overflow-y: auto; overscroll-behavior: contain; }
 .meki-block-submenu .meki-block-menu-title { padding-top: 3px; }
 :root { --meki-block-drop-color: #2383e2; }
-:root[data-theme=night] { --meki-block-drop-color: #69b1ff; }
+:root[data-theme-base=night] { --meki-block-drop-color: #69b1ff; }
 .meki-block-drag-source {
   opacity: .45; border-radius: 4px; outline: none !important;
   background: color-mix(in srgb, var(--meki-block-drop-color) 9%, transparent);

@@ -926,8 +926,8 @@ export class ResearchWorkspace {
     if (!state || !active || !today) {
       this.timelineEvents.show();
       const message = error || (this.loading ? t("正在读取研究项目…") : t("打开项目后即可查看研究阶段、实验记录和阶段总结。"));
-      this.content.innerHTML = `<div class="research-empty"><h1 tabindex="-1">${ht("科研项目")}</h1>
-        <p${error ? ' role="alert"' : ''}>${escape(message)}</p>
+      this.content.innerHTML = `<div class="research-empty"><div><h1 tabindex="-1">${ht("科研项目")}</h1>
+        <p${error ? ' role="alert"' : ''}>${escape(message)}</p></div>
         ${this.loading ? '' : `<div class="research-actions"><button type="button" class="primary-button" data-action="research-projects">${ht("打开科研项目")}</button>
           <button type="button" class="secondary-button" data-action="research-demo">${ht("创建示例项目")}</button></div>`}
       </div>`;
@@ -982,10 +982,10 @@ export class ResearchWorkspace {
     const previousMarkers = timelineView && !this.axisDrag?.moving ? this.timelineEvents.capture() : undefined;
     this.content.innerHTML = `
       <header class="research-overview"><div><h1 tabindex="-1">${escape(projectPage ? project.title : active.label)}</h1>
-        ${projectPage && project.description ? `<p>${escape(project.description)}</p>` : ''}</div>
+        ${projectPage && project.description ? `<p>${escape(project.description)}</p>` : ''}
         ${projectPage ? `<div class="research-overview-stats"><span>${ht("{0} 条实验", experiments.length)}</span><span>${ht("{0} 份阶段总结", summaries.length)}</span>
           ${lastExperiment ? `<span>${ht("最近实验 {0}", escape(lastExperiment))}</span>` : ''}</div>` : ''}
-      </header>
+      </div></header>
       ${problems.length ? `<details class="research-problems"><summary>${ht("{0} 份文档无法读取", problems.length)}</summary><ul>${problems.map(item => `<li><code>${escape(item.file)}</code> · ${escape(item.message)}</li>`).join('')}</ul></details>` : ''}
       ${timelineView?.html || ''}
       ${active.page === 'rules' ? this.renderSettings(state) : active.page === 'sources' ? this.renderSources(state) :
