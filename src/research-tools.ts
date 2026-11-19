@@ -97,7 +97,7 @@ export class ResearchTools {
     });
   }
 
-  editPhase({ root, project, revision }: ResearchSnapshot, today: string, original?: ResearchPhase) {
+  editPhase({ root, project, revision }: ResearchSnapshot, today: string, original: ResearchPhase | undefined, focus: () => void) {
     if (this.dialog.open) return;
     const id = original?.id ?? `phase-${crypto.randomUUID()}`;
     this.show(`<form>${heading(original ? t("编辑阶段") : t("新建阶段"))}
@@ -119,6 +119,7 @@ export class ResearchTools {
       await window.meki.configureResearchProject(root, { ifRevision: revision, project: { ...project, phases } });
       await this.refresh();
       this.dialog.close();
+      focus();
     });
   }
 

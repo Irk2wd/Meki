@@ -677,8 +677,12 @@ try {
   await timelineView.click();
   await page.clock.setFixedTime(new Date('2026-11-19T15:59:59Z'));
   const phaseDialog = page.locator('#research-tools-dialog');
-  async function addPhase(title, start) {
-    await page.getByRole('button', { name: '新建阶段', exact: true }).click();
+  async function addPhase(title, start, useRestoredFocus = false) {
+    const open = page.getByRole('button', { name: '新建阶段', exact: true });
+    if (useRestoredFocus) {
+      assert.ok(await open.evaluate(button => button === document.activeElement));
+      await page.keyboard.press('Enter');
+    } else await open.click();
     await phaseDialog.waitFor({ state: 'visible' });
     await phaseDialog.getByLabel('阶段名称').fill(title);
     const startDate = phaseDialog.getByLabel('开始日期');
@@ -693,7 +697,7 @@ try {
     return id;
   }
   const ongoingId = await addPhase('持续实验阶段', '2026-11-18');
-  const futureId = await addPhase('计划验证阶段', '2026-11-22');
+  const futureId = await addPhase('计划验证阶段', '2026-11-22', true);
   const ongoingRow = phases.filter({ hasText: '持续实验阶段' });
   const futureRow = phases.filter({ hasText: '计划验证阶段' });
   await ongoingRow.getByText('进行中', { exact: true }).waitFor();

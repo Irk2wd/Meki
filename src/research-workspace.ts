@@ -890,7 +890,12 @@ export class ResearchWorkspace {
       const latest = this.snapshot;
       if (!latest || latest.root !== state.root) return;
       const phase = latest.project.phases.find(item => item.id === data.researchEditPhase);
-      if ('researchNewPhase' in data || phase) this.tools.editPhase(latest, projectToday(latest.project.timezone), phase);
+      if ('researchNewPhase' in data || phase) {
+        const selector = phase ? `[data-research-edit-phase="${CSS.escape(phase.id)}"]` : '[data-research-new-phase]';
+        this.tools.editPhase(latest, projectToday(latest.project.timezone), phase, () => {
+          this.content.querySelector<HTMLButtonElement>(selector)?.focus({ preventScroll: true });
+        });
+      }
       return;
     }
     if (data.researchEdit || data.researchNew) {
