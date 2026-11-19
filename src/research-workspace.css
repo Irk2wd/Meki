@@ -195,8 +195,10 @@
 .research-timeline-axis .first { left: max(var(--tick), 0%); transform: none; }
 .research-timeline-axis .last { left: min(var(--tick), 100%); transform: translateX(-100%); }
 .research-timeline-row { position: relative; width: 100%; align-items: center; min-height: 65px; padding: 8px 7px; border-radius: 9px; }
-.research-timeline-row:hover { background: var(--hover); }
-.research-timeline-row:has(.research-timeline-label[aria-pressed="true"]) { background: var(--accent-soft); }
+@media (hover: hover) {
+  :where(.research-content:not(.research-axis-panning)) .research-timeline-row:hover { background-color: var(--hover); }
+}
+.research-timeline-row:has(> .research-timeline-label[aria-pressed="true"]) { background-color: var(--accent-soft); }
 .research-timeline-label { min-width: 0; padding: 0; text-align: left; }
 .research-timeline-label:hover { background: transparent; }
 .research-timeline-label strong { display: block; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
@@ -514,6 +516,7 @@
 @keyframes research-reader-scrim-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes research-dialog-in { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: no-preference) {
+  .research-timeline-row { transition: background-color 150ms cubic-bezier(.22,.75,.25,1); }
   dialog:is(#research-tools-dialog, #research-project-picker, #research-range-picker, #research-record-dialog, #research-comparison-dialog)[open] {
     animation: research-dialog-in 165ms cubic-bezier(.22,.75,.25,1);
   }

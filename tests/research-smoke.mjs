@@ -195,6 +195,34 @@ try {
   assert.equal(await page.locator('.research-timeline [data-research-record]').count(), 0);
   pass('phase order keeps active phases first and sorts ended phases by end date despite later summaries');
 
+  await phases.evaluateAll(rows => {
+    for (const row of rows) row.addEventListener('transitionrun', event => {
+      if (event.target === row && event.propertyName === 'background-color') {
+        row.dataset.hoverTransition = row.matches(':hover') ? 'enter' : 'leave';
+      }
+    });
+  });
+  const firstPhase = phases.nth(0), nextPhase = phases.nth(1);
+  await firstPhase.locator('.research-timeline-label').hover();
+  await page.locator('.research-timeline-row[data-hover-transition="enter"]').first().waitFor();
+  await firstPhase.evaluate(row => Promise.allSettled(row.getAnimations().map(animation => animation.finished)));
+  const firstPhaseBounds = await firstPhase.boundingBox();
+  await nextPhase.locator('.research-timeline-label').hover();
+  await page.waitForFunction(() => {
+    const [first, second] = document.querySelectorAll('.research-timeline-row');
+    return first.dataset.hoverTransition === 'leave' && second.dataset.hoverTransition === 'enter';
+  });
+  assert.deepEqual(await firstPhase.boundingBox(), firstPhaseBounds);
+  await nextPhase.evaluate(row => Promise.allSettled(row.getAnimations().map(animation => animation.finished)));
+  await page.locator('.research-overview h1').hover();
+  await page.waitForFunction(() => document.querySelectorAll('.research-timeline-row')[1].dataset.hoverTransition === 'leave');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await firstPhase.locator('.research-timeline-label').hover();
+  assert.equal(await firstPhase.evaluate(row => getComputedStyle(row).transitionDuration), '0s');
+  await page.locator('.research-overview h1').hover();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  pass('moving between phase rows fades the old and new highlights without moving the rows and respects reduced motion');
+
   const rangeButton = page.locator('[data-research-range]');
   assert.equal(await page.locator('.research-entry').count(), 0);
   const quickRange = (name) => page.getByRole('group', { name: '快捷时间范围' }).getByRole('button', { name, exact: true });
