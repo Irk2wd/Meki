@@ -530,7 +530,7 @@ async function closeResearchReader() {
   closePopovers(); writingTools?.close();
   await perform(async () => {
     if (dirty()) await persistDraft();
-    researchUI.closeReader();
+    await researchUI.dismissReader();
     researchReaderHistory.length = 0;
     setResearchEditing(false);
   }, true);

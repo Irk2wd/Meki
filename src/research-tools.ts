@@ -92,11 +92,14 @@ export class ResearchTools {
   chooseTimelineEvents(date: string, entries: ResearchEntry[], types: Map<string, ResearchType>, open: (id: string) => Promise<void>) {
     if (this.dialog.open) return;
     const comparisons = entries.every(({ record }) => record.comparison);
+    const multipleDays = entries.some(({ record }) => record.date !== entries[0].record.date);
     this.show(`${heading(comparisons ? t("{0} 的可视化展示", date) : t("{0} 的事件", date))}
       <ul class="research-project-list">${entries.map(({ record }, index) => {
         const type = types.get(record.type);
+        const label = type?.label || record.type;
         return `<li><button type="button" data-research-event-choice="${record.id}"${index === 0 ? ' autofocus' : ''}>
-          ${icon(timelineIcon(type, Boolean(record.comparison)), 17)}<span><strong>${escape(record.title)}</strong><small aria-hidden="true">${escape(type?.label || record.type)}</small></span></button></li>`;
+          ${icon(timelineIcon(type, Boolean(record.comparison)), 17)}<span><strong>${escape(record.title)}</strong>
+          <small${multipleDays ? '' : ' aria-hidden="true"'}>${escape(multipleDays ? `${record.date} · ${label}` : label)}</small></span></button></li>`;
       }).join('')}</ul>`);
     this.dialog.querySelectorAll<HTMLButtonElement>('[data-research-event-choice]').forEach(button => {
       button.addEventListener('click', () => {

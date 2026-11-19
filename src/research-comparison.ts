@@ -135,7 +135,7 @@ export class ComparisonViewer {
     this.dialog.dataset.width = actions.width;
     const { columns, rows } = record.comparison;
     this.dialog.innerHTML = `<div class="dialog-heading"><div class="research-comparison-heading">
-      ${actions.back ? `<button type="button" class="icon-button" data-comparison-back aria-label="${ht("返回当天事件")}" title="${ht("返回当天事件")}">${icon('back', 17)}</button>` : ''}
+      ${actions.back ? `<button type="button" class="icon-button" data-comparison-back aria-label="${ht("返回事件列表")}" title="${ht("返回事件列表")}">${icon('back', 17)}</button>` : ''}
       <div><h2 id="research-comparison-title">${escape(record.title)}</h2><time>${escape(record.date)}</time></div></div>
       <button type="button" class="icon-button" data-comparison-close aria-label="${ht("关闭可视化展示")}">${icon('close', 16)}</button></div>
       <div class="research-comparison-toolbar"><div class="research-actions" role="group" aria-label="${ht("缩放")}">

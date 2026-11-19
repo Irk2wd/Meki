@@ -9,4 +9,23 @@
 .sidebar-settings-menu > button span { overflow-wrap:anywhere }
 .sidebar-settings-menu > button:focus-visible { outline-offset:-2px; background:var(--hover) }
 .sidebar-settings-menu > [role="separator"] { height:1px; margin:6px 8px; background:var(--border) }
+@media (prefers-reduced-motion: no-preference) {
+  .popover.sidebar-settings-menu {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    transform-origin: left bottom;
+    transition: opacity 150ms ease-out, transform 150ms cubic-bezier(.22,.75,.25,1), display 150ms allow-discrete;
+  }
+  .popover.sidebar-settings-menu[hidden] {
+    opacity: 0;
+    transform: translateY(5px) scale(.985);
+    transition-duration: 115ms;
+    pointer-events: none;
+  }
+  @starting-style {
+    .popover.sidebar-settings-menu:not([hidden]) { opacity: 0; transform: translateY(5px) scale(.985); }
+  }
+  :is(#style-panel, #lifecycle-settings):not([hidden]) { animation: settings-panel-in 160ms cubic-bezier(.22,.75,.25,1); }
+}
+@keyframes settings-panel-in { from { opacity: 0; transform: translateY(-5px); } }
 @media print { #sidebar-settings-menu { display:none!important } }

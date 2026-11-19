@@ -1352,6 +1352,10 @@
   "新建研究记录": "New research record",
   "项目视图": "Project views",
   "项目规则": "Project rules",
+  "项目位置": "Project location",
+  "项目目录": "Project folder",
+  "配置文件": "Configuration file",
+  "项目时区": "Project time zone",
   "字段和模板按记录类型定义。Agent 通过 {0} 读取当前规则。": "Fields and templates are defined per record type. Agents can read the current rules with {0}.",
   "可选字段": "Optional",
   "最小值 {0}": "Minimum {0}",
@@ -1623,5 +1627,5 @@
   "添加类型": "Add type",
   "请填写事件类型名称。": "Enter a name for the event type.",
   "阶段目标（每行一项）": "Phase goals (one per line)",
-  "返回当天事件": "Back to events on this date"
+  "返回事件列表": "Back to event list"
 }

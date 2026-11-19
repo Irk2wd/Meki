@@ -12,7 +12,7 @@ export class SidebarSettings {
   private button = document.querySelector<HTMLButtonElement>('#sidebar-settings-button')!;
   private menu = document.createElement('div');
   constructor(private hooks: Hooks) {
-    this.menu.id = 'sidebar-settings-menu'; this.menu.className = 'popover sidebar-settings-menu'; this.menu.hidden = true;
+    this.menu.id = 'sidebar-settings-menu'; this.menu.className = 'popover sidebar-settings-menu'; this.menu.hidden = this.menu.inert = true;
     this.menu.setAttribute('role', 'menu'); this.menu.setAttribute('aria-labelledby', this.button.id);
     this.menu.innerHTML = `<div class="sidebar-settings-heading">${ht("设置")}</div>
       <button type="button" role="menuitem" tabindex="-1" data-sidebar-setting="style">${icon('style', 16)}<span>${ht("外观与排版")}</span></button>
@@ -61,20 +61,20 @@ export class SidebarSettings {
     window.addEventListener('resize', () => { if (!this.menu.hidden) this.position(); });
   }
   close(restoreFocus = false) {
-    this.menu.hidden = true; this.button.setAttribute('aria-expanded', 'false');
+    this.menu.hidden = this.menu.inert = true; this.button.setAttribute('aria-expanded', 'false');
     if (restoreFocus) this.button.focus();
   }
   private toggle() { if (this.menu.hidden) this.show(); else this.close(); }
   private show(last = false) {
     if (this.hooks.blocked()) return;
-    this.hooks.closeOthers(); this.menu.hidden = false; this.button.setAttribute('aria-expanded', 'true'); this.position();
+    this.hooks.closeOthers(); this.menu.hidden = this.menu.inert = false; this.button.setAttribute('aria-expanded', 'true'); this.position();
     const items = this.menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
     items[last ? items.length - 1 : 0].focus();
   }
   private position() {
-    const button = this.button.getBoundingClientRect(), menu = this.menu.getBoundingClientRect();
+    const button = this.button.getBoundingClientRect();
     if (!button.width || !button.height) { this.close(); return; }
-    this.menu.style.left = `${Math.max(8, Math.min(button.left, innerWidth - menu.width - 8))}px`;
-    this.menu.style.top = `${Math.max(8, button.top - menu.height - 8)}px`;
+    this.menu.style.left = `${Math.max(8, Math.min(button.left, innerWidth - this.menu.offsetWidth - 8))}px`;
+    this.menu.style.top = `${Math.max(8, button.top - this.menu.offsetHeight - 8)}px`;
   }
 }

@@ -65,7 +65,7 @@ async function sourceAppend(text) {
 
 async function editDescription() {
   const dialog = page.locator('#research-tools-dialog');
-  await page.getByRole('button', { name: '编辑项目描述', exact: true }).click();
+  await page.locator('.research-settings').getByRole('button', { name: '编辑项目描述', exact: true }).click();
   await dialog.getByRole('heading', { name: '编辑项目描述', exact: true }).waitFor();
   return dialog;
 }
@@ -78,6 +78,49 @@ try {
   await page.getByRole('button', { name: '创建示例项目', exact: true }).click();
   await page.getByRole('heading', { name: '实时渲染性能研究', exact: true }).waitFor();
   await idle();
+  const sidebarSettings = page.locator('#sidebar-settings-button');
+  const settingsMenu = page.locator('#sidebar-settings-menu');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const opening = await sidebarSettings.evaluate(button => {
+    button.click();
+    return document.querySelector('#sidebar-settings-menu').getAnimations().map(animation => animation.transitionProperty);
+  });
+  assert.ok(opening.includes('opacity') && opening.includes('transform'));
+  assert.equal(await sidebarSettings.getAttribute('aria-expanded'), 'true');
+  assert.ok(await settingsMenu.getByRole('menuitem').first().evaluate(item => item === document.activeElement));
+  await settingsMenu.evaluate(menu => Promise.allSettled(menu.getAnimations().map(animation => animation.finished)));
+  const closingMenu = await settingsMenu.evaluate(menu => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    return { inert: menu.inert, properties: menu.getAnimations().map(animation => animation.transitionProperty) };
+  });
+  assert.ok(closingMenu.inert && closingMenu.properties.includes('opacity'));
+  await settingsMenu.waitFor({ state: 'hidden' });
+  assert.ok(await sidebarSettings.evaluate(button => button === document.activeElement));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  assert.equal(await sidebarSettings.evaluate(button => {
+    button.click();
+    const count = document.querySelector('#sidebar-settings-menu').getAnimations().length;
+    button.click();
+    return count;
+  }), 0);
+  await settingsMenu.waitFor({ state: 'hidden' });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  pass('the footer settings menu animates both ways, restores keyboard focus and respects reduced motion');
+
+  assert.equal(await page.locator('[data-research-edit-description]').count(), 0);
+  await page.locator('[data-research-destination=rules]').click();
+  const settings = page.locator('.research-settings');
+  const rulesSummary = settings.getByText('项目规则', { exact: true });
+  const locationSummary = settings.getByText('项目位置', { exact: true });
+  const copyPath = settings.getByRole('button', { name: '复制项目路径', includeHidden: true });
+  assert.equal(await rulesSummary.evaluate(summary => summary.parentElement.open), false);
+  assert.equal(await copyPath.isVisible(), false);
+  await settings.screenshot({ path: path.join(folder, 'project-settings.png'), animations: 'disabled' });
+  await locationSummary.click();
+  await settings.getByText('.mekir/project.json', { exact: true }).waitFor();
+  assert.equal(await copyPath.isVisible(), true);
+  await locationSummary.click();
+  assert.equal(await copyPath.isVisible(), false);
   const originalDescription = command('describe').project.description;
   const descriptionForm = await editDescription();
   const descriptionField = descriptionForm.getByLabel('项目描述', { exact: true });
@@ -86,19 +129,26 @@ try {
   await descriptionForm.getByRole('button', { name: '取消', exact: true }).last().click();
   await descriptionForm.waitFor({ state: 'hidden' });
   assert.equal(command('describe').project.description, originalDescription);
+  await rulesSummary.click();
+  const experimentRules = settings.locator('[data-research-settings-section=type-experiment]');
+  await experimentRules.click();
   await editDescription();
   const savedDescription = '研究遮挡剔除对 GPU 帧时间的影响。\n按机位对比 <原图> 和帧时间。';
   await descriptionField.fill(savedDescription);
   await descriptionForm.getByRole('button', { name: '保存', exact: true }).click();
   await descriptionForm.waitFor({ state: 'hidden' });
-  assert.equal(await page.locator('.research-overview p').textContent(), savedDescription);
+  assert.equal(await settings.locator('.research-settings-description p').textContent(), savedDescription);
+  assert.equal(await rulesSummary.evaluate(summary => summary.parentElement.open), true);
+  assert.equal(await experimentRules.evaluate(summary => summary.parentElement.open), true);
   assert.equal(command('describe').project.description, savedDescription);
+  await page.locator('[data-research-destination=timeline]').click();
+  assert.equal(await page.locator('.research-overview p').textContent(), savedDescription);
   await app.close();
   app = undefined;
   await launch();
   await page.getByRole('heading', { name: '实时渲染性能研究', exact: true }).waitFor();
   assert.equal(await page.locator('.research-overview p').textContent(), savedDescription);
-  pass('project description edits are escaped, take effect immediately, survive restart and can be canceled');
+  pass('project settings folds rules and paths, and description edits survive refresh, cancellation and restart');
   await page.locator('[data-research-destination=timeline][aria-current=page]').waitFor();
   await page.locator('[data-action="research-projects"]').first().click();
   const projectPicker = page.locator('#research-project-picker');
@@ -252,14 +302,22 @@ try {
   assert.equal(await documentScroll.evaluate(element => element.scrollTop), tileScroll);
   await back.click();
   await readerTitle.getByText('方案探索阶段总结', { exact: true }).waitFor();
-  await page.getByRole('button', { name: '返回研究列表' }).click();
+  await idle();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const closingReader = await page.getByRole('button', { name: '返回研究列表' }).evaluate(button => {
+    button.click();
+    const surfaces = [document.querySelector('#document-surface'), document.querySelector('.research-reader-scrim')];
+    return { open: surfaces[0].parentElement.classList.contains('research-reader-open'),
+      fading: surfaces.every(surface => surface.getAnimations().some(animation => Number(animation.effect.getKeyframes().at(-1).opacity) === 0)) };
+  });
+  assert.deepEqual(closingReader, { open: true, fading: true });
   await page.locator('#document-surface').waitFor({ state: 'hidden' });
   assert.equal(await researchScroll.evaluate(element => element.scrollTop), scroll);
   assert.equal(await page.locator('#research-date').inputValue(), '2026-11-07');
   assert.match(await rangeButton.innerText(), /2026-11-05 – 2026-11-14/);
   assert.equal(await page.locator('[data-research-phase="exploration"]').getAttribute('aria-pressed'), 'true');
   assert.equal(await phaseSummary.evaluate(button => document.activeElement === button), true);
-  pass('linked read-only previews return document by document and restore scroll, focus and timeline filters');
+  pass('linked previews animate back to the timeline and restore scroll, focus and filters');
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1220, 820));
   await page.locator('[data-research-reset-range]').click();
 
@@ -349,6 +407,7 @@ try {
   const verificationView = page.getByRole('button', { name: '复测结果', exact: true });
   await verificationView.waitFor();
   await page.locator('[data-research-destination=rules]').click();
+  await page.locator('.research-rules > summary').click();
   await page.locator('.research-rules summary').filter({ hasText: 'experiment' }).click();
   await page.locator('.research-rules').getByText(/最小值 0/).waitFor();
   await page.locator('.research-rules').getByText(/新记录默认值 待复核/).waitFor();
@@ -513,7 +572,7 @@ try {
 
   await closeReader();
   assert.equal(await eventLegend.count(), 0);
-  command('batch', [], { records: [{ id: 'baseline-meeting', type: 'group-meeting', title: '基线组会', date: '2026-11-05', phaseId: 'baseline' }] });
+  command('batch', [], { records: [{ id: 'baseline-meeting', type: 'group-meeting', title: '基线组会', date: '2026-11-06', phaseId: 'baseline' }] });
   const expanded = command('describe');
   expanded.project.phases.push(...Array.from({ length: 12 }, (_, i) => ({
     id: `extra-${i + 1}`, title: `补充阶段 ${i + 1}`, start: '2026-10-01', end: '2026-11-06',
@@ -626,14 +685,16 @@ try {
   await projectPicker.locator('[data-action=research-open-project]').click();
   await page.getByRole('heading', { name: secondPeer.title, exact: true }).waitFor();
   assert.equal(await page.locator('.research-overview p').count(), 0);
+  await page.locator('[data-research-destination=rules]').click();
   const emptyDescription = await editDescription();
   assert.equal(await emptyDescription.getByLabel('项目描述', { exact: true }).inputValue(), '');
   await emptyDescription.getByLabel('项目描述', { exact: true }).fill('追踪论文的章节修改。');
   await emptyDescription.getByRole('button', { name: '保存', exact: true }).click();
   await emptyDescription.waitFor({ state: 'hidden' });
+  await page.locator('[data-research-destination=timeline]').click();
   await page.locator('.research-overview p').getByText('追踪论文的章节修改。', { exact: true }).waitFor();
   assert.equal(commandAt(secondPeer.root, 'describe').project.description, '追踪论文的章节修改。');
-  pass('a project without a description can add one from the overview');
+  pass('a project without a description can add one from project settings');
   await page.locator('[data-research-phase=drafting]').click();
   const paperEntry = page.locator('.research-entry').filter({ hasText: '方法章节修改' });
   assert.match(await paperEntry.locator('.research-entry-meta').innerText(), /章节 方法/);
@@ -944,7 +1005,7 @@ try {
   await tools.getByRole('button', { name: titles[0], exact: true }).click();
   await comparison.waitFor({ state: 'visible' });
   assert.equal(await comparison.getAttribute('data-width'), 'comfort');
-  await comparison.getByRole('button', { name: '返回当天事件' }).click();
+  await comparison.getByRole('button', { name: '返回事件列表' }).click();
   await tools.getByRole('button', { name: '基线评测审阅', exact: true }).click();
   await page.locator('#research-reader-title').getByText('基线评测审阅').waitFor();
   await closeReader();
@@ -1010,6 +1071,68 @@ try {
   assert.equal(await legend.innerHTML(), legendContents);
   await legend.screenshot({ path: path.join(folder, 'timeline-legend-narrow.png'), animations: 'disabled' });
   pass('timeline markers and custom events switch from a vertical divider to stacked groups in narrow layouts');
+
+  await quickRange('最近 14 天').click();
+  command('batch', [], { records: [
+    { id: 'adjacent-meeting', type: 'group-meeting', title: '复测讨论', date: '2026-11-18', phaseId: ongoingId },
+    { id: 'adjacent-review', type: review.id, title: '次日审阅', date: '2026-11-19', phaseId: ongoingId },
+  ] });
+  await refresh.click();
+  const combined = ongoingRow.getByRole('button', { name: '2026-11-18 – 2026-11-19 的 2 个事件', exact: true });
+  const firstEvent = ongoingRow.getByRole('button', { name: '打开事件 复测讨论', exact: true });
+  const nextEvent = ongoingRow.getByRole('button', { name: '打开事件 次日审阅', exact: true });
+  await combined.waitFor();
+  assert.equal(await combined.locator('svg').count(), 1);
+  assert.equal(await combined.locator('small').innerText(), '+1');
+  await combined.click();
+  await tools.getByRole('heading', { name: '2026-11-18 – 2026-11-19 的事件' }).waitFor();
+  assert.deepEqual(await tools.locator('[data-research-event-choice] small').allTextContents(), ['2026-11-18 · 组会汇报', '2026-11-19 · 论文审阅']);
+  await page.keyboard.press('Escape');
+  await tools.waitFor({ state: 'hidden' });
+
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const motion = await page.evaluateHandle(phase => {
+    const calls = [];
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (frames, options) {
+      if (this.closest(`[data-phase="${phase}"]`)) calls.push(this.dataset.researchTimelineEvents);
+      return animate.call(this, frames, options);
+    };
+    return { calls, restore: () => { Element.prototype.animate = animate; } };
+  }, ongoingId);
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1220, 820));
+  await firstEvent.waitFor();
+  await nextEvent.waitFor();
+  assert.equal(await combined.count(), 0);
+  assert.ok(await motion.evaluate(probe => ['adjacent-meeting', 'adjacent-review'].every(id => probe.calls.includes(id))));
+  await ongoingRow.screenshot({ path: path.join(folder, 'timeline-events-split.png'), animations: 'disabled' });
+  const [firstBox, nextBox] = await Promise.all([firstEvent.boundingBox(), nextEvent.boundingBox()]);
+  assert.equal(firstBox.y, nextBox.y);
+  assert.ok(firstBox.x + firstBox.width < nextBox.x);
+
+  await firstEvent.focus();
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(520, 760));
+  await combined.waitFor();
+  assert.ok(await combined.evaluate(button => button === document.activeElement));
+  assert.ok(await motion.evaluate(probe => probe.calls.includes('adjacent-meeting adjacent-review')));
+  await ongoingRow.screenshot({ path: path.join(folder, 'timeline-events-merged.png'), animations: 'disabled' });
+
+  await rangeButton.click();
+  await rangePicker.getByLabel('开始日期').fill('2026-11-18');
+  await rangePicker.getByLabel('结束日期').fill('2026-11-19');
+  await applyRange.click();
+  await firstEvent.waitFor();
+  await nextEvent.waitFor();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const animationsBeforeZoom = await motion.evaluate(probe => probe.calls.length);
+  const zoomOut = page.getByRole('button', { name: '缩小时间轴', exact: true });
+  for (let i = 0; i < 6 && !await combined.count(); i++) await zoomOut.click();
+  await combined.waitFor();
+  assert.equal(await motion.evaluate(probe => probe.calls.length), animationsBeforeZoom);
+  await motion.evaluate(probe => probe.restore());
+  await motion.dispose();
+  assert.deepEqual(errors, []);
+  pass('adjacent event dates merge without extra rows, split on resize or zoom, and honor reduced motion');
 
   await fs.writeFile(path.join(folder, 'results.json'), JSON.stringify({ results, errors }, null, 2) + '\n');
   console.log(`Timeline screenshot: ${path.join(folder, 'timeline.png')}`);
