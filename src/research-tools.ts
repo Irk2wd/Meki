@@ -1,7 +1,8 @@
 import { ht, t } from '../electron/i18n.mjs';
 import eventIcons from '../electron/research-event-icons.json';
-import type { ResearchEntry, ResearchFilter, ResearchGoalMode, ResearchImportPreview, ResearchPhase, ResearchRelationKind, ResearchSnapshot, ResearchType, ResearchWidth } from '../shared/research';
+import type { ResearchEntry, ResearchFilter, ResearchGoalMode, ResearchImportPreview, ResearchPhase, ResearchReference, ResearchRelationKind, ResearchSnapshot, ResearchType, ResearchWidth } from '../shared/research';
 import { icon } from './icons';
+import { ResearchReportPreview } from './research-report-preview';
 
 export const escapeResearch = (value: string | number | boolean) => String(value).replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -32,6 +33,7 @@ const feedback = '<p class="research-form-error" role="alert"></p>';
 
 export class ResearchTools {
   private dialog = document.createElement('dialog');
+  private report = new ResearchReportPreview();
   private submitting = false;
 
   constructor(private refresh: () => Promise<void>, private notify: (message: string, error?: boolean) => void) {
@@ -277,6 +279,14 @@ export class ResearchTools {
 
   async evidence(root: string, id: string, sourceDocument?: string, returnLabel = t("返回正文")) {
     const file = await window.meki.openResearchEvidence(root, id, sourceDocument);
+    if (file.kind === 'pdf' || file.kind === 'pptx') {
+      this.report.show([file], {
+        read: async () => file,
+        reveal: () => window.meki.revealResearchEvidence(root, id, sourceDocument),
+        notify: this.notify,
+      });
+      return;
+    }
     this.show(`<div class="dialog-heading research-evidence-heading">
       <button type="button" class="icon-button" data-tools-close aria-label="${escape(returnLabel)}" title="${escape(returnLabel)}" autofocus>${icon('back', 17)}</button>
       <div><h2 id="research-tools-title">${escape(file.title)}</h2><small>${escape(file.source)} · ${escape(file.relativePath)}</small></div>${closeButton(ht("关闭证据预览"))}
@@ -296,6 +306,14 @@ export class ResearchTools {
     }
     this.dialog.querySelector('[data-evidence-reveal]')!.addEventListener('click', () => {
       void window.meki.revealResearchEvidence(root, id, sourceDocument).catch(error => this.notify(String(error), true));
+    });
+  }
+
+  previewReports(root: string, files: ResearchReference[], origin: HTMLButtonElement | undefined, viewBody: () => Promise<void>) {
+    this.report.show(files, {
+      read: id => window.meki.openResearchEvidence(root, id),
+      reveal: id => window.meki.revealResearchEvidence(root, id),
+      origin, viewBody, notify: this.notify,
     });
   }
 

@@ -38,6 +38,7 @@
     "test:shortcuts": "node tests/shortcuts-reopen-smoke.mjs"
   },
   "devDependencies": {
+    "@aiden0z/pptx-renderer": "1.4.0",
     "@codemirror/lang-markdown": "6.5.2",
     "@electron/packager": "20.3.0",
     "@floating-ui/dom": "1.8.0",
@@ -54,6 +55,7 @@
     "mermaid": "12.2.0",
     "micromark-util-classify-character": "2.0.1",
     "micromark-util-resolve-all": "2.0.1",
+    "pdfjs-dist": "6.5.438",
     "playwright": "1.64.1",
     "postcss": "8.5.31",
     "postcss-selector-parser": "7.1.7",

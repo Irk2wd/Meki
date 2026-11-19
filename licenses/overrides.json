@@ -452,5 +452,137 @@
         "sha256": "13d8825a59e5e546d41e8711405d0f335a9934362a47c04a3b4280fa7932dc4a"
       }
     ]
+  },
+  "@napi-rs/canvas-android-arm64@1.1.1": {
+    "license": "MIT",
+    "reason": "The optional Node.js binary omits the parent package license. The browser preview uses Electron canvas and the native Node addon is not staged.",
+    "packageSource": "https://registry.npmjs.org/@napi-rs/canvas-android-arm64/-/canvas-android-arm64-1.1.1.tgz",
+    "files": [
+      {
+        "path": "licenses/upstream/napi-rs-canvas-1.1.1-LICENSE.txt",
+        "url": "https://github.com/Brooooooklyn/canvas/blob/4627c0f8ddec93d8b25f2e24e6d7055a23b92691/LICENSE",
+        "sha256": "0b8e3b4f0042f33677406344854c1dcce3a2878eb3a3f6baee58c6f5752655ce"
+      }
+    ]
+  },
+  "@napi-rs/canvas-darwin-arm64@1.1.1": {
+    "license": "MIT",
+    "reason": "The optional Node.js binary omits the parent package license. The browser preview uses Electron canvas and the native Node addon is not staged.",
+    "packageSource": "https://registry.npmjs.org/@napi-rs/canvas-darwin-arm64/-/canvas-darwin-arm64-1.1.1.tgz",
+    "files": [
+      {
+        "path": "licenses/upstream/napi-rs-canvas-1.1.1-LICENSE.txt",
+        "url": "https://github.com/Brooooooklyn/canvas/blob/4627c0f8ddec93d8b25f2e24e6d7055a23b92691/LICENSE",
+        "sha256": "0b8e3b4f0042f33677406344854c1dcce3a2878eb3a3f6baee58c6f5752655ce"
+      }
+    ]
+  },
+  "@napi-rs/canvas-darwin-x64@1.1.1": {
+    "license": "MIT",
+    "reason": "The optional Node.js binary omits the parent package license. The browser preview uses Electron canvas and the native Node addon is not staged.",
+    "packageSource": "https://registry.npmjs.org/@napi-rs/canvas-darwin-x64/-/canvas-darwin-x64-1.1.1.tgz",
+    "files": [
+      {
+        "path": "licenses/upstream/napi-rs-canvas-1.1.1-LICENSE.txt",
+        "url": "https://github.com/Brooooooklyn/canvas/blob/4627c0f8ddec93d8b25f2e24e6d7055a23b92691/LICENSE",
+        "sha256": "0b8e3b4f0042f33677406344854c1dcce3a2878eb3a3f6baee58c6f5752655ce"
+      }
+    ]
+  },
+  "@napi-rs/canvas-linux-arm-gnueabihf@1.1.1": {
+    "license": "MIT",
+    "reason": "The optional Node.js binary omits the parent package license. The browser preview uses Electron canvas and the native Node addon is not staged.",
+    "packageSource": "https://registry.npmjs.org/@napi-rs/canvas-linux-arm-gnueabihf/-/canvas-linux-arm-gnueabihf-1.1.1.tgz",
+    "files": [
+      {
+        "path": "licenses/upstream/napi-rs-canvas-1.1.1-LICENSE.txt",
+        "url": "https://github.com/Brooooooklyn/canvas/blob/4627c0f8ddec93d8b25f2e24e6d7055a23b92691/LICENSE",
+        "sha256": "0b8e3b4f0042f33677406344854c1dcce3a2878eb3a3f6baee58c6f5752655ce"
+      }
+    ]
+  },
+  "@napi-rs/canvas-linux-arm64-gnu@1.1.1": {
+    "license": "MIT",
+    "reason": "The optional Node.js binary omits the parent package license. The browser preview uses Electron canvas and the native Node addon is not staged.",
+    "packageSource": "https://registry.npmjs.org/@napi-rs/canvas-linux-arm64-gnu/-/canvas-linux-arm64-gnu-1.1.1.tgz",
+    "files": [
+      {
+        "path": "licenses/upstream/napi-rs-canvas-1.1.1-LICENSE.txt",
+        "url": "https://github.com/Brooooooklyn/canvas/blob/4627c0f8ddec93d8b25f2e24e6d7055a23b92691/LICENSE",
+        "sha256": "0b8e3b4f0042f33677406344854c1dcce3a2878eb3a3f6baee58c6f5752655ce"
+      }
+    ]
+  },
+  "@napi-rs/canvas-linux-arm64-musl@1.1.1": {
+    "license": "MIT",
+    "reason": "The optional Node.js binary omits the parent package license. The browser preview uses Electron canvas and the native Node addon is not staged.",
+    "packageSource": "https://registry.npmjs.org/@napi-rs/canvas-linux-arm64-musl/-/canvas-linux-arm64-musl-1.1.1.tgz",
+    "files": [
+      {
+        "path": "licenses/upstream/napi-rs-canvas-1.1.1-LICENSE.txt",
+        "url": "https://github.com/Brooooooklyn/canvas/blob/4627c0f8ddec93d8b25f2e24e6d7055a23b92691/LICENSE",
+        "sha256": "0b8e3b4f0042f33677406344854c1dcce3a2878eb3a3f6baee58c6f5752655ce"
+      }
+    ]
+  },
+  "@napi-rs/canvas-linux-riscv64-gnu@1.1.1": {
+    "license": "MIT",
+    "reason": "The optional Node.js binary omits the parent package license. The browser preview uses Electron canvas and the native Node addon is not staged.",
+    "packageSource": "https://registry.npmjs.org/@napi-rs/canvas-linux-riscv64-gnu/-/canvas-linux-riscv64-gnu-1.1.1.tgz",
+    "files": [
+      {
+        "path": "licenses/upstream/napi-rs-canvas-1.1.1-LICENSE.txt",
+        "url": "https://github.com/Brooooooklyn/canvas/blob/4627c0f8ddec93d8b25f2e24e6d7055a23b92691/LICENSE",
+        "sha256": "0b8e3b4f0042f33677406344854c1dcce3a2878eb3a3f6baee58c6f5752655ce"
+      }
+    ]
+  },
+  "@napi-rs/canvas-linux-x64-gnu@1.1.1": {
+    "license": "MIT",
+    "reason": "The optional Node.js binary omits the parent package license. The browser preview uses Electron canvas and the native Node addon is not staged.",
+    "packageSource": "https://registry.npmjs.org/@napi-rs/canvas-linux-x64-gnu/-/canvas-linux-x64-gnu-1.1.1.tgz",
+    "files": [
+      {
+        "path": "licenses/upstream/napi-rs-canvas-1.1.1-LICENSE.txt",
+        "url": "https://github.com/Brooooooklyn/canvas/blob/4627c0f8ddec93d8b25f2e24e6d7055a23b92691/LICENSE",
+        "sha256": "0b8e3b4f0042f33677406344854c1dcce3a2878eb3a3f6baee58c6f5752655ce"
+      }
+    ]
+  },
+  "@napi-rs/canvas-linux-x64-musl@1.1.1": {
+    "license": "MIT",
+    "reason": "The optional Node.js binary omits the parent package license. The browser preview uses Electron canvas and the native Node addon is not staged.",
+    "packageSource": "https://registry.npmjs.org/@napi-rs/canvas-linux-x64-musl/-/canvas-linux-x64-musl-1.1.1.tgz",
+    "files": [
+      {
+        "path": "licenses/upstream/napi-rs-canvas-1.1.1-LICENSE.txt",
+        "url": "https://github.com/Brooooooklyn/canvas/blob/4627c0f8ddec93d8b25f2e24e6d7055a23b92691/LICENSE",
+        "sha256": "0b8e3b4f0042f33677406344854c1dcce3a2878eb3a3f6baee58c6f5752655ce"
+      }
+    ]
+  },
+  "@napi-rs/canvas-win32-arm64-msvc@1.1.1": {
+    "license": "MIT",
+    "reason": "The optional Node.js binary omits the parent package license. The browser preview uses Electron canvas and the native Node addon is not staged.",
+    "packageSource": "https://registry.npmjs.org/@napi-rs/canvas-win32-arm64-msvc/-/canvas-win32-arm64-msvc-1.1.1.tgz",
+    "files": [
+      {
+        "path": "licenses/upstream/napi-rs-canvas-1.1.1-LICENSE.txt",
+        "url": "https://github.com/Brooooooklyn/canvas/blob/4627c0f8ddec93d8b25f2e24e6d7055a23b92691/LICENSE",
+        "sha256": "0b8e3b4f0042f33677406344854c1dcce3a2878eb3a3f6baee58c6f5752655ce"
+      }
+    ]
+  },
+  "@napi-rs/canvas-win32-x64-msvc@1.1.1": {
+    "license": "MIT",
+    "reason": "The optional Node.js binary omits the parent package license. The browser preview uses Electron canvas and the native Node addon is not staged.",
+    "packageSource": "https://registry.npmjs.org/@napi-rs/canvas-win32-x64-msvc/-/canvas-win32-x64-msvc-1.1.1.tgz",
+    "files": [
+      {
+        "path": "licenses/upstream/napi-rs-canvas-1.1.1-LICENSE.txt",
+        "url": "https://github.com/Brooooooklyn/canvas/blob/4627c0f8ddec93d8b25f2e24e6d7055a23b92691/LICENSE",
+        "sha256": "0b8e3b4f0042f33677406344854c1dcce3a2878eb3a3f6baee58c6f5752655ce"
+      }
+    ]
   }
 }

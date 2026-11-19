@@ -6,10 +6,12 @@ const path = require('node:path');
 const { atomicWrite, decodeDocument, digest, isWithin, pathKey, readBytes, validateAbsolutePath } = require('./file-store.cjs');
 const { assert, validateEvidencePath } = require('./research-model.cjs');
 const { evidenceImageExtensions, evidenceImageMime } = require('./research-comparison.mjs');
+const { researchReportFormat } = require('./research-report-format.mjs');
 
 const textFiles = new Set(['.md', '.markdown', '.txt', '.json', '.csv', '.tsv', '.log', '.tex', '.bib', '.xml', '.yaml', '.yml']);
-const knownEvidence = new Set([...evidenceImageExtensions, ...textFiles, '.pdf', '.exr', '.tiff', '.xlsx', '.docx', '.zip', '.rdc', '.nsight-gfx']);
+const knownEvidence = new Set([...evidenceImageExtensions, ...textFiles, '.pdf', '.pptx', '.exr', '.tiff', '.xlsx', '.docx', '.zip', '.rdc', '.nsight-gfx']);
 const previewLimit = 24 * 1024 * 1024;
+const reportPreviewLimit = 64 * 1024 * 1024;
 
 function bindingPath(root) {
   const local = process.env.MEKIR_LOCAL_STATE || path.join(os.homedir(), '.mekir');
@@ -71,6 +73,11 @@ async function evidencePath(directory, relativePath) {
 
 async function previewEvidence(file, reference, source) {
   const result = { ...reference, source: source.label, kind: 'file' };
+  const format = researchReportFormat(file.path);
+  if (format && file.size <= reportPreviewLimit) {
+    const { bytes } = await readBytes(file.path, reportPreviewLimit);
+    return { ...result, kind: format, bytes: Uint8Array.from(bytes) };
+  }
   const ext = path.extname(file.path).toLowerCase();
   const mime = evidenceImageMime(file.path);
   if (file.size > previewLimit || (!mime && !textFiles.has(ext))) return result;

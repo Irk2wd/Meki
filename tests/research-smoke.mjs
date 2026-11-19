@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { _electron as electron } from 'playwright';
+import { writeReportPdf, writeReportPptx } from './research-report-fixtures.mjs';
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -1131,8 +1132,91 @@ try {
   assert.equal(await motion.evaluate(probe => probe.calls.length), animationsBeforeZoom);
   await motion.evaluate(probe => probe.restore());
   await motion.dispose();
-  assert.deepEqual(errors, []);
   pass('adjacent event dates merge without extra rows, split on resize or zoom, and honor reduced motion');
+
+  const pdfReport = path.join(archive, 'GPU.pdf'), slidesReport = path.join(archive, 'GPU.PPTX');
+  await writeReportPdf(pdfReport);
+  await writeReportPptx(slidesReport);
+  command('index', ['gpu-report-pdf', '--source', 'archive', '--path', 'GPU.pdf']);
+  command('index', ['gpu-report-slides', '--source', 'archive', '--path', 'GPU.PPTX']);
+  command('batch', [], { records: [
+    { id: 'pdf-briefing', type: 'group-meeting', phaseId: 'validation', date: '2026-11-14',
+      title: '性能汇报 PDF', fields: {}, body: '# 性能汇报 PDF\n\n[原始汇报][deck]\n\n[deck]: mekir:gpu-report-pdf\n' },
+    { id: 'slide-briefing', type: 'group-meeting', phaseId: 'validation', date: '2026-11-14',
+      title: '复测汇报 PPTX', fields: {}, evidence: ['gpu-report-slides'], body: '# 复测汇报 PPTX\n\n保留事件正文。\n' },
+  ] });
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1120, 540));
+  await refresh.click();
+  await idle();
+  await page.locator('[data-research-reset-range]').click();
+  const activePhase = page.locator('[data-research-phase="validation"]');
+  if (await activePhase.getAttribute('aria-pressed') !== 'true') await activePhase.click();
+  const briefingSelector = '[data-research-timeline-events~="pdf-briefing"][data-research-timeline-events~="slide-briefing"]';
+  const briefing = page.locator(briefingSelector);
+  await briefing.scrollIntoViewIfNeeded();
+  const timelinePosition = await researchScroll.evaluate(element => element.scrollTop);
+  const dateRange = await rangeButton.innerText();
+  const report = page.locator('#research-report-dialog');
+  async function openBriefing(title) {
+    await briefing.click();
+    await page.locator('#research-tools-dialog').getByRole('button', { name: title }).click();
+    await report.waitFor();
+  }
+  async function readyReportPage(number) {
+    await report.locator('#research-report-page').getByText(`第 ${number} 页，共 3 页`, { exact: true }).waitFor();
+    await report.locator('.research-report-stage[aria-busy=false]').waitFor();
+    assert.equal(await report.locator('#research-report-status').isVisible(), false);
+  }
+  async function closeBriefing() {
+    await report.getByRole('button', { name: '关闭汇报预览' }).click();
+    await report.waitFor({ state: 'hidden' });
+    assert.equal(await researchScroll.evaluate(element => element.scrollTop), timelinePosition);
+    assert.equal(await rangeButton.innerText(), dateRange);
+    assert.equal(await activePhase.getAttribute('aria-pressed'), 'true');
+    await page.waitForFunction(selector => document.activeElement?.matches(selector), briefingSelector);
+  }
+  await openBriefing('性能汇报 PDF');
+  const colors = [];
+  for (const number of [1, 2, 3]) {
+    await readyReportPage(number);
+    colors.push(await report.locator('canvas').evaluate(canvas => [...canvas.getContext('2d').getImageData(20, 20, 1, 1).data].join(',')));
+    if (number < 3) await report.locator('[data-report-next]').click();
+  }
+  assert.equal(new Set(colors).size, 3);
+  assert.equal(await report.locator('[data-report-next]').isDisabled(), true);
+  await report.locator('[data-report-prev]').click();
+  await readyReportPage(2);
+  await report.locator('[data-report-prev]').click();
+  await readyReportPage(1);
+  assert.equal(await report.locator('canvas').evaluate(canvas => [...canvas.getContext('2d').getImageData(20, 20, 1, 1).data].join(',')), colors[0]);
+  await report.getByRole('button', { name: '定位原文件' }).click();
+  await report.screenshot({ path: path.join(folder, 'report-pdf.png'), animations: 'disabled' });
+  await closeBriefing();
+
+  const externalReportRequests = [];
+  page.on('request', request => {
+    if (request.url().startsWith('https://report-preview.invalid/')) externalReportRequests.push(request.url());
+  });
+  await openBriefing('复测汇报 PPTX');
+  for (const [index, title] of ['First', 'Second', 'Third'].entries()) {
+    await readyReportPage(index + 1);
+    assert.match(await report.locator('.research-report-document').textContent(), new RegExp(`${title} report slide`));
+    if (index < 2) await report.locator('[data-report-next]').click();
+  }
+  await page.keyboard.press('ArrowLeft');
+  await readyReportPage(2);
+  await page.keyboard.press('ArrowLeft');
+  await readyReportPage(1);
+  assert.deepEqual(externalReportRequests, []);
+  await report.screenshot({ path: path.join(folder, 'report-pptx.png'), animations: 'disabled' });
+  await closeBriefing();
+  await openBriefing('复测汇报 PPTX');
+  await readyReportPage(1);
+  await report.getByRole('button', { name: '查看事件正文' }).click();
+  await page.locator('#research-reader-title').getByText('复测汇报 PPTX', { exact: true }).waitFor();
+  await closeReader();
+  pass('same-day reports reveal and preview indexed PPTX/PDF pages in original order, preserving the timeline and event note');
+  assert.deepEqual(errors, []);
 
   await fs.writeFile(path.join(folder, 'results.json'), JSON.stringify({ results, errors }, null, 2) + '\n');
   console.log(`Timeline screenshot: ${path.join(folder, 'timeline.png')}`);

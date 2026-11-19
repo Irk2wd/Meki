@@ -53,7 +53,8 @@ const text = notices.join('\n').replace(/\r\n/g, '\n').replace(/[ \t]+$/gm, '').
 const target = path.join(root, 'THIRD_PARTY_NOTICES.txt');
 if (process.argv.includes('--check')) {
   const current = (await fs.readFile(target, 'utf8')).replace(/\r\n/g, '\n');
-  const divider = new RegExp(`\\n${'='.repeat(72)}\\n`);
+  // Some upstream notices include separator lines of their own.
+  const divider = new RegExp(`\\n${'='.repeat(72)}\\n(?=\\S+ \\S+\\nLicense: )`);
   const blocks = document => document.split(divider).map(block => block.trim());
   const expected = blocks(text), actual = blocks(current);
   const key = block => { const lines = block.split('\n'); return `${lines[0]}@${lines[1] || ''}`; };

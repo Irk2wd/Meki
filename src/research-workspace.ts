@@ -1,9 +1,11 @@
 import { getLocale, ht, t } from '../electron/i18n.mjs';
 import { comparisonImages } from '../electron/research-comparison.mjs';
+import { researchReportFormat } from '../electron/research-report-format.mjs';
 import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSnapshot, ResearchType, ResearchValue, ResearchView } from '../shared/research';
 import { icon } from './icons';
 import { ComparisonGridEditor, ComparisonViewer } from './research-comparison';
 import { TimelineEventLayout, timelineEventButton, type TimelineEventDay } from './research-timeline-events';
+import { reportReferences } from './research-report-links';
 import { escapeResearch as escape, relationLabels, researchOption as option, ResearchTools, runFields, timelineIcon, type ResearchWidths } from './research-tools';
 import './research-workspace.css';
 
@@ -343,6 +345,7 @@ export class ResearchWorkspace {
   private readerReturn?: { scroll: number; origin?: HTMLButtonElement };
   private loading = false;
   private loadNumber = 0;
+  private referenceRequest = 0;
   private editing: ResearchEntry | undefined;
   private formProject: ResearchSnapshot | null = null;
   private initialFieldValues = new Map<string, string>();
@@ -594,17 +597,31 @@ export class ResearchWorkspace {
   async openReference(id: string, origin?: HTMLButtonElement, back?: () => void) {
     const state = this.snapshot;
     if (!state) return;
-    if (state.records.some(({ record }) => record.id === id && record.comparison)) {
+    const request = ++this.referenceRequest;
+    const record = state.records.find(item => item.record.id === id)?.record;
+    if (record?.comparison) {
       const document = await window.meki.readResearchRecord(state.root, id);
-      if (this.hooks.root() !== state.root) return;
+      if (request !== this.referenceRequest || this.hooks.root() !== state.root) return;
       this.comparisonViewer.show(state.root, document, {
         width: this.widths.comparison, back,
         evidence: file => this.tools.evidence(state.root, file, undefined, t("返回对比")),
         edit: () => this.hooks.open(state.root, id, origin, true),
         error: error => this.hooks.notify(errorText(error), true),
       });
-    } else if (state.documents.some(file => file.id === id && file.sourceId)) await this.openEvidence(id);
-    else await this.hooks.open(state.root, id, origin);
+      return;
+    }
+    if (state.documents.some(file => file.id === id && file.sourceId)) { await this.openEvidence(id); return; }
+    if (record && state.project.recordTypes.some(type => type.id === record.type && type.kind === 'event')
+      && state.documents.some(file => file.sourceId && researchReportFormat(file.relativePath))) {
+      const document = await window.meki.readResearchRecord(state.root, id);
+      if (request !== this.referenceRequest || this.hooks.root() !== state.root || (origin && !origin.isConnected)) return;
+      const files = reportReferences(document, state.documents);
+      if (files.length) {
+        this.tools.previewReports(state.root, files, origin, () => this.hooks.open(state.root, id, origin));
+        return;
+      }
+    }
+    await this.hooks.open(state.root, id, origin);
   }
 
   async showProjects() {

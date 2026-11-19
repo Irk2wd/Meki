@@ -80,9 +80,10 @@ export interface ResearchEvidenceFile {
   title: string;
   source: string;
   relativePath: string;
-  kind: 'text' | 'image' | 'file';
+  kind: 'text' | 'image' | 'file' | 'pdf' | 'pptx';
   content?: string;
   mime?: string;
+  bytes?: Uint8Array;
 }
 
 export interface ResearchImportRun {
