@@ -1,5 +1,5 @@
 import { ht, t } from '../electron/i18n.mjs';
-import type { ResearchFilter, ResearchImportPreview, ResearchPhase, ResearchRelationKind, ResearchSnapshot } from '../shared/research';
+import type { ResearchEntry, ResearchFilter, ResearchImportPreview, ResearchPhase, ResearchRelationKind, ResearchSnapshot } from '../shared/research';
 import { icon } from './icons';
 
 export const escapeResearch = (value: string | number | boolean) => String(value).replace(/[&<>"']/g, char => ({
@@ -59,6 +59,41 @@ export class ResearchTools {
       try { await action(new FormData(form), event.submitter); }
       catch (error) { message.textContent = String(error).replace(/^Error: (?:Error invoking remote method '[^']+': Error: )?/, ''); }
       finally { this.submitting = false; buttons.forEach(button => { button.disabled = false; }); }
+    });
+  }
+
+  editDescription({ root, project, revision }: ResearchSnapshot, focus: () => void) {
+    if (this.dialog.open) return;
+    this.show(`<form>${heading(t("编辑项目描述"))}
+      <div class="research-form-grid"><label class="wide"><span id="research-description-label">${ht("项目描述")}</span>
+        <textarea name="description" rows="5" maxlength="2000" aria-labelledby="research-description-label" autofocus>${escape(project.description ?? '')}</textarea></label></div>
+      ${feedback}<div class="research-actions">
+        <button type="button" class="secondary-button" data-tools-close>${ht("取消")}</button>
+        <button type="submit" class="primary-button">${ht("保存")}</button>
+      </div></form>`);
+    this.submit(async data => {
+      const description = String(data.get('description')).trim();
+      const updated = { ...project };
+      if (description) updated.description = description;
+      else delete updated.description;
+      await window.meki.configureResearchProject(root, { ifRevision: revision, project: updated });
+      await this.refresh();
+      this.dialog.close();
+      focus();
+    });
+  }
+
+  chooseComparison(date: string, entries: ResearchEntry[], open: (id: string) => Promise<void>) {
+    if (this.dialog.open) return;
+    this.show(`${heading(t("{0} 的可视化展示", date))}
+      <ul class="research-project-list">${entries.map(({ record }, index) => `<li>
+        <button type="button" data-research-comparison-choice="${record.id}"${index === 0 ? ' autofocus' : ''}>
+          ${icon('image', 17)}<strong>${escape(record.title)}</strong></button></li>`).join('')}</ul>`);
+    this.dialog.querySelectorAll<HTMLButtonElement>('[data-research-comparison-choice]').forEach(button => {
+      button.addEventListener('click', () => {
+        this.dialog.close();
+        void open(button.dataset.researchComparisonChoice!).catch(error => this.notify(String(error), true));
+      });
     });
   }
 

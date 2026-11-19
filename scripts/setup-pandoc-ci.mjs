@@ -35,12 +35,12 @@ for (let attempt = 0; ; attempt++) {
 }
 await fs.mkdir(destination);
 if (process.platform === 'win32') {
-  await execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Expand-Archive -LiteralPath $env:MEKI_CI_ARCHIVE -DestinationPath $env:MEKI_CI_DESTINATION'], { windowsHide: true, timeout: 120_000, env: { ...process.env, MEKI_CI_ARCHIVE: archive, MEKI_CI_DESTINATION: destination } });
+  await execute('tar.exe', ['-xf', archive, '-C', destination], { windowsHide: true, timeout: 120_000 });
 } else await execute('/usr/bin/ditto', ['-x', '-k', archive, destination], { timeout: 120_000 });
 async function findExecutable(root) {
   for (const item of await fs.readdir(root, { withFileTypes: true })) {
     const candidate = path.join(root, item.name);
-    if (item.isFile() && item.name === (process.platform === 'win32' ? 'pandoc.exe' : 'pandoc')) return candidate;
+    if (item.isFile() && (process.platform === 'win32' ? item.name.toLowerCase() === 'pandoc.exe' : item.name === 'pandoc')) return candidate;
     if (item.isDirectory()) { const result = await findExecutable(candidate); if (result) return result; }
   }
 }

@@ -63,6 +63,13 @@ async function sourceAppend(text) {
   await page.keyboard.insertText(text);
 }
 
+async function editDescription() {
+  const dialog = page.locator('#research-tools-dialog');
+  await page.getByRole('button', { name: '编辑项目描述', exact: true }).click();
+  await dialog.getByRole('heading', { name: '编辑项目描述', exact: true }).waitFor();
+  return dialog;
+}
+
 try {
   await launch();
   await page.getByRole('heading', { name: '科研项目', exact: true }).waitFor();
@@ -71,10 +78,27 @@ try {
   await page.getByRole('button', { name: '创建示例项目', exact: true }).click();
   await page.getByRole('heading', { name: '实时渲染性能研究', exact: true }).waitFor();
   await idle();
+  const originalDescription = command('describe').project.description;
+  const descriptionForm = await editDescription();
+  const descriptionField = descriptionForm.getByLabel('项目描述', { exact: true });
+  assert.equal(await descriptionField.inputValue(), originalDescription);
+  await descriptionField.fill('不保存的临时描述');
+  await descriptionForm.getByRole('button', { name: '取消', exact: true }).last().click();
+  await descriptionForm.waitFor({ state: 'hidden' });
+  assert.equal(command('describe').project.description, originalDescription);
+  await editDescription();
+  const savedDescription = '研究遮挡剔除对 GPU 帧时间的影响。\n按机位对比 <原图> 和帧时间。';
+  await descriptionField.fill(savedDescription);
+  await descriptionForm.getByRole('button', { name: '保存', exact: true }).click();
+  await descriptionForm.waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('.research-overview p').textContent(), savedDescription);
+  assert.equal(command('describe').project.description, savedDescription);
   await app.close();
   app = undefined;
   await launch();
   await page.getByRole('heading', { name: '实时渲染性能研究', exact: true }).waitFor();
+  assert.equal(await page.locator('.research-overview p').textContent(), savedDescription);
+  pass('project description edits are escaped, take effect immediately, survive restart and can be canceled');
   await page.locator('[data-research-destination=timeline][aria-current=page]').waitFor();
   await page.locator('[data-action="research-projects"]').first().click();
   const projectPicker = page.locator('#research-project-picker');
@@ -90,14 +114,16 @@ try {
   assert.equal(command('read', ['exploration-review']).relativePath, '.mekir/summaries/r-exploration-review.md');
   assert.equal(command('read', ['tile-culling']).relativePath, 'records/r-tile-culling.md');
   assert.ok((await page.evaluate(() => window.meki.refreshWorkspace())).tree.every(entry => !entry.relativePath.startsWith('.mekir')));
-  const phases = page.locator('.research-timeline [data-research-phase]');
-  const phaseOrder = () => phases.evaluateAll(rows => rows.map(row => row.dataset.researchPhase));
+  const phases = page.locator('.research-timeline-row');
+  const phaseOrder = () => phases.locator('[data-research-phase]').evaluateAll(rows => rows.map(row => row.dataset.researchPhase));
   const refresh = page.getByRole('button', { name: '刷新项目', exact: true });
   await page.clock.setFixedTime(new Date('2026-11-17T12:00:00+08:00'));
   await refresh.click();
   await idle();
   assert.deepEqual(await phaseOrder(), ['validation', 'exploration', 'baseline']);
   assert.match(await phases.first().innerText(), /进行中/);
+  assert.equal(await phases.first().locator('.research-timeline-dot:not(.is-ended)').count(), 1);
+  assert.equal(await phases.last().locator('.research-timeline-dot.is-ended').count(), 1);
   await page.clock.setFixedTime(new Date('2026-11-19T12:00:00+08:00'));
   await refresh.click();
   await idle();
@@ -562,6 +588,15 @@ try {
   await showProjectPicker();
   await projectPicker.locator('[data-action=research-open-project]').click();
   await page.getByRole('heading', { name: secondPeer.title, exact: true }).waitFor();
+  assert.equal(await page.locator('.research-overview p').count(), 0);
+  const emptyDescription = await editDescription();
+  assert.equal(await emptyDescription.getByLabel('项目描述', { exact: true }).inputValue(), '');
+  await emptyDescription.getByLabel('项目描述', { exact: true }).fill('追踪论文的章节修改。');
+  await emptyDescription.getByRole('button', { name: '保存', exact: true }).click();
+  await emptyDescription.waitFor({ state: 'hidden' });
+  await page.locator('.research-overview p').getByText('追踪论文的章节修改。', { exact: true }).waitFor();
+  assert.equal(commandAt(secondPeer.root, 'describe').project.description, '追踪论文的章节修改。');
+  pass('a project without a description can add one from the overview');
   const paperEntry = page.locator('.research-entry').filter({ hasText: '方法章节修改' });
   assert.match(await paperEntry.locator('.research-entry-meta').innerText(), /章节 方法/);
   assert.doesNotMatch(await paperEntry.locator('.research-entry-meta').innerText(), /稿件版本/);
@@ -663,7 +698,7 @@ try {
   const futureRow = phases.filter({ hasText: '计划验证阶段' });
   await ongoingRow.getByText('进行中', { exact: true }).waitFor();
   await futureRow.getByText('未开始', { exact: true }).waitFor();
-  assert.equal(await futureRow.getAttribute('data-research-phase'), futureId);
+  assert.equal(await futureRow.locator('[data-research-phase]').getAttribute('data-research-phase'), futureId);
   const bar = ongoingRow.locator('.research-timeline-bar');
   const rightEdge = () => bar.evaluate(item => parseFloat(item.style.getPropertyValue('--right')));
   const before = await rightEdge();
@@ -672,7 +707,7 @@ try {
   const axisDays = (axisEnd - axisStart) / 86400000 + 1;
   await page.clock.setFixedTime(new Date('2026-11-19T16:00:00Z'));
   await page.waitForFunction(({ id, right }) => {
-    const item = document.querySelector(`[data-research-phase="${id}"] .research-timeline-bar`);
+    const item = document.querySelector(`[data-research-phase="${id}"]`)?.closest('.research-timeline-row')?.querySelector('.research-timeline-bar');
     return Number.parseFloat(item?.style.getPropertyValue('--right')) < right;
   }, { id: ongoingId, right: before });
   assert.ok(Math.abs(before - await rightEdge() - 100 / axisDays) < 0.000001);
@@ -767,7 +802,7 @@ try {
   await comparison.getByRole('button', { name: '关闭可视化展示' }).click();
   const saved = command('list', ['--phase', futureId, '--type', command('describe').format.comparison.type]).records[0].record;
   assert.deepEqual(saved.comparison.rows.flatMap(row => row.images), imageIds);
-  await page.getByRole('button', { name: /双机位 Mesh 对比/ }).click();
+  await futureRow.getByRole('button', { name: '打开可视化展示 双机位 Mesh 对比', exact: true }).click();
   await comparison.locator('.research-comparison-caption strong').getByText('同一机位').waitFor();
   await comparison.getByRole('button', { name: '编辑图注', exact: true }).click();
   await page.locator('#visual-editor strong').getByText('同一机位').waitFor();
@@ -778,6 +813,35 @@ try {
   await closeReader();
   assert.deepEqual(errors, []);
   pass('phase comparisons retain evidence and Markdown captions, link zoom and pan within rows, and open original pixels');
+
+  const beforeBackfill = await phaseOrder();
+  const sameDay = '2026-11-04';
+  const titles = ['基线图像对比 A', '基线图像对比 B'];
+  command('batch', [], { records: titles.map((title, index) => ({
+    id: `baseline-display-${index}`, ifRevision: null, title, type: saved.type, phaseId: 'baseline',
+    date: sameDay, comparison: saved.comparison, body: '历史展示图注',
+  })) });
+  await refresh.click();
+  const baseline = phases.filter({ hasText: '基线测量' });
+  const marker = baseline.getByRole('button', { name: `${sameDay} 的 2 条可视化展示`, exact: true });
+  await marker.waitFor();
+  assert.equal(await baseline.locator('.research-timeline-comparison').count(), 1);
+  assert.deepEqual(await phaseOrder(), beforeBackfill);
+  const dot = baseline.locator('.research-timeline-dot.is-ended');
+  assert.equal(await dot.count(), 1);
+  const [iconBox, dotBox] = await Promise.all([marker.boundingBox(), dot.boundingBox()]);
+  assert.ok(Math.abs(iconBox.x + iconBox.width / 2 - dotBox.x - dotBox.width / 2) < 1);
+  await page.locator('.research-timeline').screenshot({ path: path.join(folder, 'timeline-comparisons.png'), animations: 'disabled' });
+  for (const title of titles) {
+    await marker.click();
+    await tools.getByRole('heading', { name: `${sameDay} 的可视化展示`, exact: true }).waitFor();
+    await tools.getByRole('button', { name: title, exact: true }).click();
+    await comparison.getByRole('heading', { name: title, exact: true }).waitFor();
+    await comparison.getByRole('button', { name: '关闭可视化展示' }).click();
+    assert.equal(await baseline.locator('[data-research-phase]').getAttribute('aria-pressed'), 'false');
+  }
+  assert.deepEqual(errors, []);
+  pass('same-day backfilled comparisons appear once, align with the finished experiment dot and open individually');
 
   await fs.writeFile(path.join(folder, 'results.json'), JSON.stringify({ results, errors }, null, 2) + '\n');
   console.log(`Timeline screenshot: ${path.join(folder, 'timeline.png')}`);

@@ -102,16 +102,29 @@ interface TimelineOptions {
 }
 
 const phaseGroupOrder = { ongoing: 0, ended: 1, upcoming: 2 } as const;
+const endedStatuses = new Set(['ended', 'finished', 'completed', 'done', 'succeeded', 'failed', 'canceled', 'cancelled', '已结束', '已完成', '完成', '失败', '已取消']);
+const activeStatuses = new Set(['running', 'ongoing', 'in progress', '进行中', '运行中']);
+
+function experimentEnded({ fields, run }: ResearchEntry['record'], phaseEnded: boolean) {
+  for (const status of [fields.status, run?.status]) {
+    if (typeof status !== 'string') continue;
+    const value = status.trim().toLowerCase().replace(/[-_]/g, ' ');
+    if (endedStatuses.has(value)) return true;
+    if (activeStatuses.has(value)) return false;
+  }
+  return phaseEnded;
+}
 
 function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByPhase: Map<string, ResearchEntry[]>,
   { activePhase, today, range: selection, presetId, page: requestedPage, pageSize, canCreatePhase }: TimelineOptions) {
   const spans = phases.map(phase => ({ phase, span: phaseSpan(phase, today) }));
-  const dates = [...spans.flatMap(({ span }) => [span.start, span.end]), ...entries.map(({ record }) => record.date)].sort();
+  const comparisons = [...progressByPhase.values()].flat().filter(({ record }) => record.comparison);
+  const dates = [...spans.flatMap(({ span }) => [span.start, span.end]), ...[...entries, ...comparisons].map(({ record }) => record.date)].sort();
   const range = selection || { start: dates[0] || today, end: dates.at(-1) || today };
   const start = dayNumber(range.start), end = dayNumber(range.end), span = end - start + 1;
   const crossesYear = new Date(start * 86400000).getUTCFullYear() !== new Date(end * 86400000).getUTCFullYear();
   const position = (date: string, offset = 0) => (dayNumber(date) - start + offset) * 100 / span;
-  const dot = (date: string) => `<i class="research-timeline-dot" style="--point:${position(date, 0.5)}%"></i>`;
+  const dot = (date: string, ended: boolean) => `<i class="research-timeline-dot${ended ? ' is-ended' : ''}" style="--point:${position(date, 0.5)}%"></i>`;
   const hasToday = containsDay(range, today);
   const ticks = [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(start + (end - start) * i / 4)))];
   const ordered = spans.filter(({ span }) => overlaps(span, range)).map(({ phase, span }) => {
@@ -130,15 +143,31 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
   const pageCount = Math.max(1, Math.ceil(ordered.length / limit));
   const page = Math.max(1, Math.min(requestedPage, pageCount));
   const phaseRows = ordered.slice((page - 1) * limit, page * limit).map(({ phase, span, group, latest, assigned }) => {
-    const activity = [...new Set(assigned.map(({ record }) => record.date))];
+    const activity = new Map<string, boolean>();
+    for (const { record } of assigned) {
+      activity.set(record.date, (activity.get(record.date) ?? true) && experimentEnded(record, group === 'ended'));
+    }
+    const displays = new Map<string, string[]>();
+    for (const { record } of progressByPhase.get(phase.id) || []) {
+      if (!record.comparison || !containsDay(range, record.date)) continue;
+      const titles = displays.get(record.date);
+      if (titles) titles.push(record.title);
+      else displays.set(record.date, [record.title]);
+    }
+    const markers = [...displays].sort(([a], [b]) => a.localeCompare(b)).map(([date, titles]) => {
+      const label = titles.length === 1 ? ht("打开可视化展示 {0}", escape(titles[0])) : ht("{0} 的 {1} 条可视化展示", date, titles.length);
+      return `<button type="button" class="research-timeline-comparison" style="--point:${position(date, 0.5)}%"
+        data-research-comparison-phase="${phase.id}" data-date="${date}" aria-haspopup="dialog" aria-label="${label}" title="${label}">${icon('image', 14)}</button>`;
+    }).join('');
     const left = Math.max(0, position(span.start)), right = Math.max(0, 100 - position(span.end, 1));
     const status = group === 'ongoing' ? ht("进行中") : group === 'ended' ? ht("已结束") : ht("未开始");
-    return `<button type="button" class="research-timeline-row" data-research-phase="${phase.id}" aria-pressed="${activePhase === phase.id}">
-      <span class="research-timeline-label"><strong>${escape(phase.title)} <span class="research-phase-status${group === 'ongoing' ? ' research-phase-ongoing' : ''}">${status}</span></strong>
-        <small>${escape(phaseDates(phase, today, true))} · ${ht("{0} 条实验", assigned.length)}</small>${latest ? `<small>${ht("最近进展 {0}", escape(formatDay(dayNumber(latest), latest.slice(0, 4) !== today.slice(0, 4))))}</small>` : ''}</span>
-      <span aria-hidden="true" class="research-timeline-track"><i class="research-timeline-bar" style="--left:${left}%;--right:${right}%"></i>${activity.map(dot).join('')}
-        ${hasToday ? `<i class="research-today-line" style="--point:${position(today, 0.5)}%"></i>` : ''}</span>
-    </button>`;
+    return `<div class="research-timeline-row">
+      <button type="button" class="research-timeline-label" data-research-phase="${phase.id}" aria-pressed="${activePhase === phase.id}">
+        <strong>${escape(phase.title)} <span class="research-phase-status${group === 'ongoing' ? ' research-phase-ongoing' : ''}">${status}</span></strong>
+        <small>${escape(phaseDates(phase, today, true))} · ${ht("{0} 条实验", assigned.length)}</small>${latest ? `<small>${ht("最近进展 {0}", escape(formatDay(dayNumber(latest), latest.slice(0, 4) !== today.slice(0, 4))))}</small>` : ''}</button>
+      <div class="research-timeline-track"><span aria-hidden="true"><i class="research-timeline-bar" style="--left:${left}%;--right:${right}%"></i>${[...activity].map(([date, ended]) => dot(date, ended)).join('')}
+        ${hasToday ? `<i class="research-today-line" style="--point:${position(today, 0.5)}%"></i>` : ''}</span>${markers}</div>
+    </div>`;
   }).join('');
   const presetButtons = rangePresets.map(({ id, amount, unit }) => {
     const label = unit === 'days' ? ht("{0} 天", amount) : ht("{0} 个月", amount);
@@ -680,7 +709,8 @@ export class ResearchWorkspace {
     const newSummary = summaryTypes.size ? `<button type="button" class="secondary-button" data-research-new="summary">${icon('plus', 14)}${ht("插入阶段总结")}</button>` : '';
     this.content.innerHTML = `
       <header class="research-overview"><div><h1 tabindex="-1">${escape(projectPage ? project.title : active.label)}</h1>
-        ${projectPage && project.description ? `<p>${escape(project.description)}</p>` : ''}</div>
+        ${projectPage ? `${project.description ? `<p>${escape(project.description)}</p>` : ''}
+          <button type="button" class="text-button research-edit-description" data-research-edit-description>${icon('edit', 14)}${ht("编辑项目描述")}</button>` : ''}</div>
         ${projectPage ? `<div class="research-overview-stats"><span>${ht("{0} 条实验", experiments.length)}</span><span>${ht("{0} 份阶段总结", summaries.length)}</span>
           ${lastExperiment ? `<span>${ht("最近实验 {0}", escape(lastExperiment))}</span>` : ''}</div>` : ''}
       </header>
@@ -825,6 +855,13 @@ export class ResearchWorkspace {
     const state = this.snapshot;
     if (!button || !state || this.hooks.blocked()) return;
     const data = button.dataset;
+    if (data.researchComparisonPhase) {
+      const comparisons = state.records.filter(({ record }) => record.comparison &&
+        record.phaseId === data.researchComparisonPhase && record.date === data.date);
+      if (comparisons.length === 1) await this.openReference(comparisons[0].record.id, button);
+      else if (comparisons.length) this.tools.chooseComparison(data.date!, comparisons, id => this.openReference(id, button));
+      return;
+    }
     if (data.researchRecord) {
       if (data.researchLinkedProject) await this.hooks.open(state.root, data.researchRecord, button, false, data.researchLinkedProject);
       else await this.openReference(data.researchRecord, button);
@@ -840,6 +877,14 @@ export class ResearchWorkspace {
       return;
     }
     if ('researchFilter' in data) { this.tools.filter(state, this.recordFilter, filter => this.setRecordFilter(filter)); return; }
+    if ('researchEditDescription' in data) {
+      await this.refresh();
+      const latest = this.snapshot;
+      if (latest?.root === state.root) this.tools.editDescription(latest, () => {
+        this.content.querySelector<HTMLButtonElement>('[data-research-edit-description]')?.focus({ preventScroll: true });
+      });
+      return;
+    }
     if ('researchNewPhase' in data || data.researchEditPhase) {
       await this.refresh();
       const latest = this.snapshot;
