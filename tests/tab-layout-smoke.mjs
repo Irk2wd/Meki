@@ -65,8 +65,14 @@ try {
 
   await size(800);
   const strip = page.locator('.document-tab-list');
-  const before = await strip.evaluate(node => node.scrollLeft); await strip.hover(); await page.mouse.wheel(0, -500); await frames();
-  assert.ok(await strip.evaluate(node => node.scrollLeft) < before, 'Vertical wheel should scroll overflowing tabs');
+  await strip.hover();
+  const before = await strip.evaluate(node => {
+    node.scrollLeft = node.scrollWidth;
+    return node.scrollLeft;
+  });
+  assert.ok(before > 0, 'The tab strip must overflow at this width');
+  await page.mouse.wheel(0, -500);
+  await page.waitForFunction(previous => document.querySelector('.document-tab-list').scrollLeft < previous, before);
   await activate(names[0]); await verify('first-tab'); await activate(names.at(-1)); await verify('last-tab');
   await page.locator('.document-tab.active [role=tab]').focus(); await page.keyboard.press('Tab');
   assert.equal(await page.locator('.document-tab.active [data-close-tab]').evaluate(node => node === document.activeElement), true);
