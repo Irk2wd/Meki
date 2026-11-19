@@ -1,5 +1,6 @@
 import type { ExportRequest, ExportTools, ImportedDocument, DiagramSaveRequest } from './export';
 import type { UpdateState } from './updates';
+import type { ThemeManifest } from '../electron/theme-format.mjs';
 export interface DocumentFile {
   path: string | null;
   name: string;
@@ -12,7 +13,8 @@ export interface ReopenedDocument { kind: 'disk' | 'buffer' | 'copy' | 'existing
 export interface Settings {
   locale: 'zh-CN' | 'en';
   shortcuts?: Record<string, string | null>;
-  theme: 'paper' | 'linen' | 'night';
+  theme: string;
+  installedThemes?: ThemeManifest[];
   font: 'serif' | 'sans';
   fontSize: number;
   lineWidth: number;
@@ -138,6 +140,8 @@ export interface MekiAPI {
   writeClipboardText(text: string): Promise<void>;
   copyImage(point: { x: number; y: number }): Promise<void>;
   importTheme(): Promise<ImportedTheme | null>;
+  installThemePackage(): Promise<Settings | null>;
+  removeThemePackage(id: string): Promise<Settings>;
   confirmDiscard(name: string): Promise<'save' | 'discard' | 'cancel'>;
   exportFile(input: ExportRequest): Promise<import('./export').ExportResult | null>;
   listExportPresets(): Promise<import('./export').ExportPresetCatalog>;

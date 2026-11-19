@@ -4,13 +4,13 @@
   --editor-block-selection:#edf3f8;
   --editor-block-border:#b9ccdc;
 }
-:root[data-theme=linen] {
+:root[data-theme-base=linen] {
   --editor-selection:#dce5eb;
   --editor-selection-inactive:#e8e8e3;
   --editor-block-selection:#eaf0f1;
   --editor-block-border:#b8cbd0;
 }
-:root[data-theme=night] {
+:root[data-theme-base=night] {
   --editor-selection:#38546a;
   --editor-selection-inactive:#34444f;
   --editor-block-selection:#293c48;

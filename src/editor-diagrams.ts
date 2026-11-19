@@ -3,7 +3,9 @@ import { $prose } from '@milkdown/kit/utils';
 import { Plugin } from '@milkdown/kit/prose/state';
 import type { EditorView } from '@milkdown/kit/prose/view';
 import { renderDiagram, type RenderedDiagram } from './diagram-engine';
-import { diagramTheme, type DiagramTheme } from './diagram-policy';
+import type { DiagramTheme } from './diagram-policy';
+import { resolveTheme } from '../electron/theme-format.mjs';
+import type { Settings } from '../shared/meki';
 
 export class EditorDiagrams {
   private theme: DiagramTheme = 'paper';
@@ -14,7 +16,7 @@ export class EditorDiagrams {
   private generation = 0;
   private pending: Promise<void> = Promise.resolve();
   private results: RenderedDiagram[] = [];
-  updateSettings(settings: { theme?: string }) { this.theme = diagramTheme(settings.theme); this.schedule(); }
+  updateSettings(settings: Pick<Settings, 'theme' | 'installedThemes'>) { this.theme = resolveTheme(settings.theme, settings.installedThemes).base; this.schedule(); }
   private schedule() { if (!this.timer) this.timer = window.setTimeout(() => { this.timer = 0; void this.render(); }, 80); }
   async flush() { if (this.timer) clearTimeout(this.timer); this.timer = 0; await this.render(); }
   blockPreview(_source: string) { const dom = document.createElement('div'); dom.className = 'meki-block-diagram'; dom.textContent = t("图表渲染中…"); this.schedule(); return dom; }

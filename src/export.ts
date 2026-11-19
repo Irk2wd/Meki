@@ -4,6 +4,8 @@ import { renderMarkdown } from './markdown-render';
 import { renderMathDocument } from './math-engine';
 import { renderDiagram } from './diagram-engine';
 import { writingAppearance } from './appearance';
+import { resolveTheme } from '../electron/theme-format.mjs';
+import { cssDeclarations, themeVariables } from './theme-styles';
 import extensionCSS from './markdown-extensions.css?inline';
 import diagramCSS from './diagrams.css?inline';
 import type { Settings } from '../shared/meki';
@@ -14,6 +16,7 @@ import { highlightExportCode } from './code-highlight';
 const defaults: Settings = { locale: 'zh-CN', theme: 'paper', font: 'serif', fontSize: 18, lineWidth: 1040, unlimitedWidth: false, focus: false, sidebar: true, customCss: '', fontFamily: '', mathNumbering: 'none', mathPhysics: false, typewriter: false, paragraphFocus: false, spellcheck: false, autoSave: false, autoSaveInterval: 30, autoSaveOnBlur: true, autoSnapshot: true, snapshotInterval: 60, reopenSession: true, codeLineNumbers: true, headingNumbering: false, picgoPort: 36677, imageAutoUpload: false, imageDirectoryBase: 'document', imageDirectory: '${filename}.assets', ...codeDefaults, ...typingDefaults };
 
 export async function exportHTML(markdown: string, name: string, documentPath: string | null, settings: Settings = defaults, wordMath = false) {
+  const theme = resolveTheme(settings.theme, settings.installedThemes);
   const parsed = renderMarkdown(markdown, settings);
   const holder = document.createElement('div');
   // User HTML is visible escaped source; links and remaining generated HTML are sanitized.
@@ -33,7 +36,7 @@ export async function exportHTML(markdown: string, name: string, documentPath: s
   }
   await Promise.all([...holder.querySelectorAll<HTMLElement>('[data-meki-diagram]')].map(async slot => {
     const index = Number(slot.dataset.mekiDiagram), source = parsed.diagrams[index];
-    if (source !== undefined) slot.innerHTML = (await renderDiagram(source, { theme: settings.theme, id: `export-${index}` })).html;
+    if (source !== undefined) slot.innerHTML = (await renderDiagram(source, { theme: theme.base, id: `export-${index}` })).html;
     delete slot.dataset.mekiDiagram;
   }));
   await Promise.all([...holder.querySelectorAll('img')].map(async img => {
@@ -41,7 +44,15 @@ export async function exportHTML(markdown: string, name: string, documentPath: s
   }));
   const title = name.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
   const appearance = writingAppearance(settings, { scope: '.meki-document', exporting: true });
-  const background = settings.theme === 'night' ? '#202521' : settings.theme === 'linen' ? '#faf6ee' : '#fff';
-  const css = `${appearance}\n${extensionCSS}\n${diagramCSS}\n${math.css}`.replace(/<\/style/gi, '<\\/style');
-  return `<!doctype html><html lang="${getLocale()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http: file:; style-src 'unsafe-inline'; font-src data:;"><title>${title}</title><style>html,body{background:${background};print-color-adjust:exact;-webkit-print-color-adjust:exact}body{margin:0;padding:48px 24px}.meki-document{margin:auto;max-width:${settings.lineWidth || 780}px}.meki-document img{max-width:100%}@page{background:${background}}@media print{body{padding:0}}\n${css}</style></head><body><article class="meki-document">${holder.innerHTML}</article></body></html>`;
+  const colorScheme = theme.base === 'night' ? 'dark' : 'light';
+  const canvas = `:root{${cssDeclarations(themeVariables(theme))}color-scheme:${colorScheme}}
+html,body{background-color:var(--bg);print-color-adjust:exact;-webkit-print-color-adjust:exact}
+body{margin:0;padding:48px 24px;background-image:var(--theme-image);background-size:var(--theme-size);background-repeat:var(--theme-repeat);background-position:var(--theme-position)}
+.meki-document,.meki-page{margin:auto;max-width:${settings.lineWidth || 780}px}.meki-document img{max-width:100%}
+.meki-page{background:var(--bg);}
+@page{background:${theme.palette.bg}}@media print{body{padding:0}}`;
+  const css = `${canvas}\n${appearance}\n${extensionCSS}\n${diagramCSS}\n${math.css}`.replace(/<\/style/gi, '<\\/style');
+  const article = `<article class="meki-document">${holder.innerHTML}</article>`;
+  const page = theme.background ? `<div class="meki-page">${article}</div>` : article;
+  return `<!doctype html><html lang="${getLocale()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http: file:; style-src 'unsafe-inline'; font-src data:;"><title>${title}</title><style>${css}</style></head><body>${page}</body></html>`;
 }

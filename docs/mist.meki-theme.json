@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "id": "mist-journal",
+  "name": "薄雾",
+  "base": "paper",
+  "palette": {
+    "bg": "#edf3f0",
+    "side": "#e0ebe5",
+    "surface": "#f6faf8",
+    "text": "#253c35",
+    "soft": "#4c665c",
+    "muted": "#60786d",
+    "accent": "#376e65",
+    "accent-soft": "#d9ebe2",
+    "border": "#bfd2c8",
+    "hover": "#e1ede5",
+    "selection": "#c7e1d7"
+  },
+  "background": {
+    "image": "linear-gradient(130deg, #ffffff88, #edf3f000), repeating-linear-gradient(0deg, #376e6515 0 1px, transparent 1px 25px)",
+    "size": "100% 100%, auto"
+  },
+  "styles": {
+    "heading": { "font-family": "system-ui, sans-serif" },
+    "h1": { "color": "var(--accent)", "border-bottom": "2px solid var(--accent)", "padding-bottom": ".25em" },
+    "quote": { "border-radius": "0 8px 8px 0", "background-color": "#d9ebe2aa", "padding-right": "1em" },
+    "tableHead": { "background-color": "var(--accent-soft)" }
+  }
+}

@@ -27,6 +27,7 @@ import type { ExportOptions } from '../shared/export';
 import { renderMath } from './math-engine';
 import { installMathCopyActions } from './math-copy';
 import { normalizeCustomCss, writingAppearance } from './appearance';
+import { ThemePicker } from './theme-picker';
 import './style.css';
 import './print.css';
 import './formula.css';
@@ -67,8 +68,9 @@ document.querySelector('#app')!.innerHTML = `
 <div class="popover style-panel" id="style-panel" hidden>
   <label class="setting-row">Language / 语言<select id="ui-language" aria-label="Language / 语言"><option value="zh-CN">简体中文</option><option value="en">English</option></select></label>
   <p class="setting-note" id="language-restart-note" role="status" hidden>${ht('语言设置已保存。退出并重新打开应用后，所有窗口将使用所选语言。')}</p>
-  <div class="popover-title">${ht("给文字一点空间")}<span>${ht("外观与排版")}</span></div>
-  <div class="theme-choices"><button data-theme="paper" aria-label="${ht("纸白主题")}"><span class="theme-sample paper">Aa</span><span>${ht("纸白")}</span></button><button data-theme="linen" aria-label="${ht("亚麻主题")}"><span class="theme-sample linen">Aa</span><span>${ht("亚麻")}</span></button><button data-theme="night" aria-label="${ht("夜墨主题")}"><span class="theme-sample night">Aa</span><span>${ht("夜墨")}</span></button></div>
+  <div class="popover-title">${ht("外观与排版")}</div>
+  <div id="theme-choices" class="theme-choices" role="group" aria-label="${ht("主题")}"></div>
+  <div class="theme-tools"><button type="button" data-action="install-theme-package">${icon('plus', 14)} ${ht("导入主题")}</button><button type="button" data-action="remove-theme-package" hidden>${ht("移除当前主题")}</button></div>
   <label class="setting-row">${ht("字体")}<select id="font-family"><option value="serif">${ht("人文衬线")}</option><option value="sans">${ht("清晰无衬线")}</option></select></label>
   <label class="setting-row">${ht("本机字体")}<input id="custom-font" placeholder="${ht("使用默认字体")}" maxlength="128" aria-label="${ht("本机字体名称")}"></label>
   <div class="setting-row"><label for="font-size">${ht("字号")}</label><input id="font-size" type="range" min="14" max="24" step="1"><output id="font-size-value">18</output></div>
@@ -91,7 +93,7 @@ document.querySelector('#app')!.innerHTML = `
   <label class="field-label" for="custom-css">${ht("正文 CSS")}</label>
   <textarea id="custom-css" rows="11" spellcheck="false" placeholder="h1 { color: #416b5b; }&#10;p { line-height: 1.9; }"></textarea>
   <p id="theme-feedback" role="status"></p>
-  <div class="dialog-actions"><div><button type="button" class="secondary-button" data-action="import-theme">${ht("导入 CSS")}</button><button type="button" class="text-button" data-action="reset-theme">${ht("恢复默认")}</button></div><button type="button" class="primary-button" data-action="apply-theme">${ht("应用主题")}</button></div>
+  <div class="dialog-actions"><div><button type="button" class="secondary-button" data-action="import-theme">${ht("导入 CSS")}</button><button type="button" class="text-button" data-action="reset-theme">${ht("清除 CSS")}</button></div><button type="button" class="primary-button" data-action="apply-theme">${ht("应用 CSS")}</button></div>
 </form></dialog>
 <dialog id="help-dialog"><form method="dialog"><div class="dialog-heading"><div><span class="eyebrow">${ht("MEKI")}</span><h2>${ht("开始一页新的想法")}</h2></div><button value="close" class="icon-button" aria-label="${ht("关闭指南")}">${icon('close')}</button></div><p>${ht("直接在编辑区写作，Markdown 标记会自动变成排版。在空白行输入")} <code>/</code> ${ht("插入标题、列表、表格或公式。")}</p><p>${ht("工具栏的“插入 Mermaid 图表”会创建可编辑的流程图。也可用")} <code>\`\`\`mermaid</code> ${ht("代码围栏输入图表，点击预览编辑源码；HTML 和 PDF 会保留图表。")}</p><div class="shortcut-list"><span>${ht("新建文稿")}</span><kbd>Ctrl / ⌘ N</kbd><span>${ht("打开文件")}</span><kbd>Ctrl / ⌘ O</kbd><span>${ht("保存文件")}</span><kbd>Ctrl / ⌘ S</kbd><span>${ht("另存为")}</span><kbd>Ctrl / ⌘ Shift S</kbd><span>${ht("源码与编辑切换")}</span><kbd>Ctrl / ⌘ /</kbd><span>${ht("查找")}</span><kbd>Ctrl / ⌘ F</kbd><span>${ht("专注模式")}</span><kbd>Ctrl / ⌘ Shift F</kbd></div><p class="help-note">${ht("未保存的修改会自动保留为本地恢复草稿。自动写回默认关闭，可在标签栏“文稿与保存”中开启。公式支持常用 LaTeX 数学语法。")}</p><button class="primary-button" value="close">${ht("开始写作")}</button></form></dialog>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>`;
@@ -150,6 +152,7 @@ new ImageActions({ editor: () => editor, document: () => current, activeId: () =
 const documentStyle = document.createElement('style');
 documentStyle.id = 'document-appearance';
 document.head.appendChild(documentStyle);
+const themePicker = new ThemePicker(el('#theme-choices'), el('[data-action="remove-theme-package"]'));
 const mathPreviewStyle = document.createElement('style');
 document.head.appendChild(mathPreviewStyle);
 const dirty = () => documents.dirty();
@@ -278,7 +281,7 @@ async function workspaceOperation(request: WorkspaceRequest) {
 function applySettings() {
   el<HTMLSelectElement>('#ui-language').value = settings.locale;
   el('#language-restart-note').hidden = settings.locale === getLocale();
-  document.documentElement.dataset.theme = settings.theme;
+  themePicker.apply(settings);
   document.documentElement.dataset.font = settings.font;
   document.documentElement.style.setProperty('--writing-size', `${settings.fontSize}px`);
   document.documentElement.style.setProperty('--line-width', `${settings.lineWidth}px`);
@@ -295,7 +298,6 @@ function applySettings() {
   el<HTMLSelectElement>('#line-width').disabled = settings.unlimitedWidth;
   el<HTMLInputElement>('#unlimited-width').checked = settings.unlimitedWidth;
   el('#font-status').textContent = `${settings.fontSize} px`;
-  document.querySelectorAll<HTMLButtonElement>('button[data-theme]').forEach(button => { const selected = button.dataset.theme === settings.theme; button.classList.toggle('active', selected); button.setAttribute('aria-pressed', String(selected)); });
   document.querySelector('[data-action="focus"]')?.classList.toggle('active', settings.focus);
   documentStyle.textContent = writingAppearance(settings);
   for (const view of panes?.views.values() || []) view.editor.updateSettings(settings);
@@ -375,6 +377,16 @@ async function dispatch(action: string, payload?: unknown) {
     await lifecycleSettingsQueue; return;
   }
   if (busy) return;
+  if (action === 'install-theme-package' || action === 'remove-theme-package') {
+    await perform(async () => {
+      const updated = action === 'install-theme-package' ? await window.meki.installThemePackage() : await window.meki.removeThemePackage(settings.theme);
+      if (!updated) return;
+      settings = { ...settings, theme: updated.theme, installedThemes: updated.installedThemes };
+      applySettings();
+      notify(action === 'install-theme-package' ? t("已导入并应用主题。") : t("已移除主题。"));
+    });
+    return;
+  }
   if (action === 'shortcut-settings') { closePopovers(); await shortcuts?.open(); return; }
   if (action === 'window-menu') { closePopovers(); documents.toggleWindows(); return; }
   if (action === 'autosave-blur') {
@@ -418,7 +430,7 @@ async function dispatch(action: string, payload?: unknown) {
       normalizeCustomCss(css);
       changeSettings({ customCss: css });
       el<HTMLDialogElement>('#theme-dialog').close();
-      notify(css ? t("已应用正文主题") : t("已恢复内置排版"));
+      notify(css ? t("已应用正文 CSS。") : t("已清除正文 CSS。"));
     } catch (error) { el('#theme-feedback').textContent = t("CSS 格式有误：{0}", String(error).replace(/^Error: /, '')); }
     return;
   }
@@ -476,7 +488,7 @@ async function dispatch(action: string, payload?: unknown) {
       if (theme) {
         normalizeCustomCss(theme.css);
         el<HTMLTextAreaElement>('#custom-css').value = theme.css;
-        el('#theme-feedback').textContent = t("已读取 {0}，点击“应用主题”保存。", theme.name);
+        el('#theme-feedback').textContent = t("已读取 {0}，点击“应用 CSS”保存。", theme.name);
       }
     }
     if (action === 'new') { await loadDocument({ path: null, name: t("未命名.md"), content: '', revision: null }); editor.focus(); }
@@ -522,7 +534,8 @@ document.addEventListener('click', event => {
   const format = target.closest<HTMLElement>('[data-format]'); if (format && ready && !busy) { editor.format(format.dataset.format!); return; }
   const mode = target.closest<HTMLElement>('[data-mode]'); if (mode && ready && !busy) { switchMode(mode.dataset.mode as 'visual' | 'source'); return; }
   const tab = target.closest<HTMLElement>('[data-tab]'); if (tab) { setSidebarTab(tab.dataset.tab!); return; }
-  const theme = target.closest<HTMLElement>('button[data-theme]'); if (theme) { changeSettings({ theme: theme.dataset.theme as Settings['theme'] }); return; }
+  const theme = target.closest<HTMLButtonElement>('#theme-choices button[data-theme]');
+  if (theme) { if (ready && !busy) changeSettings({ theme: theme.dataset.theme! }); return; }
   const file = target.closest<HTMLElement>('[data-file]'); if (file) { void dispatch('open-path', file.dataset.file); return; }
   const example = target.closest<HTMLElement>('[data-math-example]'); if (example) { el<HTMLTextAreaElement>('#math-input').value = example.dataset.mathExample!; updateMathPreview(); return; }
   const link = target.closest<HTMLAnchorElement>('.editor-host a[href]'); if (link) {

@@ -592,6 +592,26 @@ function registerIpc() {
     }
     return selected ? store.readTheme(selected) : null;
   });
+  register('install-theme-package', async () => {
+    let selected;
+    if (TEST_MODE) selected = process.env.MEKI_TEST_THEME_PACKAGE_PATH;
+    else {
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: t("导入主题"), filters: [{ name: t("Meki 主题文件"), extensions: ['json'] }], properties: ['openFile'],
+      });
+      if (result.canceled) return null;
+      selected = result.filePaths[0];
+    }
+    if (!selected) return null;
+    const settings = await store.installThemePackage(selected).catch(error => { throw new Error(error.message, { cause: error }); });
+    coordinator.settingsChanged(id, { installedThemes: settings.installedThemes, theme: settings.theme });
+    return settings;
+  });
+  register('remove-theme-package', async themeId => {
+    const settings = await store.removeThemePackage(themeId);
+    coordinator.settingsChanged(id, { installedThemes: settings.installedThemes, theme: settings.theme });
+    return settings;
+  });
   register('confirm-discard', askDiscard);
   const exporting = createExportService(() => mainWindow, () => activeDocument, store);
   register('export-file', exporting.exportFile);

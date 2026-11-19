@@ -9,12 +9,13 @@ const { fileURLToPath } = require('node:url');
 const { MAX_IMAGE_COUNT, MAX_BATCH_BYTES } = require('./image-input.cjs');
 const { normalizeDestinationSettings, resolveImageDestination, ensureImageDestination, rollbackImageDirectories } = require('./image-destination.cjs');
 const { validateBindings } = require('./shortcuts.mjs');
+const { MAX_THEME_PACKAGE_BYTES, MAX_THEME_LIBRARY_BYTES, hasTheme, validateThemePackage, validateThemeLibrary } = require('./theme-format.mjs');
 
 const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_THEME_BYTES = 256 * 1024;
 // JSON escaping may expand one CSS byte to six bytes; leave room for existing metadata.
-const MAX_METADATA_BYTES = MAX_THEME_BYTES * 6 + 256 * 1024;
+const MAX_METADATA_BYTES = MAX_THEME_BYTES * 6 + 256 * 1024 + MAX_THEME_LIBRARY_BYTES;
 const MAX_WORKSPACE_ENTRIES = 500;
 const MAX_RECENT_FOLDERS = 20;
 const MAX_PINNED_FOLDERS = 10;
@@ -22,7 +23,7 @@ const DOCUMENT_EXTENSIONS = new Set(['.md', '.markdown', '.mdown', '.mkd', '.mkd
 const DEFAULT_SETTINGS = Object.freeze({
   locale: 'zh-CN',
   shortcuts: Object.freeze({}),
-  theme: 'paper', font: 'serif', fontSize: 18, lineWidth: 1040, unlimitedWidth: false, focus: false, sidebar: true,
+  theme: 'paper', installedThemes: Object.freeze([]), font: 'serif', fontSize: 18, lineWidth: 1040, unlimitedWidth: false, focus: false, sidebar: true,
   customCss: '', fontFamily: '', mathNumbering: 'none', mathPhysics: false,
   typewriter: false, paragraphFocus: false, spellcheck: false,
   typingAutoPair: 'default', typingMarkdownPairs: false, typingSmartQuotes: false, typingSmartDashes: false,
@@ -97,11 +98,13 @@ function validateDocument(value, { requirePath = false } = {}) {
 function validateSettings(patch, base = DEFAULT_SETTINGS) {
   if (!isObject(patch)) throw new TypeError('Settings must be an object.');
   const next = { ...DEFAULT_SETTINGS, ...base };
+  if (Object.hasOwn(patch, 'installedThemes')) next.installedThemes = validateThemeLibrary(patch.installedThemes);
   for (const key of Object.keys(patch)) {
+    if (key === 'installedThemes') continue;
     const value = patch[key];
     if (key === 'shortcuts') { next.shortcuts = validateBindings(value, process.platform); continue; }
     const valid = key === 'locale' ? isLocale(value)
-      : key === 'theme' ? ['paper', 'linen', 'night'].includes(value)
+      : key === 'theme' ? hasTheme(value, next.installedThemes)
       : key === 'font' ? ['serif', 'sans'].includes(value)
       : key === 'fontSize' ? Number.isFinite(value) && value >= 12 && value <= 32
       : key === 'lineWidth' ? Number.isFinite(value) && value >= 480 && value <= 1200
@@ -131,8 +134,9 @@ function validateSettings(patch, base = DEFAULT_SETTINGS) {
 function restoreSettings(input) {
   let settings = { ...DEFAULT_SETTINGS };
   if (!isObject(input)) return settings;
+  settings.installedThemes = validateThemeLibrary(input.installedThemes, true);
   for (const key of Object.keys(DEFAULT_SETTINGS)) {
-    if (!Object.hasOwn(input, key)) continue;
+    if (key === 'installedThemes' || !Object.hasOwn(input, key)) continue;
     try { settings = validateSettings({ [key]: input[key] }, settings); }
     catch { /* Preserve valid old preferences when an individual stored value is invalid. */ }
   }
@@ -301,7 +305,7 @@ class FileStore {
   async updateMetadata(patch) {
     return this.locked('metadata', async () => {
       const next = { ...this.metadata, ...patch };
-      next.settings = validateSettings(next.settings);
+      if (Object.hasOwn(patch, 'settings')) next.settings = validateSettings(next.settings);
       await atomicWrite(this.statePath, Buffer.from(JSON.stringify(next, null, 2), 'utf8'));
       this.metadata = next;
       return this.metadata;
@@ -310,14 +314,16 @@ class FileStore {
 
   async updateSettings(patch) {
     // Merge after earlier writes finish so rapid controls cannot erase one another's settings.
-    validateSettings(patch);
-    return this.locked('metadata', async () => {
-      const settings = validateSettings(patch, this.metadata.settings);
-      const next = { ...this.metadata, settings };
-      await atomicWrite(this.statePath, Buffer.from(JSON.stringify(next, null, 2), 'utf8'));
-      this.metadata = next;
-      return settings;
-    });
+    if (isObject(patch) && Object.hasOwn(patch, 'installedThemes')) throw new TypeError('Use the theme file picker to install themes.');
+    return this.locked('metadata', () => this.#writeSettings(patch));
+  }
+
+  async #writeSettings(patch) {
+    const settings = validateSettings(patch, this.metadata.settings);
+    const next = { ...this.metadata, settings };
+    await atomicWrite(this.statePath, Buffer.from(JSON.stringify(next, null, 2), 'utf8'));
+    this.metadata = next;
+    return settings;
   }
 
   async changeRecentFolders(action, folder) {
@@ -354,6 +360,32 @@ class FileStore {
     validateSettings({ customCss: css });
     // Import only reads the selected text. The renderer scopes and sanitizes it before use.
     return { name: path.basename(filePath), css };
+  }
+
+  async installThemePackage(filePath) {
+    filePath = validateAbsolutePath(filePath);
+    if (!filePath.toLowerCase().endsWith('.meki-theme.json')) throw new TypeError(t("请选择 .meki-theme.json 主题文件。"));
+    const { bytes } = await readBytes(filePath, MAX_THEME_PACKAGE_BYTES);
+    let manifest;
+    try { manifest = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
+    catch { throw new TypeError(t("主题文件须为 UTF-8 编码的有效 JSON。")); }
+    const theme = validateThemePackage(manifest);
+    return this.locked('metadata', () => {
+      const installedThemes = this.metadata.settings.installedThemes.slice();
+      const index = installedThemes.findIndex(entry => entry.id === theme.id);
+      if (index === -1) installedThemes.push(theme);
+      else installedThemes[index] = theme;
+      return this.#writeSettings({ installedThemes, theme: theme.id });
+    });
+  }
+
+  async removeThemePackage(id) {
+    return this.locked('metadata', () => {
+      const { theme, installedThemes } = this.metadata.settings;
+      const remove = installedThemes.find(entry => entry.id === id);
+      if (!remove) return this.metadata.settings;
+      return this.#writeSettings({ installedThemes: installedThemes.filter(entry => entry.id !== id), theme: theme === id ? remove.base : theme });
+    });
   }
 
   async readDocument(filePath) {

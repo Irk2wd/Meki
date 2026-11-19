@@ -7,6 +7,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [开始使用](getting-started.md) | 安装、打开文稿、分栏、保存与恢复、导出及本地数据。 |
+| [主题](themes.md) | 切换主题、导入纹理和排版，以及编写可分享的主题文件。 |
 | [Markdown 兼容性](markdown-compatibility.md) | 支持的语法、原文保留与视觉编辑的转换边界。 |
 | [PicGo 图床](image-hosting.md) | 连接 PicGo、上传图片、设置附件目录与单图操作。 |
 | [应用内更新](updates.md#检查与安装) | 检查版本、下载、重启及轻量更新。 |

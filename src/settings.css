@@ -1,4 +1,23 @@
-.style-panel { max-height:calc(100vh - 130px); overflow-y:auto; scrollbar-width:thin; }
+.style-panel { width:min(356px,calc(100vw - 48px)); max-height:calc(100vh - 130px); overflow-y:auto; scrollbar-width:thin; }
+.theme-choices { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; margin:14px -4px 5px; padding:4px; max-height:min(282px,42vh); overflow:auto; scrollbar-width:thin; }
+.theme-choices button { min-width:0; padding:4px; border:1px solid transparent; border-radius:8px; color:var(--soft); font-size:11px; text-align:left; }
+.theme-choices button.active { border-color:var(--accent); background:var(--accent-soft); color:var(--text); }
+.theme-choices button:focus-visible { outline-offset:-2px; }
+.theme-sample, .document-scroll, .research-content {
+  background-image:var(--theme-image,none);
+  background-size:var(--theme-size,auto);
+  background-position:var(--theme-position,0 0);
+  background-repeat:var(--theme-repeat,repeat);
+}
+:root[data-theme-background] .document-scroll :is(.milkdown,.source-editor .cm-editor) { background-color:var(--bg); }
+:root[data-theme-background] .document-scroll .milkdown { border-radius:5px; box-shadow:0 0 0 9px var(--bg); }
+.theme-sample { display:flex; flex-direction:column; justify-content:center; gap:3px; height:47px; padding:5px 9px; margin-bottom:4px; border:1px solid var(--border); border-radius:5px; background-color:var(--bg); color:var(--text); font:21px/1 Georgia,serif; }
+.theme-sample[data-theme-background] > span { align-self:flex-start; background-color:var(--bg); border-radius:2px; box-shadow:0 0 0 3px var(--bg); }
+.theme-sample::after { content:''; width:58%; height:5px; border-block:1px solid var(--accent); opacity:.64; }
+.theme-label { display:block; padding-inline:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.theme-tools { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:15px; }
+.theme-tools button { padding:5px 7px; border-radius:5px; font-size:11px; color:var(--accent); }
+.theme-tools button:last-child { color:var(--soft); }
 html[lang="en"] .open-button span { white-space:nowrap; }
 .setting-row input:not([type=range]):not([type=checkbox]) { width:160px; padding:5px 7px; border:1px solid var(--border); border-radius:4px; background:var(--bg); font-size:11px; }
 .setting-row input[type=checkbox] { width:16px; height:16px; margin:0; }
