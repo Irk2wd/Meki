@@ -75,6 +75,7 @@ contextBridge.exposeInMainWorld('meki', Object.freeze({
   updateSettings: (patch) => invoke('update-settings', patch),
   readClipboardText: () => invoke('read-clipboard-text'),
   writeClipboardText: (text) => invoke('write-clipboard-text', text),
+  copyImage: point => invoke('copy-image', point),
   importTheme: () => invoke('import-theme'),
   confirmDiscard: (name) => invoke('confirm-discard', name),
   exportFile: (input) => invoke('export-file', input),

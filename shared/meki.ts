@@ -155,6 +155,7 @@ export interface MekiAPI {
   updateSettings(patch: Partial<Settings>): Promise<Settings>;
   readClipboardText(): Promise<string>;
   writeClipboardText(text: string): Promise<void>;
+  copyImage(point: { x: number; y: number }): Promise<void>;
   importTheme(): Promise<ImportedTheme | null>;
   confirmDiscard(name: string): Promise<'save' | 'discard' | 'cancel'>;
   exportFile(input: ExportRequest): Promise<import('./export').ExportResult | null>;

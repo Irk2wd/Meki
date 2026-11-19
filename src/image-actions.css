@@ -1,5 +1,7 @@
 .image-actions-menu{position:fixed;z-index:90;min-width:220px;padding:6px;border:1px solid var(--border);border-radius:8px;background:var(--surface);box-shadow:var(--shadow)}
 .image-actions-menu button{display:block;width:100%;text-align:left;padding:10px;font-size:12px;border-radius:5px}
+.image-actions-menu [role=separator]{border-top:1px solid var(--border);margin:4px}
+.meki-image-copying .milkdown .meki-image-block :is(.operation,.image-resize-handle){visibility:hidden;pointer-events:none;transition:none}
 #image-copy-dialog{width:min(560px,92vw);max-height:88vh;overflow:auto}
 #image-copy-dialog p{font-size:12px;line-height:1.7;color:var(--soft);overflow-wrap:anywhere}
 #image-copy-source{max-height:65px;overflow:auto}

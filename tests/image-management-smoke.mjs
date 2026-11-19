@@ -10,8 +10,11 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url), root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 await fs.mkdir(path.join(root, 'test-results'), { recursive: true });
 const run = await fs.realpath(await fs.mkdtemp(path.join(root, 'test-results', 'image-management-'))), profile = path.join(run, 'profile');
+await fs.mkdir(path.join(run, 'evidence'));
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 const picture = path.join(run, '原 图.png'), other = path.join(run, 'other.png'), doc = path.join(run, '图片管理.md');
+const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"><rect width="80" height="40" fill="red"/></svg>';
+const embedded = `data:image/png;base64,${png.toString('base64')}`, vector = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 const errors = [], results = [], uploads = []; let delay = 0, downloads = 0, afterDownload;
 const server = http.createServer(async (request, response) => {
   try {
@@ -31,11 +34,11 @@ const server = http.createServer(async (request, response) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const port = server.address().port, remote = `http://127.0.0.1:${port}/remote.png?size=original`;
-const original = '\uFEFF# 图片管理\r\n\r\n<img src="原 图.png" width="84" height="36" alt="原图" title="Keep" />\r\n\r\n![重复](<原 图.png> "Same")\r\n\r\n<img src="other.png" width="84" height="36" alt="其他" />\r\n\r\n<img src="' + remote + '" width="84" height="36" alt="网络" />\r\n';
+const original = '\uFEFF# 图片管理\r\n\r\n<img src="原 图.png" width="84" height="36" alt="原图" title="Keep" />\r\n\r\n![重复](<原 图.png> "Same")\r\n\r\n<img src="other.png" width="84" height="36" alt="其他" />\r\n\r\n<img src="' + remote + '" width="84" height="36" alt="网络" />\r\n\r\n<img src="' + embedded + '" width="84" height="36" alt="嵌入" />\r\n\r\n<img src="' + vector + '" width="120" alt="矢量" />\r\n\r\n粘贴位置。\r\n';
 await fs.writeFile(picture, png); await fs.writeFile(other, png); await fs.writeFile(doc, original);
 const env = { ...process.env, MEKI_TEST: '1', MEKI_USER_DATA: profile, MEKI_TEST_DISCARD: 'cancel', MEKI_TEST_CONFLICT: 'cancel', MEKI_TEST_FOLDER_PATH: run, MEKI_TEST_IMAGE_DOWNLOAD_ORIGIN: `http://127.0.0.1:${port}` }; delete env.ELECTRON_RUN_AS_NODE;
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control', redo = process.platform === 'darwin' ? 'Meta+Shift+z' : 'Control+y';
-let app, page;
+let app, page, menuCaptured = false;
 const pass = name => { results.push(name); console.log(`PASS ${name}`); };
 async function poll(check) { const deadline = Date.now() + 15000; while (Date.now() < deadline) { const value = await check(); if (value) return value; await new Promise(resolve => setTimeout(resolve, 60)); } throw new Error('Timed out waiting for image operation'); }
 async function session() { try { return await readSession(profile); } catch { return null; } }
@@ -47,6 +50,11 @@ async function imageAction(alt, actionName) {
   const box = await image.boundingBox(); assert.ok(box);
   await page.mouse.click(box.x + box.width - 2, box.y + box.height - 2, { button: 'right' });
   await page.locator('#image-actions-menu').waitFor({ state: 'visible' });
+  if (!menuCaptured && alt === '原图') {
+    assert.equal(await page.locator('[data-image-action="clipboard"]').innerText(), '复制图片');
+    assert.equal(await page.locator('[data-image-action="copy"]').innerText(), '保存副本并替换引用…');
+    await page.locator('#image-actions-menu').screenshot({ path: path.join(run, 'evidence', 'image-actions-menu.png') }); menuCaptured = true;
+  }
   await page.locator(`[data-image-action="${actionName}"]`).click();
 }
 async function copyOptions(directory, name = '') {
@@ -56,6 +64,24 @@ async function copyOptions(directory, name = '') {
   await page.locator('#image-copy-dialog button[type="submit"]').click();
 }
 async function complete() { await page.locator('#image-copy-dialog').waitFor({ state: 'hidden' }); await idle(); }
+async function clipboardImage() {
+  return app.evaluate(async ({ clipboard, nativeImage }) => {
+    const item = (await clipboard.read()).find(item => item.types.includes('image/png'));
+    if (!item) return null;
+    const image = nativeImage.createFromBuffer(Buffer.from(await (await item.getType('image/png')).arrayBuffer()));
+    return { ...image.getSize(), pixels: image.toBitmap().toString('hex') };
+  });
+}
+async function copyImage(alt) {
+  await app.evaluate(({ clipboard }) => clipboard.writeText('image-copy-check'));
+  await imageAction(alt, 'clipboard');
+  let image;
+  try { image = await poll(clipboardImage); }
+  catch (error) { console.error(`Copy failed (${alt}): ${await page.locator('#toast').textContent()}`); throw error; }
+  assert.equal(await page.locator('#image-copy-dialog').isVisible(), false);
+  await page.waitForFunction(() => document.querySelector('#toast').textContent === '已复制图片' && !document.body.classList.contains('meki-image-copying'));
+  return image;
+}
 async function undo() {
   await idle();
   // The editor's center can hit an image caption; focus document text before undo.
@@ -69,12 +95,41 @@ try {
   await page.route('https://images.meki.test/**', route => route.fulfill({ contentType: 'image/png', body: png }));
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.setSize(1024, 694); window.show(); window.focus(); });
   await page.waitForSelector('#shell[data-ready="true"]');
+  await app.evaluate(async ({ clipboard }) => { globalThis.imageCopyPreviousClipboard = await clipboard.read(); });
   await action('image-hosting'); await page.locator('#picgo-port').fill(String(port));
   await page.locator('#image-directory').fill('images/${filename}'); await page.locator('[data-host="save"]').click();
   await page.waitForFunction(() => document.querySelector('#image-host-status').textContent === '设置已保存。');
   await page.locator('[data-host="close"]').click();
   await action('image-hosting'); assert.equal(await page.locator('#image-directory').inputValue(), 'images/${filename}'); await page.locator('[data-host="close"]').click();
   pass('image directory preference is persisted without enabling automatic uploads');
+
+  const beforeCopyFiles = (await fs.readdir(run)).sort(), beforeCopyContent = await content(() => true);
+  const bitmap = await copyImage('原图'); assert.equal(bitmap.width, 1); assert.equal(bitmap.height, 1);
+  assert.deepEqual(await copyImage('网络'), bitmap);
+  assert.deepEqual(await copyImage('嵌入'), bitmap);
+  const vectorImage = await copyImage('矢量'); assert.equal(vectorImage.width, 80); assert.equal(vectorImage.height, 40);
+  assert.equal(vectorImage.pixels, '0000ffff'.repeat(80 * 40));
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1.25));
+  assert.deepEqual(await copyImage('网络'), bitmap);
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1));
+  assert.equal(await page.locator('#dirty-dot').isVisible(), false); await content(text => text === beforeCopyContent);
+  assert.deepEqual((await fs.readdir(run)).sort(), beforeCopyFiles);
+  assert.equal(await fs.readFile(doc, 'utf8'), original);
+  pass('copy image writes original pixels for local, cross-origin, embedded and SVG images, including zoomed pages, without saving files or changing references');
+
+  const imageSnapshot = () => page.locator('.ProseMirror img').evaluateAll(images => images.map(image => ({ src: image.src, alt: image.alt, title: image.title, width: image.getAttribute('width'), height: image.getAttribute('height') })));
+  const beforePasteImages = await imageSnapshot();
+  await page.locator('.ProseMirror > p').filter({ hasText: '粘贴位置。' }).click();
+  await page.keyboard.press(`${mod}+v`); await idle();
+  await poll(async () => await page.locator('.ProseMirror img').count() === 7);
+  await content(text => text !== beforeCopyContent);
+  const added = page.locator('.ProseMirror img').last();
+  assert.deepEqual(await added.evaluate(image => ({ width: image.naturalWidth, height: image.naturalHeight })), { width: 1, height: 1 });
+  await undo(); await poll(async () => await page.locator('.ProseMirror img').count() === beforePasteImages.length);
+  assert.deepEqual(await imageSnapshot(), beforePasteImages);
+  assert.equal(await page.locator('.ProseMirror > p').filter({ hasText: '粘贴位置。' }).innerText(), '粘贴位置。');
+  assert.equal(await fs.readFile(doc, 'utf8'), original);
+  pass('the copied bitmap pastes as an image through the existing attachment flow; undo restores images and text without saving the document');
 
   // Editing must not rewrite the full compatibility copy.
   await app.evaluate(() => {
@@ -88,7 +143,9 @@ try {
   await copyOptions('images/copies', '副本.png'); await complete();
   let copied = await content(text => text.includes('images/copies/'));
   assert.equal((copied.match(/images\/copies\//g) || []).length, 2);
-  assert.ok(copied.includes('width="84" height="36" alt="原图" title="Keep"')); assert.ok(copied.includes('src="other.png"'));
+  const originalTag = copied.match(/<img\b[^>]*alt="原图"[^>]*>/)?.[0] || '';
+  for (const attribute of ['width="84"', 'height="36"', 'title="Keep"']) assert.ok(originalTag.includes(attribute));
+  assert.ok(copied.includes('src="other.png"'));
   assert.deepEqual(await fs.readFile(path.join(run, 'images/copies/副本.png')), png);
   assert.deepEqual(await fs.readFile(picture), png); assert.equal(await fs.readFile(doc, 'utf8'), original);
   assert.equal((await session()).documents.find(item => item.path === doc).paused, 'attachments');
@@ -138,7 +195,7 @@ try {
   pass('external edits reject reference replacement; the image dialog fits a narrow window with no renderer errors');
 } finally {
   if (page) await page.screenshot({ path: path.join(run, 'last-state.png') }).catch(() => {});
-  if (app) { await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await app.close().catch(() => {}); }
+  if (app) { await app.evaluate(async ({ clipboard }) => { const previous = globalThis.imageCopyPreviousClipboard; if (previous?.length) await clipboard.write(previous); else if (previous) clipboard.clear(); }).catch(() => {}); await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await app.close().catch(() => {}); }
   await new Promise(resolve => { server.closeAllConnections(); server.close(resolve); });
   await fs.writeFile(path.join(run, 'results.json'), JSON.stringify({ results, errors }, null, 2)); console.log(`Evidence: ${run}`);
 }

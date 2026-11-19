@@ -12,13 +12,13 @@ interface Hooks {
 export class ImageActions {
   private menu = document.createElement('div');
   private dialog = document.createElement('dialog');
-  private selected: { source: string; tab: string | null } | null = null;
-  private running = false; private canceled = false;
+  private selected: { source: string; tab: string | null; image: HTMLImageElement } | null = null;
+  private running = false; private canceled = false; private copying = false;
   constructor(private hooks: Hooks) {
     this.menu.id = 'image-actions-menu'; this.menu.className = 'image-actions-menu'; this.menu.hidden = true; this.menu.setAttribute('role', 'menu');
-    this.menu.innerHTML = `<button type="button" data-image-action="upload" role="menuitem">${ht("上传这张图片到 PicGo…")}</button><button type="button" data-image-action="copy" role="menuitem">${ht("复制图片并更新引用…")}</button><button type="button" data-image-action="download" role="menuitem">${ht("下载图片到本地…")}</button>`;
+    this.menu.innerHTML = `<button type="button" data-image-action="clipboard" role="menuitem">${ht("复制图片")}</button><div role="separator"></div><button type="button" data-image-action="upload" role="menuitem">${ht("上传这张图片到 PicGo…")}</button><button type="button" data-image-action="copy" role="menuitem">${ht("保存副本并替换引用…")}</button><button type="button" data-image-action="download" role="menuitem">${ht("下载图片到本地…")}</button>`;
     this.dialog.id = 'image-copy-dialog'; this.dialog.setAttribute('aria-labelledby', 'image-copy-title');
-    this.dialog.innerHTML = `<form><div class="dialog-heading"><h2 id="image-copy-title">${ht("保存图片副本")}</h2><button type="button" data-image-cancel aria-label="${ht("取消图片操作")}">×</button></div><p id="image-copy-source"></p><p>${ht("更新当前文稿中此图片的所有引用，保留说明与尺寸。原图保留，完成后请手动保存；撤销只还原文稿引用。")}</p><label>${ht("目录基准")}<select id="image-copy-base"><option value="document">${ht("当前文稿")}</option><option value="workspace">${ht("当前工作区")}</option></select></label><label>${ht("相对目录")}<input id="image-copy-directory" required maxlength="512" /></label><label>${ht("副本名称（可留空）")}<input id="image-copy-name" maxlength="240" placeholder="${ht("自动生成唯一名称")}" /></label><p id="image-copy-status" role="status" aria-live="polite"></p><div class="dialog-actions"><button type="button" data-image-cancel>${ht("取消")}</button><button class="primary-button" type="submit">${ht("保存副本并更新引用")}</button></div></form>`;
+    this.dialog.innerHTML = `<form><div class="dialog-heading"><h2 id="image-copy-title">${ht("保存图片副本")}</h2><button type="button" data-image-cancel aria-label="${ht("取消图片操作")}">×</button></div><p id="image-copy-source"></p><p>${ht("更新当前文稿中此图片的所有引用，保留说明与尺寸。原图保留，完成后请手动保存；撤销只还原文稿引用。")}</p><label>${ht("目录基准")}<select id="image-copy-base"><option value="document">${ht("当前文稿")}</option><option value="workspace">${ht("当前工作区")}</option></select></label><label>${ht("相对目录")}<input id="image-copy-directory" required maxlength="512" /></label><label>${ht("副本名称（可留空）")}<input id="image-copy-name" maxlength="240" placeholder="${ht("自动生成唯一名称")}" /></label><p id="image-copy-status" role="status" aria-live="polite"></p><div class="dialog-actions"><button type="button" data-image-cancel>${ht("取消")}</button><button class="primary-button" type="submit">${ht("保存副本并替换引用")}</button></div></form>`;
     document.body.append(this.menu, this.dialog);
     document.addEventListener('contextmenu', event => {
       const target = event.target instanceof Element ? event.target : null;
@@ -39,7 +39,8 @@ export class ImageActions {
       const action = (event.target as Element).closest<HTMLElement>('[data-image-action]')?.dataset.imageAction;
       if (!action || !this.selected) return; this.menu.hidden = true;
       if (this.hooks.activeId() !== this.selected.tab) return;
-      if (action === 'upload') void this.hooks.upload(this.selected.source);
+      if (action === 'clipboard') void this.copyImage();
+      else if (action === 'upload') void this.hooks.upload(this.selected.source);
       else this.show(action === 'download');
     });
     this.dialog.querySelector('form')!.addEventListener('submit', event => { event.preventDefault(); void this.execute(); });
@@ -49,13 +50,34 @@ export class ImageActions {
   private open(image: HTMLImageElement, x: number, y: number) {
     if (document.body.classList.contains('is-busy') || document.querySelector('dialog[open]')) return false;
     const source = this.hooks.editor().imageSourceAt(image); if (!source) return false;
-    this.selected = { source, tab: this.hooks.activeId() };
+    this.selected = { source, tab: this.hooks.activeId(), image };
     const remote = /^https?:\/\//i.test(source);
     this.menu.querySelector<HTMLElement>('[data-image-action="upload"]')!.hidden = remote;
     this.menu.querySelector<HTMLElement>('[data-image-action="copy"]')!.hidden = remote;
     this.menu.querySelector<HTMLElement>('[data-image-action="download"]')!.hidden = !remote;
     this.menu.hidden = false; this.menu.style.left = `${Math.max(8, Math.min(x, innerWidth - 240))}px`; this.menu.style.top = `${Math.max(8, Math.min(y, innerHeight - this.menu.offsetHeight - 8))}px`;
     return true;
+  }
+  private async copyImage() {
+    const selected = this.selected;
+    if (!selected || this.copying) return;
+    this.copying = true; document.body.classList.add('meki-image-copying');
+    try {
+      // Menus and hover controls must not cover Chromium's image hit-test point.
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const { image } = selected;
+      if (this.hooks.activeId() !== selected.tab || !image.isConnected || this.hooks.editor().imageSourceAt(image) !== selected.source) throw new Error(t("这张图片已变化，请重新选择。"));
+      if (!image.complete || !image.naturalWidth) throw new Error(t("图片尚未加载，无法复制。"));
+      const box = image.getBoundingClientRect(), viewport = image.closest('.document-scroll')!.getBoundingClientRect();
+      const left = Math.max(0, box.left, viewport.left), right = Math.min(innerWidth, box.right, viewport.right);
+      const top = Math.max(0, box.top, viewport.top), bottom = Math.min(innerHeight, box.bottom, viewport.bottom);
+      const x = Math.floor((left + right) / 2), y = Math.floor((top + bottom) / 2);
+      if (right <= left || bottom <= top || document.elementFromPoint(x, y) !== image) throw new Error(t("这张图片已变化，请重新选择。"));
+      await window.meki.copyImage({ x, y });
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      this.hooks.notify(t("已复制图片"));
+    } catch (error) { this.hooks.notify(String(error).replace(/^Error: (Error invoking remote method '[^']+': Error: )?/, ''), true); }
+    finally { this.copying = false; document.body.classList.remove('meki-image-copying'); }
   }
   private show(download: boolean) {
     const settings = this.hooks.settings(); this.canceled = false; this.dialog.dataset.download = String(download);
