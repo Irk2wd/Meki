@@ -325,6 +325,8 @@ export class ResearchWorkspace {
   private phasePageSize = savedPageSize();
   private recordFilter?: ResearchFilter;
   private axisPan?: AxisPan;
+  private controlPress?: { pointerId: number; release: () => void };
+  private controlsIdle = Promise.resolve();
   private widths = savedWidths();
   private eventLayout = new ResizeObserver(() => this.layoutTimelineEvents());
   private positions = new Map<string, ViewPosition>();
@@ -354,7 +356,15 @@ export class ResearchWorkspace {
     document.body.append(this.dialog, this.projectPicker, this.rangePicker);
     for (const element of [this.sidebar, this.panel]) {
       element.addEventListener('click', event => { void this.click(event).catch(error => this.hooks.notify(errorText(error), true)); });
+      element.addEventListener('pointerdown', event => {
+        if (event.button !== 0 || this.controlPress || !(event.target as Element).closest('button')) return;
+        this.controlsIdle = new Promise(release => { this.controlPress = { pointerId: event.pointerId, release }; });
+      });
     }
+    for (const name of ['pointerup', 'pointercancel'] as const) {
+      window.addEventListener(name, event => this.releaseControl(event.pointerId));
+    }
+    window.addEventListener('blur', () => this.releaseControl());
     this.content.addEventListener('change', event => {
       const target = event.target as HTMLInputElement;
       if (target.id === 'research-date') {
@@ -595,8 +605,11 @@ export class ResearchWorkspace {
     try {
       const includeLinked = !this.snapshot || this.destination(this.snapshot).page === 'summaries';
       const snapshot = root ? await window.meki.researchSnapshot(this.recordFilter, includeLinked) : null;
+      if (!this.hooks.blocked()) await this.controlsIdle;
       if (number !== this.loadNumber || root !== this.hooks.root() || this.axisPan?.moving) return;
-      const signature = JSON.stringify([snapshot, this.recordFilter]);
+      const shown = snapshot && this.destination(snapshot).page !== 'summaries'
+        ? { ...snapshot, linkedSummaries: undefined } : snapshot;
+      const signature = JSON.stringify([shown, this.recordFilter]);
       const today = snapshot ? projectToday(snapshot.project.timezone) : '';
       this.loading = false;
       if (signature === this.signature && today === this.renderedDay) return;
@@ -612,12 +625,21 @@ export class ResearchWorkspace {
       if (!snapshot?.project.phases.some(phase => phase.id === this.phaseId)) this.phaseId = '';
       this.render();
     } catch (error) {
+      if (!this.hooks.blocked()) await this.controlsIdle;
       if (number !== this.loadNumber || root !== this.hooks.root() || this.axisPan?.moving) return;
       this.loading = false;
       this.snapshot = null;
       const message = errorText(error);
       if (this.signature !== message) { this.signature = message; this.render(message); }
     }
+  }
+
+  private releaseControl(pointerId?: number) {
+    const press = this.controlPress;
+    if (!press || (pointerId !== undefined && pointerId !== press.pointerId)) return;
+    this.controlPress = undefined;
+    // Let the native click run before a pending refresh replaces its button.
+    setTimeout(press.release, 0);
   }
 
   private openRangePicker(range: ResearchRange, bounds: ResearchRange) {
@@ -774,6 +796,10 @@ export class ResearchWorkspace {
 
   private render(error?: string) {
     const state = this.snapshot, active = state && this.destination(state);
+    const focused = document.activeElement;
+    const focusRoot = this.panel.contains(focused) ? this.panel : this.sidebar.contains(focused) ? this.sidebar : undefined;
+    const focusKey = focusRoot && focused instanceof HTMLButtonElement && [...focused.attributes]
+      .find(({ name }) => name.startsWith('data-research-') || name === 'data-action');
     const scroll = this.content.scrollTop;
     const today = state ? projectToday(state.project.timezone) : '';
     this.renderedDay = today;
@@ -882,6 +908,9 @@ export class ResearchWorkspace {
     `;
     this.layoutTimelineEvents();
     this.content.scrollTop = scroll;
+    if (focusKey) {
+      focusRoot?.querySelector<HTMLButtonElement>(`button[${focusKey.name}="${CSS.escape(focusKey.value)}"]:enabled`)?.focus({ preventScroll: true });
+    }
   }
 
   private renderPhaseDetails(phase: ResearchPhase, mode: ResearchSnapshot['project']['phaseGoals']) {

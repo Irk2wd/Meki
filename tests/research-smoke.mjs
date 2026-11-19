@@ -698,6 +698,7 @@ try {
   await page.clock.setFixedTime(new Date('2026-11-19T15:59:59Z'));
   const phaseDialog = page.locator('#research-tools-dialog');
   async function addPhase(title, start, useRestoredFocus = false) {
+    await idle();
     const open = page.getByRole('button', { name: '新建阶段', exact: true });
     if (useRestoredFocus) {
       assert.ok(await open.evaluate(button => button === document.activeElement));
@@ -929,9 +930,15 @@ try {
   await tools.getByRole('button', { name: '基线评测审阅', exact: true }).click();
   await page.locator('#research-reader-title').getByText('基线评测审阅').waitFor();
   await closeReader();
+  const week = quickRange('最近 7 天');
+  await week.scrollIntoViewIfNeeded();
+  const weekBox = await week.boundingBox();
+  await page.mouse.move(weekBox.x + weekBox.width / 2, weekBox.y + weekBox.height / 2);
+  await page.mouse.down();
   command('batch', [], { records: [{ id: 'follow-up', type: review.id, title: '基线后续审阅', date: '2026-11-18', phaseId: 'baseline' }] });
-  await refresh.click();
-  await quickRange('最近 7 天').click();
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelector('[data-research-range-preset="7d"]')?.getAttribute('aria-pressed') === 'true');
   await baseline.getByRole('button', { name: '打开事件 基线后续审阅' }).waitFor();
   assert.equal(await baseline.locator('.research-timeline-bar').count(), 0);
   assert.deepEqual(errors, []);
