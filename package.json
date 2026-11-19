@@ -1,7 +1,7 @@
 {
   "name": "meki",
   "productName": "Meki",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "A quiet, local-first Markdown writing app for Windows and macOS.",
   "private": true,
   "type": "module",
@@ -13,6 +13,7 @@
     "url": "https://github.com/Irk2wd/Meki.git"
   },
   "homepage": "https://github.com/Irk2wd/Meki",
+  "updateMirror": "https://47.98.49.23:8443/",
   "overrides": {
     "katex": "$katex",
     "glob@>=9.0.0 <14.0.2": "14.0.3",

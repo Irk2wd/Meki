@@ -1,4 +1,4 @@
-"""Find both tagged builds and stage their exact CI artifacts."""
+"""Select changed editions and stage their exact, tagged CI artifacts."""
 import argparse
 import hashlib
 import json
@@ -9,6 +9,15 @@ import subprocess
 import zipfile
 from pathlib import Path, PurePosixPath
 
+EDITIONS = {'Meki': ('main', 'v'), 'mekiR': ('research', 'mekir-v')}
+PART = r'(?:0|[1-9][0-9]{0,5})'
+RELEASE_TAG = re.compile(rf'(mekir-)?v({PART}\.{PART}\.{PART})')
+RELEASE_METADATA = (
+    'package.json', 'package-lock.json', 'AGENTS.md', 'docs/releases/**', 'docs/updates.md',
+    '.github/workflows/checks.yml', '.github/workflows/ci.yml', '.github/workflows/release.yml',
+    'scripts/prepare-release.py', 'scripts/publish-release.py',
+)
+
 
 def gh(*args):
     return json.loads(subprocess.check_output(['gh', *args], text=True))
@@ -18,46 +27,113 @@ def git(*args):
     return subprocess.check_output(['git', *args], text=True).strip()
 
 
-def resolve(tag, triggering_run):
-    if not tag:
-        tag = 'v' + json.loads(Path('package.json').read_text())['version']
-    match = re.fullmatch(r'(?:mekir-)?v(\d+\.\d+\.\d+)', tag)
+def version_key(version):
+    return tuple(map(int, version.split('.')))
+
+
+def tag_commit(tag):
+    result = subprocess.run(['git', 'rev-parse', '--verify', '--quiet', f'refs/tags/{tag}^{{commit}}'],
+                            capture_output=True, text=True)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def released_versions():
+    repository = os.environ['GH_REPO']
+    pages = gh('api', '--paginate', '--slurp', f'repos/{repository}/releases?per_page=100')
+    released = {}
+    for page in pages:
+        for release in page:
+            match = RELEASE_TAG.fullmatch(release['tag_name'])
+            if not match or not release['published_at'] or release['draft'] or release['prerelease']:
+                continue
+            research_only, version = match.groups()
+            uploaded = {asset['name'] for asset in release['assets'] if asset['state'] == 'uploaded'}
+            for product in EDITIONS:
+                if research_only and product == 'Meki':
+                    continue
+                installers = {f'{product}-{version}-Setup-x64.exe', f'{product}-{version}-macOS-universal.dmg'}
+                if uploaded & installers and (product not in released or version_key(version) > version_key(released[product])):
+                    released[product] = version
+    return released
+
+
+def package_content(commit, filename):
+    package = json.loads(git('show', f'{commit}:{filename}'))
+    package.pop('version', None)
+    package.get('packages', {}).get('', {}).pop('version', None)
+    return package
+
+
+def has_changes(product, commit, released):
+    if product not in released:
+        return True
+    tag = EDITIONS[product][1] + released[product]
+    previous = tag_commit(tag)
+    if not previous:
+        raise RuntimeError(f'Missing the source tag {tag} for the last published {product} version.')
+    if previous == commit:
+        return False
+    paths = [':(exclude)' + name for name in RELEASE_METADATA]
+    status = subprocess.run(['git', 'diff', '--quiet', '--no-ext-diff', previous, commit, '--', '.', *paths]).returncode
+    if status not in (0, 1):
+        raise RuntimeError(f'Could not compare {product} with {tag}.')
+    return status == 1 or any(package_content(previous, name) != package_content(commit, name)
+                              for name in ('package.json', 'package-lock.json'))
+
+
+def resolve(tag):
+    match = RELEASE_TAG.fullmatch(tag)
     if not match:
-        print('Waiting for a versioned release tag.')
-        return None
-    version = match[1]
-    release_tag = 'v' + version
-    existing = subprocess.run(['gh', 'release', 'view', release_tag, '--json', 'isDraft'], capture_output=True, text=True)
-    if existing.returncode == 0 and not json.loads(existing.stdout)['isDraft']:
-        print(release_tag + ' is already published.')
+        raise RuntimeError('Provide an explicit release tag (vX.Y.Z or mekir-vX.Y.Z).')
+    research_only, version = match.groups()
+    product = 'mekiR' if research_only else 'Meki'
+    released = released_versions()
+    if product in released and version_key(version) <= version_key(released[product]):
+        print(f'{product} {released[product]} is already published. Prepare a newer version to release again.')
         return None
 
+    commit = tag_commit(tag)
+    if not commit:
+        print(f'Waiting for the {tag} tag.')
+        return None
+    heads = {product: git('rev-parse', f'origin/{branch}') for product, (branch, _) in EDITIONS.items()}
+    heads[product] = commit
+    selected = [name for name, head in heads.items() if has_changes(name, head, released)]
+    if product not in selected:
+        print(f'{tag} contains no unpublished {product} changes.')
+        return None
+    for name in selected:
+        if name in released and version_key(version) <= version_key(released[name]):
+            raise RuntimeError(f'A joint release must be newer than {name} {released[name]}. Use a new shared version.')
+
     editions = []
-    for product, branch, source_tag in [('Meki', 'main', release_tag), ('mekiR', 'research', 'mekir-' + release_tag)]:
-        resolved = subprocess.run(['git', 'rev-parse', '--verify', '--quiet', f'refs/tags/{source_tag}^{{commit}}'],
-                                  capture_output=True, text=True)
-        if resolved.returncode:
+    for name in selected:
+        branch, prefix = EDITIONS[name]
+        source_tag = prefix + version
+        source = commit if source_tag == tag else tag_commit(source_tag)
+        if not source:
             print(f'Waiting for the {source_tag} tag.')
             return None
-        commit = resolved.stdout.strip()
-        subprocess.run(['git', 'merge-base', '--is-ancestor', commit, 'origin/' + branch], check=True)
-        package = json.loads(git('show', f'{commit}:package.json'))
-        if (package['version'], package['productName']) != (version, product):
+        subprocess.run(['git', 'merge-base', '--is-ancestor', source, 'origin/' + branch], check=True)
+        if source != heads[name] and not has_changes(name, source, released):
+            raise RuntimeError(f'{source_tag} contains no unpublished {name} changes. Prepare both editions at a new shared version.')
+        package = json.loads(git('show', f'{source}:package.json'))
+        if (package['version'], package['productName']) != (version, name):
             raise RuntimeError(f'{source_tag} has the wrong package version or edition.')
-        git('cat-file', '-e', f'{commit}:docs/releases/{version}.md')
-        run = triggering_run if source_tag == tag else ''
-        if not run:
-            runs = gh('run', 'list', '--workflow', 'ci.yml', '--event', 'push', '--branch', source_tag,
-                      '--commit', commit, '--status', 'success', '--limit', '1', '--json', 'databaseId')
-            if not runs:
-                print(f'Waiting for successful installer validation on {source_tag}.')
-                return None
-            run = str(runs[0]['databaseId'])
+        git('cat-file', '-e', f'{source}:docs/releases/{version}.md')
+        runs = gh('run', 'list', '--workflow', 'ci.yml', '--event', 'push', '--branch', source_tag,
+                  '--commit', source, '--status', 'success', '--limit', '1', '--json', 'databaseId')
+        if not runs:
+            print(f'Waiting for successful installer validation on {source_tag}.')
+            return None
+        run = str(runs[0]['databaseId'])
         tested = gh('run', 'view', run, '--json', 'headSha,event,headBranch,status,conclusion')
-        if tested != dict(headSha=commit, event='push', headBranch=source_tag, status='completed', conclusion='success'):
+        if tested != dict(headSha=source, event='push', headBranch=source_tag, status='completed', conclusion='success'):
             raise RuntimeError(f'Installer run {run} does not match {source_tag}.')
-        editions.append(dict(product=product, branch=branch, commit=commit, run=run))
-    return dict(version=version, editions=editions)
+        editions.append(dict(product=name, tag=source_tag, commit=source, run=run))
+    target_tag = ('v' if 'Meki' in selected else 'mekir-v') + version
+    print(f'Preparing {target_tag} for ' + ' and '.join(selected) + '.')
+    return dict(version=version, tag=target_tag, editions=editions)
 
 
 def download_artifacts(output, run, commit):
@@ -93,12 +169,7 @@ def download_artifacts(output, run, commit):
 def stage(plan, directory):
     directory.mkdir()
     for edition in plan['editions']:
-        branch, commit, run = edition['branch'], edition['commit'], edition['run']
-        checks = gh('run', 'list', '--workflow', 'checks.yml', '--branch', branch, '--event', 'push',
-                    '--commit', commit, '--limit', '1', '--json', 'databaseId')
-        if not checks:
-            raise RuntimeError(f'Missing source checks for {branch} at {commit}.')
-        subprocess.run(['gh', 'run', 'watch', str(checks[0]['databaseId']), '--exit-status', '--interval', '15'], check=True)
+        commit, run = edition['commit'], edition['run']
         output = directory / edition['product']
         output.mkdir()
         source = output / 'source'
@@ -113,14 +184,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     resolve_parser = commands.add_parser('resolve')
-    resolve_parser.add_argument('tag', nargs='?', default='')
-    resolve_parser.add_argument('--run', default='')
+    resolve_parser.add_argument('tag')
     commands.add_parser('stage').add_argument('directory', type=Path)
     args = parser.parse_args()
     if args.command == 'stage':
         stage(json.loads(os.environ['RELEASE_PLAN']), args.directory.resolve())
     else:
-        plan = resolve(args.tag, args.run)
+        plan = resolve(args.tag)
         if plan:
             with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
                 output.write(f'version={plan["version"]}\n')

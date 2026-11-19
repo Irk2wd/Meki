@@ -1,6 +1,7 @@
-"""Publish both verified deliveries together as one GitHub Release."""
+"""Publish the selected, verified editions in one GitHub Release."""
 import hashlib
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -29,9 +30,11 @@ def sha256(file):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def collect_delivery(directory, output, product, version, tag):
+def collect_delivery(directory, output, edition, version, combined_release):
+    product, tag = edition['product'], edition['tag']
     verification = json.loads((directory / 'verification.json').read_text(encoding='utf-8'))
     commit = subprocess.check_output(['git', 'rev-parse', f'refs/tags/{tag}^{{commit}}'], cwd=ROOT, text=True).strip()
+    require(commit == edition['commit'], f'The source tag {tag} changed after planning.')
     require(verification['version'] == version and verification['sourceCommit'] == commit, f'{product} delivery does not match {tag}')
     ci = verification['ci']
     require(ci['headSha'] == commit and ci['status'] == 'completed' and ci['conclusion'] == 'success',
@@ -55,7 +58,7 @@ def collect_delivery(directory, output, product, version, tag):
 
     combined = {}
     for name, digest in checksums.items():
-        asset = 'mekiR-' + name if product == 'mekiR' and name in shared else name
+        asset = 'mekiR-' + name if combined_release and product == 'mekiR' and name in shared else name
         target = output / asset
         require(not target.exists(), f'Duplicate release asset: {asset}')
         shutil.copy2(directory / name, target)
@@ -64,10 +67,17 @@ def collect_delivery(directory, output, product, version, tag):
     return combined
 
 
-def publish(version, directory):
+def publish(plan, directory):
+    version, editions, tag = plan['version'], plan['editions'], plan['tag']
     require(re.fullmatch(r'\d+\.\d+\.\d+', version), 'Invalid release version')
-    tag = 'v' + version
-    title = 'Meki / mekiR ' + version
+    source_tags = {'Meki': 'v' + version, 'mekiR': 'mekir-v' + version}
+    products = [edition['product'] for edition in editions]
+    require(products and set(products) <= source_tags.keys() and len(set(products)) == len(products), 'Invalid release editions')
+    for edition in editions:
+        require(edition['tag'] == source_tags[edition['product']], 'Release plan has a mismatched source tag')
+    require(tag == source_tags['Meki' if 'Meki' in products else 'mekiR'], 'Release plan has a mismatched publication tag')
+    combined_release = len(products) == 2
+    title = ' / '.join(products) + ' ' + version
     existing = gh('release', 'view', tag, '--json', 'isDraft', check=False)
     if existing.returncode == 0 and not json.loads(existing.stdout)['isDraft']:
         print(tag + ' is already published.')
@@ -76,17 +86,21 @@ def publish(version, directory):
     with tempfile.TemporaryDirectory(prefix='meki-release-') as temporary:
         output = pathlib.Path(temporary) / 'assets'
         output.mkdir()
-        checksums = collect_delivery(directory / 'Meki' / 'publish', output, 'Meki', version, tag)
-        checksums.update(collect_delivery(directory / 'mekiR' / 'publish', output, 'mekiR', version, 'mekir-' + tag))
+        checksums = {}
+        release_notes = []
+        for edition in editions:
+            delivery = directory / edition['product'] / 'publish'
+            checksums.update(collect_delivery(delivery, output, edition, version, combined_release))
+            release_notes.append((delivery / 'ReleaseNotes.md').read_text(encoding='utf-8').strip())
         inventory = output / 'SHA256SUMS.txt'
         inventory.write_text(''.join(f'{checksums[name]}  {name}\n' for name in sorted(checksums)), encoding='utf-8')
         checksums[inventory.name] = sha256(inventory)
 
         notes = pathlib.Path(temporary) / 'release-body.md'
-        stable_notes = (output / 'ReleaseNotes.md').read_text(encoding='utf-8').strip()
-        research_notes = (output / 'mekiR-ReleaseNotes.md').read_text(encoding='utf-8').strip()
-        notes.write_text('标准版的安装包以 `Meki-` 开头，研究版以 `mekiR-` 开头。\n\n'
-                         + stable_notes + '\n\n---\n\n' + research_notes + '\n', encoding='utf-8')
+        body = '\n\n---\n\n'.join(release_notes) + '\n'
+        if combined_release:
+            body = '标准版的安装包以 `Meki-` 开头，研究版以 `mekiR-` 开头。\n\n' + body
+        notes.write_text(body, encoding='utf-8')
         if existing.returncode:
             gh('release', 'create', tag, '--verify-tag', '--draft', '--title', title, '--notes-file', str(notes))
         else:
@@ -105,11 +119,12 @@ def publish(version, directory):
             require(asset['state'] == 'uploaded' and asset['size'] == file.stat().st_size, 'Incomplete release upload')
             require(asset.get('digest') == 'sha256:' + checksums[file.name], 'Uploaded release checksum mismatch: ' + file.name)
 
-        gh('release', 'edit', tag, '--draft=false', '--latest')
+        latest = '--latest' if 'Meki' in products else '--latest=false'
+        gh('release', 'edit', tag, '--draft=false', latest)
         published = json.loads(gh('release', 'view', tag, '--json', 'isDraft,isPrerelease,url').stdout)
         require(not published['isDraft'] and not published['isPrerelease'], 'Release was not published')
         print(published['url'])
 
 
 if __name__ == '__main__':
-    publish(sys.argv[1], pathlib.Path(sys.argv[2]).resolve())
+    publish(json.loads(os.environ['RELEASE_PLAN']), pathlib.Path(sys.argv[1]).resolve())

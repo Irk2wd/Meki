@@ -396,6 +396,11 @@ function registerIpc() {
     closingAllowed = true; coordinator.allowQuit(); setImmediate(() => app.quit());
   });
   registerClipboardText(register, clipboard);
+  register('copy-image', point => {
+    const zoom = mainWindow.webContents.getZoomFactor(), [width, height] = mainWindow.getContentSize();
+    if (!point || Object.keys(point).some(key => !['x', 'y'].includes(key)) || ![point.x, point.y].every(value => Number.isInteger(value) && value >= 0) || point.x * zoom >= width || point.y * zoom >= height) throw new Error(t("图片位置无效，请重新选择。"));
+    mainWindow.webContents.copyImageAt(Math.round(point.x * zoom), Math.round(point.y * zoom));
+  });
   register('commands-ready', () => {
     commandsReady = true;
     try { bootstrap?.runtime?.healthy(); } catch { console.warn('Meki could not acknowledge the updated application startup.'); }

@@ -1,27 +1,23 @@
 name: Publish release
 
 on:
-  workflow_run:
-    workflows: ['Desktop CI']
-    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag (defaults to the current Meki version)
-        required: false
+        description: Approved release tag (vX.Y.Z or mekir-vX.Y.Z)
+        required: true
         type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
+
 jobs:
   resolve:
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'workflow_dispatch' ||
-       (github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_repository.full_name == github.repository))
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -37,21 +33,17 @@ jobs:
           ref: ${{ github.workflow_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Require successful tagged builds for both editions
+      - name: Select changed editions and require their successful tagged builds
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          INSTALLER_TAG: ${{ github.event.workflow_run.head_branch || inputs.tag }}
-          INSTALLER_RUN: ${{ github.event.workflow_run.id }}
-        run: python3 scripts/prepare-release.py resolve "$INSTALLER_TAG" --run "$INSTALLER_RUN"
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: python3 scripts/prepare-release.py resolve "$RELEASE_TAG"
 
   publish:
     needs: resolve
     if: needs.resolve.outputs.version != ''
-    concurrency:
-      group: publish-release-${{ needs.resolve.outputs.version }}
-      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
@@ -68,7 +60,7 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '24'
-      - name: Check source jobs and download exact tested installers and evidence
+      - name: Stage tagged source and verified installer artifacts
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -80,6 +72,7 @@ jobs:
         run: |
           for product in Meki mekiR; do
             edition="$RUNNER_TEMP/meki-delivery/$product"
+            if [ ! -d "$edition" ]; then continue; fi
             (
               cd "$edition/source"
               npm ci
@@ -87,9 +80,9 @@ jobs:
                 --ci-json "$edition/installer-ci.json" --source-archive "$edition/source.zip"
             )
           done
-      - name: Publish one release only after all files are uploaded and verified
+      - name: Publish the selected editions after their files are uploaded and verified
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
-        run: python3 scripts/publish-release.py "$RELEASE_VERSION" "$RUNNER_TEMP/meki-delivery"
+          RELEASE_PLAN: ${{ needs.resolve.outputs.plan }}
+        run: python3 scripts/publish-release.py "$RUNNER_TEMP/meki-delivery"

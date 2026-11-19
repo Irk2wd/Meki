@@ -5,15 +5,16 @@ const http = require('node:http');
 const path = require('node:path');
 const { names, digest, BOOTSTRAP_VERSION } = require('../electron/update-policy.cjs');
 const { nativeIconHash } = require('../electron/app-icon.cjs');
+const { APP_ID } = require('../electron/app-identity.cjs');
 
 function keys() {
   const pair = crypto.generateKeyPairSync('ed25519');
   return { privateKey: pair.privateKey, publicKey: pair.publicKey.export({ type: 'spki', format: 'pem' }) };
 }
-function fixture(pair, { version = '0.12.0', platform = process.platform, electron = '45.0.0', payload = Buffer.from('synthetic application'), bootstrap = BOOTSTRAP_VERSION,
+function fixture(pair, { appId = APP_ID, version = '0.12.0', platform = process.platform, electron = '45.0.0', payload = Buffer.from('synthetic application'), bootstrap = BOOTSTRAP_VERSION,
   nativeIcon = nativeIconHash(path.resolve(__dirname, '..'), platform) } = {}) {
   const files = names(version, platform), compressed = zlib.gzipSync(payload), installer = Buffer.from('synthetic installer; never execute');
-  const manifest = { appId: 'io.meki.editor', version, bootstrap, electron, platform, arch: platform === 'darwin' ? 'universal' : 'x64', nativeIcon,
+  const manifest = { appId, version, bootstrap, electron, platform, arch: platform === 'darwin' ? 'universal' : 'x64', nativeIcon,
     asarSize: payload.length, asarSha256: digest(payload), payload: { name: files.payload, size: compressed.length, sha256: digest(compressed) },
     installer: { name: files.installer, size: installer.length, sha256: digest(installer) } };
   const body = Buffer.from(JSON.stringify(manifest)), envelope = { schema: 1, body: body.toString('base64'), signature: crypto.sign(null, body, pair.privateKey).toString('base64') };
@@ -27,10 +28,32 @@ async function server(initial) {
   const instance = http.createServer(async (request, response) => {
     if (request.url === '/__fixture_ready__') { response.writeHead(204).end(); return; }
     context.requests.push({ path: request.url, authorization: request.headers.authorization });
+    if (request.url.startsWith('/updates/')) {
+      const { mirror, current } = context;
+      const { manifest, payload, installer } = names(current.manifest.version, current.manifest.platform);
+      if (mirror && request.url === `/updates/latest/${manifest}`) {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify(mirror)); return;
+      }
+      const bytes = mirror && new Map([
+        [`/updates/releases/${mirror.tag}/${payload}`, context.mirrorBytes || current.compressed],
+        [`/updates/releases/${mirror.tag}/${installer}`, current.installer],
+      ]).get(request.url);
+      if (!bytes) { response.writeHead(404).end(); return; }
+      response.setHeader('Content-Length', bytes.length);
+      if (context.holdMirror) response.write(bytes.subarray(0, 1));
+      else response.end(bytes);
+      return;
+    }
     if (request.url.startsWith('/repos/')) {
       if (!request.url.startsWith('/repos/Irk2wd/Meki/') || !context.publicAvailable) { response.writeHead(404).end(); return; }
       if (request.headers.authorization) { response.writeHead(401).end(); return; }
       if (context.errorStatus) { response.writeHead(context.errorStatus).end(); return; }
+      if (request.url.includes('/releases/tags/')) {
+        if (!request.url.endsWith('/releases/tags/' + context.current.release.tag_name)) { response.writeHead(404).end(); return; }
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify(context.current.release)); return;
+      }
       if (request.url.endsWith('/releases/latest')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(context.latest || context.current.release)); return; }
       if (request.url.includes('/releases?')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(context.releases || [context.current.release])); return; }
       const id = Number(request.url.split('/').pop());

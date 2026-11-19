@@ -16,6 +16,8 @@
 
 ## 下载或更新失败
 
+应用优先从国内 HTTPS 镜像检查和下载更新。镜像暂不可用、清单过旧或文件校验失败时，应用会自动回退到 GitHub。若已经选定要下载的版本，回退时会继续下载该版本。
+
 下载会进行签名和文件校验，未通过校验的文件不会启用。遇到网络错误时可稍后重试，或从 [GitHub Releases](https://github.com/Irk2wd/Meki/releases) 下载完整安装器。
 
 更新包损坏或启动未成功时，下次启动会尝试回到之前可用的版本。更新不会搬动文稿或删除原图，设置、草稿、快照与历史保存在本机。
@@ -24,11 +26,26 @@
 
 ## 发布 Meki 与 mekiR
 
-将两个分支的应用和锁文件更新到相同版本，并分别编写 `docs/releases/<版本>.md`。先推送对应的分支提交，再推送两个标签。
+日常提交和 PR 在本地验证。需要在 GitHub 检查源码时，可手动运行 `Source CI`。发版时，版本标签触发的 `Desktop CI` 会构建并验证安装包。
 
-| 分支 | 标签 | 用途 |
+发布流程将 `main` 和 `research` 分别与各自上次正式发布的源码比较。单版有改动时，只给该版递增版本号。两版都有改动时，使用同一个新版本号，新版本须高于两版各自已发布的最高版本。
+
+| 待发布版本 | 推送的标签 | GitHub Release |
 | --- | --- | --- |
-| `main` | `v<版本>` | 构建 Meki，创建两种应用共用的 GitHub Release。 |
-| `research` | `mekir-v<版本>` | 构建 mekiR，记录研究版安装包的源码提交。 |
+| 仅 Meki | `v<版本>` | `v<版本>`，包含 Meki 的文件 |
+| 仅 mekiR | `mekir-v<版本>` | `mekir-v<版本>`，包含 mekiR 的文件 |
+| Meki 与 mekiR | 两个同号标签 | `v<版本>`，包含两版的文件 |
 
-两套安装包都通过 Windows x64、macOS Apple Silicon 和 Intel 的验证后，`Publish release` 会把四个安装包、两份源码、各自的签名更新文件和合并校验表放到 `v<版本>`。应用按各自的文件前缀和签名清单中的应用 ID 检查、安装更新。需要重试发布时，在 `main` 上手动运行 `Publish release` 并填写 `v<版本>`。
+在待发布的分支更新应用和锁文件版本，编写 `docs/releases/<版本>.md`。先推送对应分支的提交，再推送标签，触发安装包构建和验证。流程会跳过仅修改版本号、发布说明或发布流程本身的提交。
+
+正式发布须收到用户明确的发版指令。所选版本通过 Windows x64、macOS Apple Silicon 和 Intel 验证后，在 `main` 手动运行 `Publish release` 并填写目标标签。联合发布需要两套同号构建都通过。该流程会上传安装包、源码、签名更新文件和校验表，再公开 GitHub Release。
+
+## 镜像维护
+
+在 GitHub 正式发布后，阿里云服务器会在下一轮检查时自动拉取，检查间隔为 15 分钟。同步脚本按应用和平台分别选取更新，核对轻量包的大小和 SHA-256 后发布索引。`meki-mirror-sync.service` 的 `OnSuccess=meki-mirror-installers.service` 随即启动完整安装包同步。
+
+安装包同步也有独立定时器。下载中断后会继续传输，服务器拒绝续传时会重新下载。后续发布沿用正常的 GitHub 发版流程。`scripts/serve-update-mirror.go` 通过 HTTPS 提供这些文件。
+
+在阿里云上用 `systemctl list-timers 'meki-mirror-*'` 查看同步和证书续期，用 `journalctl -u meki-mirror-sync -u meki-mirror-installers` 查看同步结果。8443 提供下载，80 用于 Let's Encrypt 验证和续期。
+
+客户端默认地址在 `package.json` 的 `updateMirror` 中。换用其他镜像时，可以设置 GitHub 仓库变量 `MEKI_UPDATE_MIRROR_URL`，也可以在本地打包前设置同名环境变量。已经发布的版本从自身打包时的配置读取地址。

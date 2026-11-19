@@ -51,6 +51,11 @@ function compatible(manifest, { electron, arch, bootstrap = BOOTSTRAP_VERSION, n
     (manifest.nativeIcon === undefined || manifest.nativeIcon === nativeIcon) &&
     (manifest.platform === 'darwin' ? ['x64', 'arm64'].includes(arch) : arch === 'x64');
 }
+function versionFromTag(tag) {
+  const value = typeof tag === 'string' ? /^v([\d.]+)$/.exec(tag)?.[1] : null;
+  version(value);
+  return value;
+}
 function releaseInfo(release, repository = REPOSITORY) {
   if (repository !== REPOSITORY) throw new Error(t("更新仓库无效。"));
   if (!release || release.draft || release.prerelease || !release.published_at || !Array.isArray(release.assets) || release.assets.length > 100) throw new Error(t("未找到可用的正式更新。"));
@@ -62,4 +67,4 @@ function asset(release, name) {
   if (matches.length !== 1 || !Number.isSafeInteger(matches[0].id) || matches[0].id <= 0 || !Number.isSafeInteger(matches[0].size) || matches[0].size <= 0) throw new Error(t("此版本缺少应用内更新文件，请等待发布者补齐。"));
   return matches[0];
 }
-module.exports = { REPOSITORY, BOOTSTRAP_VERSION, MAX_PAYLOAD, MAX_DOWNLOAD, digest, hashPattern, version, newer, names, verifyManifest, compatible, releaseInfo, asset };
+module.exports = { REPOSITORY, BOOTSTRAP_VERSION, MAX_PAYLOAD, MAX_DOWNLOAD, digest, hashPattern, version, newer, names, verifyManifest, compatible, versionFromTag, releaseInfo, asset };
