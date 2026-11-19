@@ -137,7 +137,8 @@
 .research-timeline-label { min-width: 0; }
 .research-timeline-label strong { display: block; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
 .research-timeline-label small { display: block; margin-top: 2px; color: var(--soft); font-size: 11px; line-height: 1.35; }
-.research-phase-ongoing { display: inline-block; padding: 0 5px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); font-size: 10px; white-space: nowrap; }
+.research-phase-status { display: inline-block; padding: 0 5px; color: var(--soft); font-size: 10px; white-space: nowrap; }
+.research-phase-ongoing { border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
 .research-timeline-track {
   position: relative;
   height: 27px;

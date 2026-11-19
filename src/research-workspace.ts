@@ -1,6 +1,8 @@
 import { getLocale, ht, t } from '../electron/i18n.mjs';
+import { comparisonImages } from '../electron/research-comparison.mjs';
 import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSnapshot, ResearchType, ResearchValue, ResearchView } from '../shared/research';
 import { icon } from './icons';
+import { ComparisonGridEditor, ComparisonViewer } from './research-comparison';
 import { escapeResearch as escape, relationLabels, researchOption as option, ResearchTools, runFields } from './research-tools';
 import './research-workspace.css';
 
@@ -11,7 +13,6 @@ const rangeText = (range: ResearchRange) => `${range.start} – ${range.end}`;
 const dayNumber = (date: string) => Date.parse(`${date}T00:00:00Z`) / 86400000;
 const isoDay = (day: number) => new Date(day * 86400000).toISOString().slice(0, 10);
 const formatDay = (day: number, year = false) => new Intl.DateTimeFormat(getLocale(), { year: year ? 'numeric' : undefined, month: 'numeric', day: 'numeric', timeZone: 'UTC' }).format(day * 86400000);
-const shortRange = (range: ResearchRange) => `${formatDay(dayNumber(range.start))} – ${formatDay(dayNumber(range.end))}`;
 const containsDay = (range: ResearchRange, date: string) => range.start <= date && date <= range.end;
 const overlaps = (a: ResearchRange, b: ResearchRange) => a.start <= b.end && b.start <= a.end;
 const rangePresets = [
@@ -42,6 +43,15 @@ function projectToday(timeZone: string) {
   return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
+function phaseSpan({ start, end }: ResearchPhase, today: string): ResearchRange {
+  return { start, end: end ?? (today < start ? start : today) };
+}
+
+function phaseDates({ start, end }: ResearchPhase, today: string, short = false) {
+  const display = (date: string) => short ? formatDay(dayNumber(date)) : date;
+  if (end != null) return `${display(start)} – ${display(end)}`;
+  return today < start ? t("{0} 开始", display(start)) : t("{0} 至今", display(start));
+}
 function resolveTimelineRange(selection: TimelineRange | undefined, today: string): ResearchRange | undefined {
   if (!selection || !('unit' in selection)) return selection;
   if (selection.unit === 'days') return { start: isoDay(dayNumber(today) - selection.amount + 1), end: today };
@@ -88,11 +98,15 @@ interface TimelineOptions {
   presetId?: RangePreset['id'];
   page: number;
   pageSize: number | null;
+  canCreatePhase: boolean;
 }
 
-function timeline(phases: ResearchPhase[], entries: ResearchEntry[], summariesByPhase: Map<string, ResearchEntry[]>,
-  { activePhase, today, range: selection, presetId, page: requestedPage, pageSize }: TimelineOptions) {
-  const dates = [...phases.flatMap(phase => [phase.start, phase.end]), ...entries.map(({ record }) => record.date)].sort();
+const phaseGroupOrder = { ongoing: 0, ended: 1, upcoming: 2 } as const;
+
+function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByPhase: Map<string, ResearchEntry[]>,
+  { activePhase, today, range: selection, presetId, page: requestedPage, pageSize, canCreatePhase }: TimelineOptions) {
+  const spans = phases.map(phase => ({ phase, span: phaseSpan(phase, today) }));
+  const dates = [...spans.flatMap(({ span }) => [span.start, span.end]), ...entries.map(({ record }) => record.date)].sort();
   const range = selection || { start: dates[0] || today, end: dates.at(-1) || today };
   const start = dayNumber(range.start), end = dayNumber(range.end), span = end - start + 1;
   const crossesYear = new Date(start * 86400000).getUTCFullYear() !== new Date(end * 86400000).getUTCFullYear();
@@ -100,21 +114,28 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], summariesBy
   const dot = (date: string) => `<i class="research-timeline-dot" style="--point:${position(date, 0.5)}%"></i>`;
   const hasToday = containsDay(range, today);
   const ticks = [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(start + (end - start) * i / 4)))];
-  const ordered = phases.filter(phase => overlaps(phase, range)).map(phase => {
+  const ordered = spans.filter(({ span }) => overlaps(span, range)).map(({ phase, span }) => {
     const assigned = entries.filter(({ record }) => record.phaseId === phase.id);
-    const latest = [...assigned, ...(summariesByPhase.get(phase.id) || [])]
+    const latest = [...assigned, ...(progressByPhase.get(phase.id) || [])]
       .reduce((date, { record }) => record.date > date ? record.date : date, '');
-    return { phase, ongoing: containsDay(phase, today), latest, assigned: assigned.filter(({ record }) => containsDay(range, record.date)) };
-  }).sort((a, b) => Number(b.ongoing) - Number(a.ongoing) || b.latest.localeCompare(a.latest));
+    const group: keyof typeof phaseGroupOrder = today < span.start ? 'upcoming' : today > span.end ? 'ended' : 'ongoing';
+    return { phase, span, group, latest, assigned: assigned.filter(({ record }) => containsDay(range, record.date)) };
+  }).sort((a, b) => {
+    if (a.group !== b.group) return phaseGroupOrder[a.group] - phaseGroupOrder[b.group];
+    if (a.group === 'ended') return b.span.end.localeCompare(a.span.end);
+    if (a.group === 'upcoming') return a.span.start.localeCompare(b.span.start);
+    return b.latest.localeCompare(a.latest);
+  });
   const limit = pageSize ?? Math.max(1, ordered.length);
   const pageCount = Math.max(1, Math.ceil(ordered.length / limit));
   const page = Math.max(1, Math.min(requestedPage, pageCount));
-  const phaseRows = ordered.slice((page - 1) * limit, page * limit).map(({ phase, ongoing, latest, assigned }) => {
+  const phaseRows = ordered.slice((page - 1) * limit, page * limit).map(({ phase, span, group, latest, assigned }) => {
     const activity = [...new Set(assigned.map(({ record }) => record.date))];
-    const left = Math.max(0, position(phase.start)), right = Math.max(0, 100 - position(phase.end, 1));
+    const left = Math.max(0, position(span.start)), right = Math.max(0, 100 - position(span.end, 1));
+    const status = group === 'ongoing' ? ht("进行中") : group === 'ended' ? ht("已结束") : ht("未开始");
     return `<button type="button" class="research-timeline-row" data-research-phase="${phase.id}" aria-pressed="${activePhase === phase.id}">
-      <span class="research-timeline-label"><strong>${escape(phase.title)}${ongoing ? ` <span class="research-phase-ongoing">${ht("进行中")}</span>` : ''}</strong>
-        <small>${escape(shortRange(phase))} · ${ht("{0} 条实验", assigned.length)}</small>${latest ? `<small>${ht("最近进展 {0}", escape(formatDay(dayNumber(latest), latest.slice(0, 4) !== today.slice(0, 4))))}</small>` : ''}</span>
+      <span class="research-timeline-label"><strong>${escape(phase.title)} <span class="research-phase-status${group === 'ongoing' ? ' research-phase-ongoing' : ''}">${status}</span></strong>
+        <small>${escape(phaseDates(phase, today, true))} · ${ht("{0} 条实验", assigned.length)}</small>${latest ? `<small>${ht("最近进展 {0}", escape(formatDay(dayNumber(latest), latest.slice(0, 4) !== today.slice(0, 4))))}</small>` : ''}</span>
       <span aria-hidden="true" class="research-timeline-track"><i class="research-timeline-bar" style="--left:${left}%;--right:${right}%"></i>${activity.map(dot).join('')}
         ${hasToday ? `<i class="research-today-line" style="--point:${position(today, 0.5)}%"></i>` : ''}</span>
     </button>`;
@@ -141,7 +162,8 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], summariesBy
       <div class="research-actions"><div class="research-range-presets" role="group" aria-label="${ht("快捷时间范围")}">${presetButtons}</div>
         <button type="button" class="secondary-button" data-research-range data-start="${range.start}" data-end="${range.end}"
         title="${ht("选择时间范围")}"${selection ? ` aria-label="${ht("选择时间范围")} · ${escape(rangeText(range))}"` : ''}>${icon('timeline', 14)}${selection ? escape(rangeText(range)) : ht("选择时间范围")}</button>
-        ${selection ? `<button type="button" class="secondary-button" data-research-reset-range>${ht("全部时段")}</button>` : ''}</div>
+        ${selection ? `<button type="button" class="secondary-button" data-research-reset-range>${ht("全部时段")}</button>` : ''}
+        ${canCreatePhase ? `<button type="button" class="secondary-button" data-research-new-phase>${icon('plus', 14)}${ht("新建阶段")}</button>` : ''}</div>
     </div>
     ${phaseRows ? `<div class="research-timeline-meta"><div class="research-legend"><span>${ht("阶段时段")}</span><span class="research-key-point">${ht("实验日期")}</span>${hasToday ? `<span class="research-key-today">${ht("今天")}</span>` : ''}</div>${pager}</div>
     <div class="research-timeline-axis" aria-hidden="true"><span></span><div class="research-timeline-ruler"${span > 1 ? ` data-research-axis data-start="${start}" data-end="${end}" title="${ht("拖动刻度选取时间范围")}"` : ''}>
@@ -173,14 +195,17 @@ function destinations(project: ResearchSnapshot['project']): Destination[] {
   })), { key: 'rules', label: t("项目设置"), glyph: 'settings', page: 'rules' }];
 }
 
-function summaryCoversPhase(record: ResearchEntry['record'], phase: ResearchPhase, phases: ResearchPhase[]) {
+function summaryCoversPhase(record: ResearchEntry['record'], phase: ResearchPhase, phases: ResearchPhase[], today: string) {
   if (record.phaseId === phase.id) return true;
   const range = record.coverage;
-  if (!range || !overlaps(range, phase)) return false;
+  const span = phaseSpan(phase, today);
+  if (!range || !overlaps(range, span)) return false;
   const primary = phases.find(item => item.id === record.phaseId);
+  if (!primary) return true;
+  const primarySpan = phaseSpan(primary, today);
   // Adjacent phases can overlap. Only coverage outside the primary phase extends the association.
-  return !primary || (range.start < primary.start && phase.start < primary.start)
-    || (range.end > primary.end && phase.end > primary.end);
+  return (range.start < primarySpan.start && span.start < primarySpan.start)
+    || (range.end > primarySpan.end && span.end > primarySpan.end);
 }
 
 interface Hooks {
@@ -203,6 +228,8 @@ export class ResearchWorkspace {
   private projectPicker = document.createElement('dialog');
   private rangePicker = document.createElement('dialog');
   private tools: ResearchTools;
+  private comparisonViewer = new ComparisonViewer();
+  private comparisonGrid?: ComparisonGridEditor;
   private snapshot: ResearchSnapshot | null = null;
   private signature = '';
   private renderedDay = '';
@@ -385,7 +412,7 @@ export class ResearchWorkspace {
     const record = state.records.find(item => item.record.id === reference.id)?.record;
     const run = record?.run;
     const projects = record?.relatedProjects || [];
-    const evidence = [...new Set([...(record?.evidence || []), ...(run?.evidence || []),
+    const evidence = [...new Set([...(record?.evidence || []), ...(run?.evidence || []), ...comparisonImages(record?.comparison),
       ...(record?.sources || []).filter(id => state.documents.some(file => file.id === id && file.sourceId))])];
     const incoming = state.records.flatMap(({ record }) => (record.relations || []).filter(relation => relation.target === reference.id)
       .map(relation => ({ ...relation, target: record.id, incoming: true })));
@@ -419,7 +446,15 @@ export class ResearchWorkspace {
   async openReference(id: string, origin?: HTMLButtonElement) {
     const state = this.snapshot;
     if (!state) return;
-    if (state.documents.some(file => file.id === id && file.sourceId)) await this.openEvidence(id);
+    if (state.records.some(({ record }) => record.id === id && record.comparison)) {
+      const document = await window.meki.readResearchRecord(state.root, id);
+      if (this.hooks.root() !== state.root) return;
+      this.comparisonViewer.show(state.root, document, {
+        evidence: file => this.tools.evidence(state.root, file, undefined, t("返回对比")),
+        edit: () => this.hooks.open(state.root, id, origin, true),
+        error: error => this.hooks.notify(errorText(error), true),
+      });
+    } else if (state.documents.some(file => file.id === id && file.sourceId)) await this.openEvidence(id);
     else await this.hooks.open(state.root, id, origin);
   }
 
@@ -603,15 +638,16 @@ export class ResearchWorkspace {
     const dateRange = resolveTimelineRange(selection, today);
     const summaryTypes = new Set(project.recordTypes.filter(type => type.kind === 'summary').map(type => type.id));
     const isSummary = ({ record }: ResearchEntry) => summaryTypes.has(record.type) || Boolean(record.coverage);
+    const isExperiment = (item: ResearchEntry) => !isSummary(item) && !item.record.comparison;
     const phases = project.phases.filter(phase => !view?.phaseIds || view.phaseIds.includes(phase.id));
-    const phase = phases.find(item => item.id === this.phaseId && (!dateRange || overlaps(item, dateRange)));
+    const phase = phases.find(item => item.id === this.phaseId && (!dateRange || overlaps(phaseSpan(item, today), dateRange)));
     if (!phase) this.phaseId = '';
     const summaries = records.filter(isSummary);
-    const experiments = records.filter(item => !isSummary(item));
+    const experiments = records.filter(isExperiment);
     const inView = records.filter(({ record }) => (!view?.typeIds || view.typeIds.includes(record.type)) &&
       (!view?.phaseIds || (record.phaseId && view.phaseIds.includes(record.phaseId))));
     const sequence = active.page === 'summaries' ? inView.filter(isSummary) :
-      active.page === 'view' ? inView : inView.filter(item => !isSummary(item));
+      active.page === 'view' ? inView : inView.filter(isExperiment);
     const matching = state.matchingIds && new Set(state.matchingIds);
     const matches = ({ record }: ResearchEntry) => !matching || matching.has(record.id);
     const entries = sequence.filter(({ record }) => (!phase || record.phaseId === phase.id) &&
@@ -621,13 +657,23 @@ export class ResearchWorkspace {
       .filter(({ record }) => !this.date || record.date === this.date)
       .sort((a, b) => view?.order === 'oldest' ? sortEntries(a, b) : sortEntries(b, a)) : [];
     const summariesByPhase = new Map(projectPage ? phases.map(phase => [phase.id,
-      summaries.filter(({ record }) => summaryCoversPhase(record, phase, project.phases))]) : []);
-    const timelineView = projectPage ? timeline(phases, sequence, summariesByPhase, {
+      summaries.filter(({ record }) => summaryCoversPhase(record, phase, project.phases, today))]) : []);
+    const comparisonsByPhase = new Map<string, ResearchEntry[]>();
+    for (const entry of records) {
+      const { record } = entry;
+      if (!record.comparison || !record.phaseId) continue;
+      const comparisons = comparisonsByPhase.get(record.phaseId);
+      if (comparisons) comparisons.push(entry);
+      else comparisonsByPhase.set(record.phaseId, [entry]);
+    }
+    const progressByPhase = new Map(projectPage ? phases.map(phase => [phase.id,
+      [...(summariesByPhase.get(phase.id) || []), ...(comparisonsByPhase.get(phase.id) || [])]]) : []);
+    const timelineView = projectPage ? timeline(phases, sequence, progressByPhase, {
       activePhase: phase?.id || '', today, range: dateRange, presetId: selection && 'id' in selection ? selection.id : undefined,
-      page: this.phasePage, pageSize: this.phasePageSize,
+      page: this.phasePage, pageSize: this.phasePageSize, canCreatePhase: !view?.phaseIds,
     }) : undefined;
     if (timelineView) this.phasePage = timelineView.page;
-    const phaseTitle = phase ? `<h2 id="research-journal-title">${escape(phase.title)}</h2><p class="research-phase-range">${escape(rangeText(phase))}</p>`
+    const phaseTitle = phase ? `<h2 id="research-journal-title">${escape(phase.title)}</h2><p class="research-phase-range">${escape(phaseDates(phase, today))}</p>`
       : `<h2 id="research-journal-title">${active.page === 'summaries' ? ht("已归档总结") : ht("实验记录")} <span>${entries.length + linkedSummaries.length}</span></h2>`;
     const lastExperiment = experiments.reduce((latest, { record }) => record.date > latest ? record.date : latest, '');
     const newEntry = project.recordTypes.some(type => type.kind === 'entry') ? `<button type="button" class="secondary-button" data-research-new="entry">${icon('plus', 14)}${ht("新建研究记录")}</button>` : '';
@@ -644,9 +690,11 @@ export class ResearchWorkspace {
         <section class="research-journal" aria-labelledby="research-journal-title">
           <div class="research-section-heading"><div>${phaseTitle}</div>
             <div class="research-actions">${active.page === 'summaries' ? newSummary : newEntry}
+              ${phase && projectPage ? `<button type="button" class="secondary-button" data-research-edit-phase="${phase.id}">${icon('settings', 14)}${ht("编辑阶段")}</button>` : ''}
               ${phase || this.date || this.recordFilter ? `<button type="button" class="secondary-button" data-research-clear>${ht("清除筛选")}</button>` : ''}</div>
           </div>
           ${phase && projectPage ? this.renderStageSummaries((summariesByPhase.get(phase.id) || []).filter(matches), newSummary) : ''}
+          ${phase && projectPage ? this.renderPhaseComparisons((comparisonsByPhase.get(phase.id) || []).filter(matches)) : ''}
           ${projectPage && !phase && newSummary ? `<div class="research-summary-shortcut">${newSummary}</div>` : ''}
           <div class="research-record-filters">
             ${phase && projectPage ? `<h3>${ht("实验记录")} <span>${entries.length}</span></h3>` : ''}
@@ -672,6 +720,17 @@ export class ResearchWorkspace {
           <small>${record.coverage ? ht("覆盖 {0}", escape(rangeText(record.coverage))) + ' · ' : ''}${ht("撰写于 {0}", escape(record.date))}</small></span>${icon('chevron', 14)}</button>
         <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button></li>`).join('')}</ul>`
         : `<p class="research-empty-list">${ht("这个阶段还没有总结。")}</p>`}
+    </section>`;
+  }
+
+  private renderPhaseComparisons(entries: ResearchEntry[]) {
+    return `<section class="research-phase-summaries" aria-labelledby="research-phase-comparisons-title">
+      <div class="research-section-heading"><h3 id="research-phase-comparisons-title">${ht("可视化展示")}</h3>
+        <button type="button" class="secondary-button" data-research-new="comparison">${icon('plus', 14)}${ht("新建可视化展示")}</button></div>
+      ${entries.length ? `<ul>${entries.sort((a, b) => sortEntries(b, a)).map(({ record }) => `<li class="research-summary-item">
+        <button type="button" data-research-record="${record.id}">${icon('image', 18)}<span><strong>${escape(record.title)}</strong>
+          <small>${escape(record.date)} · ${ht("{0} 行 × {1} 列", record.comparison!.rows.length, record.comparison!.columns.length)}</small></span>${icon('chevron', 14)}</button>
+        <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button></li>`).join('')}</ul>` : ''}
     </section>`;
   }
 
@@ -781,13 +840,21 @@ export class ResearchWorkspace {
       return;
     }
     if ('researchFilter' in data) { this.tools.filter(state, this.recordFilter, filter => this.setRecordFilter(filter)); return; }
+    if ('researchNewPhase' in data || data.researchEditPhase) {
+      await this.refresh();
+      const latest = this.snapshot;
+      if (!latest || latest.root !== state.root) return;
+      const phase = latest.project.phases.find(item => item.id === data.researchEditPhase);
+      if ('researchNewPhase' in data || phase) this.tools.editPhase(latest, projectToday(latest.project.timezone), phase);
+      return;
+    }
     if (data.researchEdit || data.researchNew) {
       await this.refresh();
       const latest = this.snapshot;
       if (!latest || latest.root !== state.root || this.dialog.open) return;
       const entry = latest.records.find(item => item.record.id === data.researchEdit);
       const kind = data.researchNew as ResearchType['kind'] | undefined;
-      if (entry || latest.project.recordTypes.some(type => type.kind === kind)) this.openForm(latest, kind, entry);
+      if (entry || kind === 'comparison' || latest.project.recordTypes.some(type => type.kind === kind)) this.openForm(latest, kind, entry);
       return;
     }
     if ('researchCopyRoot' in data) {
@@ -850,10 +917,13 @@ export class ResearchWorkspace {
     this.formProject = state;
     const { project } = state;
     const view = this.destination(state).view;
-    const available = project.recordTypes.filter(type => type.kind === kind);
-    const type = record ? project.recordTypes.find(type => type.id === record.type) ?? project.recordTypes[0]
+    const types = project.recordTypes.some(type => type.id === state.comparisonType.id) ? project.recordTypes : [...project.recordTypes, state.comparisonType];
+    const available = record ? types.filter(type => (type.kind === 'comparison') === Boolean(record.comparison)) : types.filter(type => type.kind === kind);
+    const type = record ? available.find(type => type.id === record.type) ?? available[0]
       : available.find(type => view?.typeIds?.includes(type.id)) ?? available[0];
-    const typeOptions = (record ? project.recordTypes : available).map(item => option(item.id, item.label, type.id));
+    if (!type) throw new Error(t("当前项目没有适用的记录类型。"));
+    const comparison = type.kind === 'comparison';
+    const typeOptions = available.map(item => option(item.id, item.label, type.id));
     const targets = state.documents.filter(source => source.id !== record?.id);
     const sources = targets.filter(source => !source.sourceId || record?.sources?.includes(source.id))
       .sort((a, b) => Number(!a.date) - Number(!b.date) || (a.date || '').localeCompare(b.date || '') || a.title.localeCompare(b.title, getLocale()));
@@ -862,7 +932,7 @@ export class ResearchWorkspace {
     const projects = state.knownProjects || [];
     const unavailableProjects = (record?.relatedProjects || []).filter(id => !projects.some(project => project.id === id));
     this.dialog.innerHTML = `<form>
-      <div class="dialog-heading"><h2>${escape(record ? t("编辑记录属性") : kind === 'summary' ? t("插入阶段总结") : t("新建研究记录"))}</h2>
+      <div class="dialog-heading"><h2>${escape(record ? t("编辑记录属性") : comparison ? t("新建可视化展示") : kind === 'summary' ? t("插入阶段总结") : t("新建研究记录"))}</h2>
         <button type="button" class="icon-button" data-research-cancel aria-label="${ht("关闭") }">${icon('close', 15)}</button></div>
       <div class="research-form-grid">
         <label class="wide">${ht("记录标题")}<input name="title" required maxlength="240" value="${escape(record?.title || '')}" autofocus></label>
@@ -893,6 +963,8 @@ export class ResearchWorkspace {
         </details>
       </div>
       <div class="research-form-grid" data-research-fields></div>
+      ${comparison ? `<section class="research-comparison-editor"><div data-research-grid></div>
+        ${record ? '' : `<label class="research-comparison-caption-field">${ht("图注（Markdown）")}<textarea name="comparison-caption" rows="4"></textarea></label>`}</section>` : ''}
       <details class="research-related-form"><summary>${ht("原始证据与研究关系")}</summary>
         ${targets.some(target => target.sourceId) || record?.evidence?.length ? `<label>${ht("证据 ID")}
           <input name="evidence-ids" value="${escape(record?.evidence?.join(' ') || '')}" placeholder="${ht("多个 ID 用空格分隔")}" list="research-evidence-ids"></label>
@@ -903,8 +975,9 @@ export class ResearchWorkspace {
       </details>
       <p class="research-form-error" role="alert"></p>
       <div class="dialog-actions"><button type="button" class="secondary-button" data-research-cancel>${ht("取消")}</button>
-        <button type="submit" class="primary-button">${escape(record ? t("保存属性") : t("创建并编辑"))}</button></div>
+        <button type="submit" class="primary-button">${escape(record ? t("保存属性") : comparison ? t("保存展示") : t("创建并编辑"))}</button></div>
     </form>`;
+    this.comparisonGrid = comparison ? new ComparisonGridEditor(this.dialog.querySelector('[data-research-grid]')!, state.documents, record?.comparison) : undefined;
     this.renderFields();
     if (!record) this.fillCoverage();
     this.dialog.showModal();
@@ -923,15 +996,18 @@ export class ResearchWorkspace {
   }
 
   private selectedType() {
-    return this.formProject!.project.recordTypes.find(type => type.id === this.input('type').value)!;
+    const state = this.formProject!;
+    return state.project.recordTypes.find(type => type.id === this.input('type').value) ?? state.comparisonType;
   }
 
   private fillCoverage() {
     if (this.selectedType().kind !== 'summary') return;
-    const phase = this.formProject!.project.phases.find(item => item.id === this.input('phaseId').value);
+    const { project } = this.formProject!;
+    const phase = project.phases.find(item => item.id === this.input('phaseId').value);
     if (!phase) return;
-    this.input('start').value ||= phase.start;
-    this.input('end').value ||= phase.end;
+    const { start, end } = phaseSpan(phase, projectToday(project.timezone));
+    this.input('start').value ||= start;
+    this.input('end').value ||= end;
   }
 
   private renderFields() {
@@ -941,6 +1017,7 @@ export class ResearchWorkspace {
     description.hidden = !type.description;
     this.dialog.querySelector<HTMLElement>('[data-research-date-label]')!.textContent = summary ? t("撰写日期") : t("发生日期");
     this.dialog.querySelector<HTMLElement>('[data-research-summary]')!.hidden = !summary;
+    this.input('phaseId').required = type.kind === 'comparison';
     for (const key of ['start', 'end']) this.input(key).required = summary;
     const record = this.editing?.record;
     const editingSameType = record?.type === type.id;
@@ -976,12 +1053,16 @@ export class ResearchWorkspace {
       const target = String(value).trim(), note = relationNotes[i];
       return target || note ? [{ kind: relationKinds[i], target, ...(note ? { note } : {}) }] : [];
     });
+    const comparison = this.comparisonGrid?.value();
+    const caption = data.get('comparison-caption');
     const write: ResearchBatch = { ifProjectRevision: state.revision, records: [{
       id, ifRevision: original?.revision ?? null, type: type.id, title: this.input('title').value.trim(), date,
       phaseId: this.input('phaseId').value || null, fields,
       ...(evidence.length || original?.record.evidence ? { evidence } : {}),
       ...(relations.length || original?.record.relations ? { relations } : {}),
       ...(relatedProjects.length || original?.record.relatedProjects ? { relatedProjects } : {}),
+      ...(comparison ? { comparison } : {}),
+      ...(typeof caption === 'string' && caption.trim() ? { body: caption } : {}),
       ...(type.kind === 'summary' ? {
         coverage: { start: this.input('start').value, end: this.input('end').value },
         sources: data.getAll('source').map(String),
@@ -993,9 +1074,10 @@ export class ResearchWorkspace {
     feedback.textContent = '';
     try {
       await window.meki.writeResearchBatch(state.root, write);
-      this.dialog.close();
       await this.refresh();
-      if (!original) await this.hooks.open(state.root, id, undefined, true);
+      this.dialog.close();
+      if (!original && comparison) await this.openReference(id);
+      else if (!original) await this.hooks.open(state.root, id, undefined, true);
     } catch (error) {
       feedback.textContent = errorText(error);
     } finally {

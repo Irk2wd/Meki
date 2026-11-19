@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { ResearchStore } = require('../electron/research-store.cjs');
 const { exampleProject, exampleRecords } = require('../electron/research-example.cjs');
-const { formatMarkdown } = require('../electron/research-model.cjs');
+const { formatMarkdown, validateProject } = require('../electron/research-model.cjs');
 const { WorkspaceStore } = require('../electron/workspace-store.cjs');
 const { previewEvidence } = require('../electron/research-evidence.cjs');
 
@@ -27,6 +27,17 @@ async function archiveProject(t) {
   });
   return { store: await ResearchStore.initialize(root, exampleProject, exampleRecords), directory };
 }
+
+test('a research phase requires a start date and allows an unknown end date', () => {
+  const phase = { id: 'continuous', title: 'Continuous experiments', start: '2026-11-18' };
+  const validate = change => validateProject({ ...exampleProject, phases: [{ ...phase, ...change }] });
+  assert.deepEqual(validate().phases, [phase]);
+  assert.equal(validate({ end: null }).phases[0].end, null);
+  assert.equal(validate({ end: phase.start }).phases[0].end, phase.start);
+  assert.throws(() => validate({ start: undefined }), /\.start must be a real calendar date/);
+  assert.throws(() => validate({ end: '2026-11-31' }), /\.end must be a real calendar date/);
+  assert.throws(() => validate({ end: '2026-11-17' }), /\.end must be on or after its start/);
+});
 
 test('a legacy project keeps its records and sibling Markdown links', async t => {
   const root = await projectFolder(t);
@@ -109,6 +120,34 @@ test('indexed evidence stays read-only and resolves after rebinding the source I
   assert.equal(file.path, path.join(mounted, 'final.tex'));
   assert.equal((await previewEvidence(file, reference, source)).content, '\\section{Experimental results}\n');
   assert.equal((await store.resolveDocument('paper-v3')).relativePath, 'final.tex');
+});
+
+test('phase image comparisons keep indexed references, Markdown and a distinct record type', async t => {
+  const { store, directory } = await archiveProject(t);
+  await fs.writeFile(path.join(directory, 'render.png'), Buffer.from('original image fixture'));
+  await fs.writeFile(path.join(directory, 'notes.txt'), 'A non-image reference');
+  await store.bindEvidenceSource('renders', directory, 'Renders');
+  await store.indexEvidence('render', { sourceId: 'renders', relativePath: 'render.png', title: 'Original image' });
+  await store.indexEvidence('notes', { sourceId: 'renders', relativePath: 'notes.txt', title: 'Notes' });
+  const before = await store.manifest();
+  await store.configure({ ifRevision: before.revision, project: { ...before.project, recordTypes: [
+    ...before.project.recordTypes, { id: 'image-comparison', label: 'Existing type', kind: 'entry', fields: [], template: '' },
+  ] } });
+  const discovery = await store.snapshot();
+  assert.equal(discovery.comparisonType.id, 'image-comparison-2');
+  const change = { id: 'comparison', ifRevision: null, type: discovery.comparisonType.id, title: 'Comparison', date: '2026-11-18',
+    phaseId: 'validation', body: '**Fixed camera**', comparison: { columns: ['Mesh', 'Ours'], rows: [{ label: 'Camera', images: ['render', null] }] } };
+  const save = records => store.writeBatch({ ifProjectRevision: discovery.revision, records });
+  await assert.rejects(save([{ ...change, comparison: { columns: ['Mesh', 'Ours'], rows: [{ label: 'Camera', images: ['render'] }] } }]), /one image slot per column/);
+  await assert.rejects(save([{ ...change, comparison: { columns: ['Mesh'], rows: [{ label: 'Camera', images: ['notes'] }] } }]), /indexed image evidence/);
+  assert.equal((await store.manifest()).revision, discovery.revision);
+  const written = await save([change]);
+  const stored = await store.read(change.id);
+  assert.deepEqual(stored.record.comparison, change.comparison);
+  assert.equal(stored.body, change.body);
+  assert.equal((await store.manifest()).project.recordTypes.at(-1).kind, 'comparison');
+  const repeat = await store.writeBatch({ ifProjectRevision: written.projectRevision, records: [change] });
+  assert.equal(repeat.records[0].changed, false);
 });
 
 test('archive import previews changes and incomplete reports, and retrying updates the same run', async t => {

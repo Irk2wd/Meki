@@ -682,7 +682,9 @@ function registerIpc() {
   register('list-research-projects', listResearchProjects);
   register('open-research-project', openResearchProject);
   register('create-research-demo', createResearchDemo);
+  register('configure-research-project', async (root, input) => { await (await requireResearch(root)).configure(input); });
   register('write-research-batch', async (root, input) => (await requireResearch(root)).writeBatch(input));
+  register('read-research-record', async (root, id) => (await requireResearch(root)).read(id));
   register('open-research-record', async (root, recordId) => {
     const selected = workspaceStore;
     const project = await requireResearch(root);

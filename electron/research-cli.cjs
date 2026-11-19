@@ -5,7 +5,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { parseArgs } = require('node:util');
 const { ResearchStore } = require('./research-store.cjs');
-const { MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, DOCUMENT_SCHEME, RECORDS, FIELD_TYPES, TEMPLATE_KEYS, RELATION_KINDS, RUN_FILTER_FIELDS, assert, date, id } = require('./research-model.cjs');
+const { MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, DOCUMENT_SCHEME, RECORDS, FIELD_TYPES, TEMPLATE_KEYS, RELATION_KINDS, RUN_FILTER_FIELDS, assert, date, id, comparisonType } = require('./research-model.cjs');
+const { comparisonLimits } = require('./research-comparison.mjs');
 const { newExampleProject, exampleRecords } = require('./research-example.cjs');
 const { PRODUCT_NAME } = require('./app-identity.cjs');
 
@@ -85,6 +86,12 @@ async function main(args) {
           views: 'Read project.views and project.defaultView. Fields listed in a view affect display only.',
         },
         relationKinds: RELATION_KINDS, archiveFilterFields: RUN_FILTER_FIELDS,
+        phase: { start: 'required inclusive date', end: 'inclusive date when known. Omit or set to null for an ongoing or planned phase.' },
+        comparison: {
+          type: comparisonType(project).id, phaseId: 'required phase ID', body: 'Markdown caption', limits: comparisonLimits,
+          comparison: { columns: ['column label'], rows: [{ label: 'row label', images: ['indexed image evidence ID or null for an empty cell'] }] },
+          note: 'Provide one image slot per column in every row. The first comparison registers the default type when needed. Use the returned projectRevision for another write.',
+        },
         summary: { date: 'date written', coverage: { start: 'inclusive date', end: 'inclusive date' }, sources: 'document IDs from list or resolve',
           relatedProjects: 'IDs from the other projects’ describe output' },
       },

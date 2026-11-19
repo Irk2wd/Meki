@@ -9,10 +9,12 @@ const { WorkspaceStore } = require('./workspace-store.cjs');
 const { bindDirectory, boundSources, sourceDirectory, evidencePath } = require('./research-evidence.cjs');
 const { researchMatcher } = require('./research-filter.cjs');
 const { planArchive, MAX_RUNS } = require('./research-import.cjs');
+const { comparisonImages } = require('./research-comparison.mjs');
 const {
   METADATA, MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, DOCUMENT_SCHEME, RECORDS, RECORD_FILE, REVISION,
   assert, object, array, id, validateProject, validateRecord,
   validateSource, validateEvidence, validateFilter,
+  comparisonType,
   relationshipIssues, fieldIssues, validateChange, parseMarkdown, formatMarkdown, fileName, templateBody,
 } = require('./research-model.cjs');
 
@@ -372,12 +374,12 @@ class ResearchStore {
         ...relationshipIssues(record, project),
         ...fieldIssues(record, project.recordTypes.find(type => type.id === record.type)).map(issue => issue.message),
         ...(record.sources || []).filter(source => !index.documents.has(source)).map(source => `Missing source document: ${source}.`),
-        ...[...(record.evidence || []), ...(record.run?.evidence || [])].filter(file => !index.documents.get(file)?.sourceId).map(file => `Missing evidence: ${file}.`),
+        ...[...(record.evidence || []), ...(record.run?.evidence || []), ...comparisonImages(record.comparison)].filter(file => !index.documents.get(file)?.sourceId).map(file => `Missing evidence: ${file}.`),
         ...(record.relations || []).filter(({ target }) => !index.documents.has(target)).map(({ target }) => `Missing relation target: ${target}.`),
       ],
     }));
     return {
-      root: this.root, project, revision, manifestFile: this.manifestFile,
+      root: this.root, project, revision, manifestFile: this.manifestFile, comparisonType: comparisonType(project),
       records, documents: [...index.documents.values()], problems: [...problems, ...index.problems],
       ...(project.evidenceSources?.length ? { evidenceSources: await boundSources(this.root, project.evidenceSources) } : {}),
       ...(filter ? { matchingIds: matchingIds.filter(recordId => items.has(recordId)) } : {}),
@@ -429,7 +431,8 @@ class ResearchStore {
       return change.id;
     }));
     return this.locked(async () => {
-      const { project, revision } = await this.manifest();
+      const current = await this.manifest();
+      const { project, revision } = current;
       if (input.ifProjectRevision && input.ifProjectRevision !== revision) throw revisionConflict('The project rules');
       const { items, problems } = await this.catalog(ids);
       const unreadable = problems.find(problem => ids.has(RECORD_FILE.exec(path.basename(problem.file))[1]));
@@ -437,8 +440,13 @@ class ResearchStore {
       const index = await this.readIndex();
       const { documents } = await this.documentIndex(items, index);
       for (const recordId of ids) assert(!index.paths.has(recordId) && !index.evidence.has(recordId), `The document index already uses ID ${recordId}.`);
-      const changes = this.prepareBatch(input.records, project, items, documents);
-      return { projectRevision: revision, records: await this.writeChanges(changes) };
+      const type = comparisonType(project);
+      const registerType = input.records.some(record => record.comparison && record.type === type.id) &&
+        !project.recordTypes.some(existing => existing.id === type.id);
+      const next = registerType ? validateProject({ ...project, recordTypes: [...project.recordTypes, type] }) : project;
+      const changes = this.prepareBatch(input.records, next, items, documents);
+      const projectRevision = registerType ? await this.writeManifest(next, current) : revision;
+      return { projectRevision, records: await this.writeChanges(changes) };
     });
   }
 
@@ -555,7 +563,7 @@ class ResearchStore {
     const seen = new Set();
     const pending = new Set(input.map(change => change.id));
     return input.map(change => {
-      object(change, 'record change', ['id', 'ifRevision', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'body', 'evidence', 'relations', 'run', 'relatedProjects']);
+      object(change, 'record change', ['id', 'ifRevision', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'body', 'evidence', 'relations', 'run', 'relatedProjects', 'comparison']);
       id(change.id, 'record ID');
       assert(!seen.has(change.id), `Use one change per record in a batch: ${change.id}.`);
       seen.add(change.id);
@@ -628,6 +636,10 @@ const projectGuide = `# mekiR 研究项目的 Agent 指引
 ## 修改字段、模板和视图
 
 从 \`describe.project\` 复制配置，按任务需求修改 \`instructions\`、记录类型、字段、模板、阶段或视图。用 \`configure <目录> --input <文件或 ->\` 提交包含 \`ifRevision\` 和 \`project\` 的对象，\`ifRevision\` 取自 \`describe.revision\`。
+
+在 \`phases\` 中填写必需的 \`start\`。结束日期未定时省略 \`end\` 或将其设为 \`null\`，确认结束后填入实际日期。阶段从开始日期起显示为进行中，固定结束日期当天仍计入。
+
+图像对比用 \`describe.format.comparison\` 查询类型和网格规则。将阶段 ID 写入 \`phaseId\`，每格用已登记的原图证据 ID，图注写入 Markdown \`body\`。首次写入后使用返回的项目修订号。
 
 调整显示名称时沿用原 ID。字段的含义或单位变化时使用新 ID，并同步更新模板里的 \`{{field.<ID>}}\` 和视图的 \`fieldIds\`。配置保存后重新 \`describe\`，用 \`list\` 的 \`issues\` 检查历史记录，再按需用 \`batch\` 补录。项目规则放在配置的 \`instructions\`，项目协作流程可在这份 \`AGENTS.md\` 中维护。
 `;

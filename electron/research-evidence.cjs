@@ -5,13 +5,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { atomicWrite, decodeDocument, digest, isWithin, pathKey, readBytes, validateAbsolutePath } = require('./file-store.cjs');
 const { assert, validateEvidencePath } = require('./research-model.cjs');
+const { evidenceImageExtensions, evidenceImageMime } = require('./research-comparison.mjs');
 
-const images = new Map(Object.entries({
-  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
-  '.gif': 'image/gif', '.avif': 'image/avif', '.bmp': 'image/bmp',
-}));
 const textFiles = new Set(['.md', '.markdown', '.txt', '.json', '.csv', '.tsv', '.log', '.tex', '.bib', '.xml', '.yaml', '.yml']);
-const knownEvidence = new Set([...images.keys(), ...textFiles, '.pdf', '.exr', '.tiff', '.xlsx', '.docx', '.zip', '.rdc', '.nsight-gfx']);
+const knownEvidence = new Set([...evidenceImageExtensions, ...textFiles, '.pdf', '.exr', '.tiff', '.xlsx', '.docx', '.zip', '.rdc', '.nsight-gfx']);
 const previewLimit = 24 * 1024 * 1024;
 
 function bindingPath(root) {
@@ -75,7 +72,7 @@ async function evidencePath(directory, relativePath) {
 async function previewEvidence(file, reference, source) {
   const result = { ...reference, source: source.label, kind: 'file' };
   const ext = path.extname(file.path).toLowerCase();
-  const mime = images.get(ext);
+  const mime = evidenceImageMime(file.path);
   if (file.size > previewLimit || (!mime && !textFiles.has(ext))) return result;
   const { bytes } = await readBytes(file.path, previewLimit);
   if (mime) return { ...result, kind: 'image', mime, content: bytes.toString('base64') };

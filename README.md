@@ -6,7 +6,7 @@
 
 Meki 的 `research` 分支，面向科研项目的本地工作区。按日期记录实验、编写带来源的阶段总结，在时间线上查看阶段和总结的覆盖时段。记录正文沿用 Meki 的 Markdown 编辑器、离线公式和图表、附件与导出。
 
-在版本发布页选择以 `mekiR-` 开头的 Windows x64 或 macOS 通用安装包。研究版有独立的应用和数据目录。[版本列表](https://github.com/Irk2wd/Meki/releases) · [mekiR 1.2.0](https://github.com/Irk2wd/Meki/releases/tag/v1.2.0)
+在版本发布页选择以 `mekiR-` 开头的 Windows x64 或 macOS 通用安装包。研究版有独立的应用和数据目录。[版本列表](https://github.com/Irk2wd/Meki/releases) · [mekiR 1.2.1](https://github.com/Irk2wd/Meki/releases/tag/v1.2.1)
 
 ## 从源码启动
 

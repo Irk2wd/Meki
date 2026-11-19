@@ -2,6 +2,7 @@
 
 const { isDeepStrictEqual } = require('node:util');
 const { DOCUMENT_SCHEME, RESEARCH_ID } = require('./research-links.mjs');
+const { comparisonImages, comparisonLimits, evidenceImageMime } = require('./research-comparison.mjs');
 
 const METADATA = '.mekir';
 const MANIFEST = `${METADATA}/project.json`;
@@ -164,8 +165,10 @@ function validateProject(project) {
   for (const phase of project.phases) {
     object(phase, 'phase', ['id', 'title', 'start', 'end']);
     id(phase.id, 'phase.id');
-    string(phase.title, `phases.${phase.id}.title`);
-    range(phase.start, phase.end, `phases.${phase.id}`);
+    const label = `phases.${phase.id}`;
+    string(phase.title, `${label}.title`);
+    if (phase.end == null) date(phase.start, `${label}.start`);
+    else range(phase.start, phase.end, label);
   }
   unique(project.phases.map(phase => phase.id), 'project.phases');
 
@@ -175,7 +178,7 @@ function validateProject(project) {
     object(type, 'record type', ['id', 'label', 'kind', 'description', 'fields', 'template']);
     id(type.id, 'record type.id');
     string(type.label, `recordTypes.${type.id}.label`);
-    assert(['entry', 'summary'].includes(type.kind), `recordTypes.${type.id}.kind must be entry or summary.`);
+    assert(['entry', 'summary', 'comparison'].includes(type.kind), `recordTypes.${type.id}.kind must be entry, summary, or comparison.`);
     if (type.description !== undefined) string(type.description, `recordTypes.${type.id}.description`, { limit: 1000 });
     array(type.fields, `recordTypes.${type.id}.fields`, 32);
     type.fields.forEach(rule => validateField(rule, type.id));
@@ -222,8 +225,32 @@ function validateProject(project) {
   return project;
 }
 
+function comparisonType(project) {
+  const configured = project.recordTypes.find(type => type.kind === 'comparison');
+  if (configured) return configured;
+  const base = 'image-comparison';
+  const used = new Set(project.recordTypes.map(type => type.id));
+  let id = base;
+  for (let suffix = 2; used.has(id); suffix++) id = `${base}-${suffix}`;
+  return { id, label: '可视化展示', kind: 'comparison', fields: [], template: '' };
+}
+
+function validateComparison(grid) {
+  object(grid, 'comparison', ['columns', 'rows']);
+  array(grid.columns, 'comparison columns', comparisonLimits.columns);
+  array(grid.rows, 'comparison rows', comparisonLimits.rows);
+  assert(grid.columns.length && grid.rows.length, 'A comparison needs at least one row and one column.');
+  for (const label of grid.columns) string(label, 'comparison column label', { limit: 120 });
+  for (const row of grid.rows) {
+    object(row, 'comparison row', ['label', 'images']);
+    string(row.label, 'comparison row label', { limit: 120 });
+    assert(Array.isArray(row.images) && row.images.length === grid.columns.length, 'Each comparison row needs one image slot per column.');
+    for (const image of row.images) if (image !== null) id(image, 'comparison image ID');
+  }
+}
+
 function validateRecord(record, expectedId) {
-  object(record, 'record', ['id', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'evidence', 'relations', 'run', 'relatedProjects']);
+  object(record, 'record', ['id', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'evidence', 'relations', 'run', 'relatedProjects', 'comparison']);
   id(record.id, 'record.id');
   assert(record.id === expectedId, `record.id must match the filename r-${expectedId}.md.`);
   id(record.type, 'record.type');
@@ -241,6 +268,7 @@ function validateRecord(record, expectedId) {
   }
   if (record.relatedProjects !== undefined) listOfIds(record.relatedProjects, 'record.relatedProjects');
   if (record.evidence !== undefined) listOfIds(record.evidence, 'record.evidence');
+  if (record.comparison !== undefined) validateComparison(record.comparison);
   if (record.relations !== undefined) {
     array(record.relations, 'record.relations', 40);
     for (const relation of record.relations) {
@@ -284,7 +312,10 @@ function relationshipIssues(record, project) {
   const issues = [];
   if (!type) issues.push(`Unknown record type: ${record.type}.`);
   else if (type.kind === 'summary' && !record.coverage) issues.push('A summary needs a coverage start and end date.');
-  else if (type.kind === 'entry' && record.coverage) issues.push('Coverage is only used by summary records.');
+  else if (type.kind !== 'summary' && record.coverage) issues.push('Coverage is only used by summary records.');
+  if (type?.kind === 'comparison') {
+    if (!record.comparison || !record.phaseId) issues.push('An image comparison needs a grid and a research phase.');
+  } else if (record.comparison) issues.push('A comparison grid requires a comparison record type.');
   if (record.phaseId && !project.phases.some(phase => phase.id === record.phaseId)) issues.push(`Unknown phase: ${record.phaseId}.`);
   if (record.relatedProjects?.length) {
     if (type?.kind !== 'summary') issues.push('Only phase summaries can link to other projects.');
@@ -317,6 +348,11 @@ function validateChange(record, previous, project, documents, pending = new Set(
   const existingEvidence = new Set([...(previous?.evidence || []), ...(previous?.run?.evidence || [])]);
   for (const evidence of [...(record.evidence || []), ...(record.run?.evidence || [])]) {
     assert(documents.get(evidence)?.sourceId || existingEvidence.has(evidence), `Evidence ID does not exist: ${evidence}.`);
+  }
+  const priorImages = new Set(comparisonImages(previous?.comparison));
+  for (const image of comparisonImages(record.comparison)) {
+    const reference = documents.get(image);
+    assert((reference?.sourceId && evidenceImageMime(reference.relativePath)) || priorImages.has(image), `Comparison image must refer to indexed image evidence: ${image}.`);
   }
   for (const { kind, target } of record.relations || []) {
     assert(documents.has(target) || pending.has(target) || previous?.relations?.some(item => item.kind === kind && item.target === target),
@@ -367,5 +403,6 @@ module.exports = {
   RECORD_FILE, REVISION, FIELD_TYPES, TEMPLATE_KEYS,
   RELATION_KINDS, RUN_CONTEXT, RUN_FILTER_FIELDS, validateSource, validateEvidencePath, validateEvidence, validateFilter,
   assert, object, array, id, date, listOfIds, validateProject, validateRecord, relationshipIssues,
+  comparisonType,
   fieldIssues, validateChange, parseMarkdown, formatMarkdown, fileName, templateBody,
 };

@@ -1,5 +1,5 @@
 import { ht, t } from '../electron/i18n.mjs';
-import type { ResearchFilter, ResearchImportPreview, ResearchRelationKind, ResearchSnapshot } from '../shared/research';
+import type { ResearchFilter, ResearchImportPreview, ResearchPhase, ResearchRelationKind, ResearchSnapshot } from '../shared/research';
 import { icon } from './icons';
 
 export const escapeResearch = (value: string | number | boolean) => String(value).replace(/[&<>"']/g, char => ({
@@ -62,6 +62,31 @@ export class ResearchTools {
     });
   }
 
+  editPhase({ root, project, revision }: ResearchSnapshot, today: string, original?: ResearchPhase) {
+    if (this.dialog.open) return;
+    const id = original?.id ?? `phase-${crypto.randomUUID()}`;
+    this.show(`<form>${heading(original ? t("编辑阶段") : t("新建阶段"))}
+      <div class="research-form-grid">
+        <label class="wide">${ht("阶段名称")}<input name="title" value="${escapeResearch(original?.title ?? '')}" required maxlength="240" autofocus></label>
+        <label>${ht("开始日期")}<input name="start" type="date" value="${escapeResearch(original?.start ?? today)}" required></label>
+        <label>${ht("结束日期（可选）")}<input name="end" type="date" value="${escapeResearch(original?.end ?? '')}"></label>
+      </div>
+      ${feedback}<div class="research-actions">
+        <button type="button" class="secondary-button" data-tools-close>${ht("取消")}</button>
+        <button type="submit" class="primary-button">${ht("保存")}</button>
+      </div></form>`);
+    this.submit(async data => {
+      const title = String(data.get('title')).trim();
+      const start = String(data.get('start')), end = String(data.get('end'));
+      if (end && end < start) throw new Error(t("结束日期不能早于开始日期。"));
+      const phase: ResearchPhase = { id, title, start, ...(end ? { end } : {}) };
+      const phases = original ? project.phases.map(item => item.id === id ? phase : item) : [...project.phases, phase];
+      await window.meki.configureResearchProject(root, { ifRevision: revision, project: { ...project, phases } });
+      await this.refresh();
+      this.dialog.close();
+    });
+  }
+
   registerSource(root: string) {
     this.show(`<form>${heading(t("登记只读来源"))}
       <div class="research-form-grid">
@@ -94,10 +119,10 @@ export class ResearchTools {
     if (await window.meki.bindResearchSource(root, sourceId)) await this.refresh();
   }
 
-  async evidence(root: string, id: string, sourceDocument?: string) {
+  async evidence(root: string, id: string, sourceDocument?: string, returnLabel = t("返回正文")) {
     const file = await window.meki.openResearchEvidence(root, id, sourceDocument);
     this.show(`<div class="dialog-heading research-evidence-heading">
-      <button type="button" class="icon-button" data-tools-close aria-label="${ht("返回正文")}" title="${ht("返回正文")}" autofocus>${icon('back', 17)}</button>
+      <button type="button" class="icon-button" data-tools-close aria-label="${escape(returnLabel)}" title="${escape(returnLabel)}" autofocus>${icon('back', 17)}</button>
       <div><h2 id="research-tools-title">${escape(file.title)}</h2><small>${escape(file.source)} · ${escape(file.relativePath)}</small></div>${closeButton(ht("关闭证据预览"))}
     </div><div class="research-evidence-content"></div>
     <div class="research-actions research-evidence-footer"><span>${ht("只读来源")}</span>

@@ -1,6 +1,6 @@
 import type { ExportRequest, ExportTools, ImportedDocument, DiagramSaveRequest } from './export';
 import type { UpdateState } from './updates';
-import type { BoundResearchSource, RecentResearchProject, ResearchBatch, ResearchEvidenceFile, ResearchFilter, ResearchImportPreview, ResearchReference, ResearchSnapshot, ResearchWriteResult, SavedResearchFilter } from './research';
+import type { BoundResearchSource, RecentResearchProject, ResearchBatch, ResearchDocument, ResearchEvidenceFile, ResearchFilter, ResearchImportPreview, ResearchProject, ResearchReference, ResearchSnapshot, ResearchWriteResult, SavedResearchFilter } from './research';
 export interface DocumentFile {
   path: string | null;
   name: string;
@@ -133,7 +133,9 @@ export interface MekiAPI {
   listResearchProjects(): Promise<RecentResearchProject[]>;
   openResearchProject(root?: string): Promise<Workspace | null>;
   createResearchDemo(): Promise<Workspace | null>;
+  configureResearchProject(root: string, input: { ifRevision: string; project: ResearchProject }): Promise<void>;
   writeResearchBatch(root: string, input: ResearchBatch): Promise<ResearchWriteResult>;
+  readResearchRecord(root: string, id: string): Promise<ResearchDocument>;
   openResearchRecord(root: string, id: string): Promise<DocumentFile | null>;
   openLinkedResearchSummary(root: string, projectId: string, id: string): Promise<{ document: DocumentFile; context: ResearchSnapshot } | null>;
   bindResearchSource(root: string, id: string, label?: string): Promise<BoundResearchSource | null>;

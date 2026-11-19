@@ -1,7 +1,7 @@
 export type ResearchValue = string | number | boolean;
 
 export interface ResearchRange { start: string; end: string }
-export interface ResearchPhase extends ResearchRange { id: string; title: string }
+export interface ResearchPhase { id: string; title: string; start: string; end?: string | null }
 export interface ResearchField {
   id: string;
   label: string;
@@ -18,7 +18,7 @@ export interface ResearchField {
 export interface ResearchType {
   id: string;
   label: string;
-  kind: 'entry' | 'summary';
+  kind: 'entry' | 'summary' | 'comparison';
   description?: string;
   fields: ResearchField[];
   template: string;
@@ -104,6 +104,11 @@ export interface ResearchProject {
   savedFilters?: SavedResearchFilter[];
 }
 
+export interface ResearchComparison {
+  columns: string[];
+  rows: Array<{ label: string; images: Array<string | null> }>;
+}
+
 export interface ResearchRecord {
   id: string;
   type: string;
@@ -116,6 +121,7 @@ export interface ResearchRecord {
   evidence?: string[];
   relations?: ResearchRelation[];
   run?: ResearchRun;
+  comparison?: ResearchComparison;
   fields: Record<string, ResearchValue>;
 }
 
@@ -125,6 +131,9 @@ export interface ResearchEntry {
   relativePath: string;
   issues: string[];
 }
+
+export interface ResearchDocument extends Omit<ResearchEntry, 'issues'> { body: string }
+
 
 export interface ResearchReference {
   id: string;
@@ -144,6 +153,7 @@ export interface LinkedResearchSummary {
 export interface ResearchSnapshot {
   root: string;
   project: ResearchProject;
+  comparisonType: ResearchType;
   revision: string;
   manifestFile: string;
   records: ResearchEntry[];
