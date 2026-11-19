@@ -130,7 +130,59 @@
 .research-range-presets button { display: block; padding: 4px 7px; border-radius: 5px; color: var(--soft); font-size: 11px; white-space: nowrap; }
 .research-range-presets [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .research-range-presets button:focus-visible { outline-offset: -2px; }
-.research-timeline-axis, .research-timeline-row { display: grid; grid-template-columns: var(--label-width) minmax(0, 1fr); gap: 13px; }
+.research-timeline-axis, .research-timeline-row, .research-range-overview { display: grid; grid-template-columns: var(--label-width) minmax(0, 1fr); gap: 13px; }
+.research-range-overview { align-items: center; margin-top: 12px; padding: 11px 7px 8px; border-block: 1px solid var(--border); }
+.research-range-overview-label strong { display: block; color: var(--text); font-size: 12px; font-weight: 600; }
+.research-range-overview-label small { display: block; margin-top: 3px; color: var(--soft); font-size: 11px; line-height: 1.35; }
+.research-range-overview-rail {
+  position: relative;
+  height: 34px;
+  border-radius: 7px;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--border) calc(25% - 1px) 25%), var(--side);
+  box-shadow: inset 0 0 0 1px var(--border);
+  cursor: crosshair;
+  touch-action: pan-y;
+  user-select: none;
+}
+.research-range-overview-bands { position: absolute; inset: 0; pointer-events: none; }
+.research-range-overview-bands i {
+  position: absolute;
+  top: calc(8px + var(--lane) * 7px);
+  left: var(--left);
+  width: var(--width);
+  height: 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 36%, var(--side));
+}
+.research-range-overview-window {
+  --handle-width: 14px;
+  --selection-width: var(--drag-width, var(--range-width));
+  --visible-width: min(100%, max(42px, var(--selection-width)));
+  position: absolute;
+  inset-block: 0;
+  left: clamp(0px, calc(var(--drag-left, var(--range-left)) + (var(--selection-width) - var(--visible-width)) / 2), calc(100% - var(--visible-width)));
+  width: var(--visible-width);
+  display: grid;
+  grid-template-columns: min(var(--handle-width), 30%) minmax(0, 1fr) min(var(--handle-width), 30%);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.research-range-overview-window [data-research-overview-handle] { position: relative; border-radius: 6px; }
+.research-range-overview-window [data-research-overview-handle]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; z-index: 1; }
+.research-range-overview-window :is([data-research-overview-handle="start"], [data-research-overview-handle="end"]) { cursor: ew-resize; background: var(--accent); }
+.research-range-overview-window :is([data-research-overview-handle="start"], [data-research-overview-handle="end"])::after {
+  content: '';
+  position: absolute;
+  inset: 10px 5px;
+  border-inline: 1px solid var(--logo-ink);
+}
+.research-range-overview-window [data-research-overview-handle="move"] { cursor: grab; }
+.research-axis-panning .research-range-overview-window [data-research-overview-handle="move"] { cursor: grabbing; }
+.research-range-overview-rail[data-full-range] [data-research-overview-handle="move"] { cursor: crosshair; }
+.research-range-overview-rail[data-single-day] { cursor: default; }
+.research-range-overview-rail[data-single-day] .research-range-overview-window { pointer-events: none; }
+.research-range-overview-dates { display: flex; justify-content: space-between; gap: 4px; margin-top: 5px; color: var(--soft); font: 10px var(--mono); }
 .research-timeline-axis { padding: 5px 7px 0; }
 .research-timeline-ruler { position: relative; height: 28px; border-radius: 6px; }
 .research-timeline [data-research-pan] { cursor: grab; touch-action: pan-y; user-select: none; }
@@ -506,9 +558,13 @@
 .research-form-error:empty { display: none; }
 #research-record-dialog .dialog-actions { margin-top: 17px; }
 
+@container research-timeline (max-width: 400px) {
+  .research-range-overview { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}
+
 @media (max-width: 720px) {
   .research-content h1 { font-size: 23px; }
-  .research-timeline-axis, .research-timeline-row { gap: 8px; }
+  .research-timeline-axis, .research-timeline-row, .research-range-overview { gap: 8px; }
   .research-timeline-axis .middle:nth-child(even) { display: none; }
   .research-date-group { grid-template-columns: 1fr; gap: 3px; }
   .research-date-group > time { padding-top: 0; }

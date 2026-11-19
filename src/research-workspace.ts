@@ -5,6 +5,7 @@ import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField
 import { icon } from './icons';
 import { ComparisonGridEditor, ComparisonViewer } from './research-comparison';
 import { TimelineEventLayout, timelineEventButton, type TimelineEventDay } from './research-timeline-events';
+import { adjustDays, brushDays, datesForDays, dayNumber, isoDay, shiftRange, timelineOverview, type RangeHandle, type TimelineWindow } from './research-timeline-range';
 import { reportReferences } from './research-report-links';
 import { escapeResearch as escape, relationLabels, researchOption as option, ResearchTools, runFields, timelineIcon, type ResearchWidths } from './research-tools';
 import './research-workspace.css';
@@ -13,8 +14,6 @@ const errorText = (error: unknown) => String(error).replace(/^Error: (?:Error in
 const sortEntries = (a: Pick<ResearchEntry, 'record'>, b: Pick<ResearchEntry, 'record'>) =>
   a.record.date.localeCompare(b.record.date) || a.record.id.localeCompare(b.record.id);
 const rangeText = (range: ResearchRange) => `${range.start} – ${range.end}`;
-const dayNumber = (date: string) => Date.parse(`${date}T00:00:00Z`) / 86400000;
-const isoDay = (day: number) => new Date(day * 86400000).toISOString().slice(0, 10);
 const formatDay = (day: number, year = false) => new Intl.DateTimeFormat(getLocale(), { year: year ? 'numeric' : undefined, month: 'numeric', day: 'numeric', timeZone: 'UTC' }).format(day * 86400000);
 const containsDay = (range: ResearchRange, date: string) => range.start <= date && date <= range.end;
 const overlaps = (a: ResearchRange, b: ResearchRange) => a.start <= b.end && b.start <= a.end;
@@ -85,13 +84,6 @@ function clipRange(range: ResearchRange | undefined, bounds: ResearchRange) {
   if (!range) return bounds;
   const clip = (date: string) => date < bounds.start ? bounds.start : date > bounds.end ? bounds.end : date;
   return { start: clip(range.start), end: clip(range.end) };
-}
-
-function shiftRange(bounds: ResearchRange, start: number, length: number): ResearchRange {
-  const first = dayNumber(bounds.start), last = dayNumber(bounds.end);
-  const days = Math.max(1, Math.min(length, last - first + 1));
-  const left = Math.max(first, Math.min(start, last - days + 1));
-  return { start: isoDay(left), end: isoDay(left + days - 1) };
 }
 
 function groupByPhase(entries: ResearchEntry[]) {
@@ -259,6 +251,7 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
           ['out', t("缩小时间轴"), '−', fullRange], ['in', t("放大时间轴"), '+', span === 1]].map(([id, label, glyph, disabled]) =>
           `<button type="button" class="icon-button" data-research-axis-action="${id}" aria-label="${escape(String(label))}" title="${escape(String(label))}"${disabled ? ' disabled' : ''}>${glyph}</button>`).join('')}
       </div>${phaseRows ? pager : ''}</div>
+    ${timelineOverview(range, bounds, ordered.map(({ span }) => span))}
     <div class="research-timeline-axis" aria-hidden="true"><span></span><div class="research-timeline-ruler" data-research-axis${fullRange ? '' : ` data-research-pan title="${ht("拖动时间轴")}"`}>
       ${ticks.map((day, i) => `<span class="${ticks.length === 1 ? '' : i === 0 ? 'first' : i === ticks.length - 1 ? 'last' : 'middle'}" style="--tick:${(day - start + 0.5) * 100 / span}%">${escape(formatDay(day, crossesYear))}</span>`).join('')}
     </div></div>${phaseRows || `<p class="research-empty-list">${ht("此视图没有研究阶段。")}</p>`}
@@ -311,7 +304,16 @@ interface Hooks {
 }
 
 interface ViewPosition { phaseId: string; date: string; scroll: number; page: number; range?: TimelineRange }
-interface AxisPan { pointerId: number; x: number; y: number; width: number; start: number; days: number; bounds: ResearchRange; moving: boolean }
+interface AxisDrag extends TimelineWindow {
+  part: 'axis' | 'draw' | RangeHandle;
+  pointerId: number;
+  x: number;
+  y: number;
+  left: number;
+  width: number;
+  clientX: number;
+  moving: boolean;
+}
 
 export class ResearchWorkspace {
   private panel = document.createElement('section');
@@ -334,7 +336,8 @@ export class ResearchWorkspace {
   private phasePage = 1;
   private phasePageSize = savedPageSize();
   private recordFilter?: ResearchFilter;
-  private axisPan?: AxisPan;
+  private axisDrag?: AxisDrag;
+  private axisFrame = 0;
   private controlPress?: { pointerId: number; release: () => void };
   private controlsIdle = Promise.resolve();
   private widths = savedWidths();
@@ -376,7 +379,10 @@ export class ResearchWorkspace {
     for (const name of ['pointerup', 'pointercancel'] as const) {
       window.addEventListener(name, event => this.releaseControl(event.pointerId));
     }
-    window.addEventListener('blur', () => this.releaseControl());
+    window.addEventListener('blur', () => {
+      this.releaseControl();
+      this.finishAxisDrag();
+    });
     this.content.addEventListener('change', event => {
       const target = event.target as HTMLInputElement;
       if (target.id === 'research-date') {
@@ -394,22 +400,29 @@ export class ResearchWorkspace {
       }
     });
     this.content.addEventListener('keydown', event => {
-      const target = event.target as HTMLInputElement;
+      const target = event.target as HTMLElement;
+      const handle = target.dataset.researchOverviewHandle as RangeHandle | undefined;
+      if (handle && !event.isComposing) {
+        this.moveOverviewHandle(event, handle);
+        return;
+      }
       if (event.key !== 'Enter' || event.isComposing || target.id !== 'research-phase-page-size') return;
       event.preventDefault();
       target.blur();
     });
-    this.content.addEventListener('pointerdown', event => this.beginAxisPan(event));
-    this.content.addEventListener('pointermove', event => this.updateAxisPan(event));
+    this.content.addEventListener('pointerdown', event => this.beginAxisDrag(event));
+    this.content.addEventListener('pointermove', event => this.updateAxisDrag(event));
     for (const name of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
-      this.content.addEventListener(name, event => this.finishAxisPan(event));
+      this.content.addEventListener(name, event => {
+        if (name !== 'lostpointercapture' || event.target === this.content) this.finishAxisDrag(event);
+      });
     }
     this.content.addEventListener('pointerleave', event => {
-      if (!this.axisPan?.moving) this.finishAxisPan(event);
+      if (!this.axisDrag?.moving) this.finishAxisDrag(event);
     });
     this.content.addEventListener('wheel', event => {
       const axis = (event.target as Element).closest('[data-research-axis], [data-research-track]');
-      if (!axis || !(event.ctrlKey || event.metaKey) || this.hooks.blocked()) return;
+      if (!axis || !(event.ctrlKey || event.metaKey) || this.axisDrag?.moving || this.hooks.blocked()) return;
       event.preventDefault();
       const { left, width } = axis.getBoundingClientRect();
       this.moveAxis(event.deltaY < 0 ? 'in' : 'out', Math.max(0, Math.min(1, (event.clientX - left) / width)), false);
@@ -467,8 +480,7 @@ export class ResearchWorkspace {
   }
 
   hide() {
-    this.axisPan = undefined;
-    this.content.classList.remove('research-axis-panning');
+    this.clearAxisDrag();
     this.closeReader(false);
     this.panel.hidden = this.sidebar.hidden = true;
     this.host.classList.remove('research-mode');
@@ -648,13 +660,12 @@ export class ResearchWorkspace {
       this.timelineRange = undefined;
       this.phasePage = 1;
       this.recordFilter = undefined;
-      this.axisPan = undefined;
-      this.content.classList.remove('research-axis-panning');
+      this.clearAxisDrag();
       this.positions.clear();
       this.readerContexts.clear();
       this.content.scrollTop = 0;
     }
-    if (this.axisPan?.moving) return;
+    if (this.axisDrag?.moving) return;
     const number = ++this.loadNumber;
     this.loading = Boolean(root) && !this.signature;
     if (!this.signature) this.render();
@@ -662,7 +673,7 @@ export class ResearchWorkspace {
       const includeLinked = !this.snapshot || this.destination(this.snapshot).page === 'summaries';
       const snapshot = root ? await window.meki.researchSnapshot(this.recordFilter, includeLinked) : null;
       if (!this.hooks.blocked()) await this.controlsIdle;
-      if (number !== this.loadNumber || root !== this.hooks.root() || this.axisPan?.moving) return;
+      if (number !== this.loadNumber || root !== this.hooks.root() || this.axisDrag?.moving) return;
       const shown = snapshot && this.destination(snapshot).page !== 'summaries'
         ? { ...snapshot, linkedSummaries: undefined } : snapshot;
       const signature = JSON.stringify([shown, this.recordFilter]);
@@ -682,7 +693,7 @@ export class ResearchWorkspace {
       this.render();
     } catch (error) {
       if (!this.hooks.blocked()) await this.controlsIdle;
-      if (number !== this.loadNumber || root !== this.hooks.root() || this.axisPan?.moving) return;
+      if (number !== this.loadNumber || root !== this.hooks.root() || this.axisDrag?.moving) return;
       this.loading = false;
       this.snapshot = null;
       const message = errorText(error);
@@ -759,34 +770,101 @@ export class ResearchWorkspace {
     this.setTimelineRange(range, focus ? `[data-research-axis-action="${action}"]:enabled` : false);
   }
 
-  private beginAxisPan(event: PointerEvent) {
-    const target = event.target as Element, axis = target.closest<HTMLElement>('[data-research-pan]');
-    if (!axis || target.closest('button') || event.button !== 0 || this.axisPan || this.hooks.blocked()) return;
-    const viewport = this.axisWindow(), width = axis.clientWidth;
-    if (viewport && width) this.axisPan = { ...viewport, width, pointerId: event.pointerId, x: event.clientX, y: event.clientY, moving: false };
+  private updateAxisRange(next: ResearchRange) {
+    const current = this.axisWindow();
+    if (current && (dayNumber(next.start) !== current.start || dayNumber(next.end) !== current.start + current.days - 1)) {
+      this.setTimelineRange(next, false);
+    }
   }
 
-  private updateAxisPan(event: PointerEvent) {
-    const pan = this.axisPan;
-    if (!pan || pan.pointerId !== event.pointerId) return;
-    const distance = event.clientX - pan.x;
-    if (!pan.moving) {
-      if (Math.abs(distance) < 5 || Math.abs(distance) < Math.abs(event.clientY - pan.y)) return;
-      pan.moving = true;
+  private moveOverviewHandle(event: KeyboardEvent, handle: RangeHandle) {
+    if (this.axisDrag?.moving || this.hooks.blocked()) return;
+    const viewport = this.axisWindow();
+    if (!viewport) return;
+    const extent = dayNumber(viewport.bounds.end) - dayNumber(viewport.bounds.start);
+    const steps: Record<string, number> = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, Home: -extent, End: extent };
+    if (!Object.hasOwn(steps, event.key)) return;
+    event.preventDefault();
+    this.updateAxisRange(datesForDays(adjustDays(viewport, handle, steps[event.key])));
+  }
+
+  private beginAxisDrag(event: PointerEvent) {
+    if (event.button !== 0 || this.axisDrag || this.hooks.blocked()) return;
+    const target = event.target as Element;
+    const overview = target.closest<HTMLElement>('[data-research-overview]');
+    const axis = overview || target.closest<HTMLElement>('[data-research-pan]');
+    if (!axis || target.closest('button') || overview?.hasAttribute('data-single-day')) return;
+    const viewport = this.axisWindow();
+    const { left, width } = axis.getBoundingClientRect();
+    if (!viewport || !width) return;
+    const handle = target.closest<HTMLElement>('[data-research-overview-handle]')?.dataset.researchOverviewHandle as RangeHandle | undefined;
+    const part = !overview ? 'axis' : !handle || (handle === 'move' && overview.hasAttribute('data-full-range')) ? 'draw' : handle;
+    this.axisDrag = { ...viewport, part, left, width, pointerId: event.pointerId, x: event.clientX,
+      y: event.clientY, clientX: event.clientX, moving: false };
+  }
+
+  private updateAxisDrag(event: PointerEvent) {
+    const drag = this.axisDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const distance = Math.abs(event.clientX - drag.x);
+    if (!drag.moving) {
+      if (distance < 4 || distance < Math.abs(event.clientY - drag.y)) return;
+      drag.moving = true;
       this.content.setPointerCapture(event.pointerId);
       this.content.classList.add('research-axis-panning');
     }
-    const next = shiftRange(pan.bounds, pan.start - Math.round(distance / pan.width * pan.days), pan.days);
-    const current = this.axisWindow();
-    if (current && dayNumber(next.start) !== current.start) this.setTimelineRange(next, false);
+    drag.clientX = event.clientX;
+    if (this.axisFrame) return;
+    this.axisFrame = requestAnimationFrame(() => {
+      this.axisFrame = 0;
+      this.applyAxisDrag(drag, true);
+    });
   }
 
-  private finishAxisPan(event: PointerEvent) {
-    if (this.axisPan?.pointerId !== event.pointerId) return;
-    const moving = this.axisPan.moving;
-    this.axisPan = undefined;
+  private applyAxisDrag(drag: AxisDrag, live = false) {
+    const { part, bounds, start, days, width, left, x, clientX } = drag;
+    const distance = (clientX - x) / width;
+    if (part === 'axis') {
+      this.updateAxisRange(shiftRange(bounds, start - Math.round(distance * days), days));
+      return;
+    }
+    const first = dayNumber(bounds.start), last = dayNumber(bounds.end), total = last - first + 1;
+    const delta = distance * total, point = first + (clientX - left) / width * total;
+    const anchor = Math.max(first, Math.min(last, first + Math.floor((x - left) / width * total)));
+    const next = part === 'draw' ? brushDays(anchor, Math.floor(point), first, last) : adjustDays(drag, part, Math.round(delta));
+    this.updateAxisRange(datesForDays(next));
+
+    if (!live) return;
+    // Follow the pointer between days while the detailed timeline stays on whole dates.
+    const visual = part === 'draw' ? brushDays(anchor, point - 0.5, first, last) : adjustDays(drag, part, delta);
+    const thumb = this.content.querySelector<HTMLElement>('.research-range-overview-window');
+    thumb?.style.setProperty('--drag-left', `${(visual.start - first) * 100 / total}%`);
+    thumb?.style.setProperty('--drag-width', `${(visual.end - visual.start + 1) * 100 / total}%`);
+  }
+
+  private clearAxisDrag() {
+    const drag = this.axisDrag;
+    this.axisDrag = undefined;
+    if (this.axisFrame) cancelAnimationFrame(this.axisFrame);
+    this.axisFrame = 0;
     this.content.classList.remove('research-axis-panning');
-    if (moving) void this.refresh();
+    if (drag && drag.part !== 'axis') {
+      const thumb = this.content.querySelector<HTMLElement>('.research-range-overview-window');
+      thumb?.style.removeProperty('--drag-left');
+      thumb?.style.removeProperty('--drag-width');
+    }
+    if (drag && this.content.hasPointerCapture(drag.pointerId)) this.content.releasePointerCapture(drag.pointerId);
+  }
+
+  private finishAxisDrag(event?: PointerEvent) {
+    const drag = this.axisDrag;
+    if (!drag || (event && drag.pointerId !== event.pointerId)) return;
+    if (drag.moving && event?.type === 'pointerup') {
+      drag.clientX = event.clientX;
+      this.applyAxisDrag(drag);
+    }
+    this.clearAxisDrag();
+    if (drag.moving) void this.refresh();
   }
 
   private async setGoal(index: number, done: boolean) {
@@ -835,7 +913,7 @@ export class ResearchWorkspace {
     const focused = document.activeElement;
     const focusRoot = this.panel.contains(focused) ? this.panel : this.sidebar.contains(focused) ? this.sidebar : undefined;
     const focusKey = focusRoot && focused instanceof HTMLElement &&
-      (focused instanceof HTMLButtonElement || focused.matches('summary[data-research-settings-section]')) && [...focused.attributes]
+      (focused instanceof HTMLButtonElement || focused.matches('summary[data-research-settings-section], [data-research-overview-handle]')) && [...focused.attributes]
       .find(({ name }) => name.startsWith('data-research-') || name === 'data-action');
     const scroll = this.content.scrollTop;
     const today = state ? projectToday(state.project.timezone) : '';
@@ -901,7 +979,7 @@ export class ResearchWorkspace {
     const lastExperiment = experiments.reduce((latest, { record }) => record.date > latest ? record.date : latest, '');
     const newEntry = project.recordTypes.some(type => type.kind === 'entry') ? `<button type="button" class="secondary-button" data-research-new="entry">${icon('plus', 14)}${ht("新建研究记录")}</button>` : '';
     const newSummary = summaryTypes.size ? `<button type="button" class="secondary-button" data-research-new="summary">${icon('plus', 14)}${ht("插入阶段总结")}</button>` : '';
-    const previousMarkers = timelineView && !this.axisPan?.moving ? this.timelineEvents.capture() : undefined;
+    const previousMarkers = timelineView && !this.axisDrag?.moving ? this.timelineEvents.capture() : undefined;
     this.content.innerHTML = `
       <header class="research-overview"><div><h1 tabindex="-1">${escape(projectPage ? project.title : active.label)}</h1>
         ${projectPage && project.description ? `<p>${escape(project.description)}</p>` : ''}</div>
@@ -939,9 +1017,9 @@ export class ResearchWorkspace {
     this.timelineEvents.show(timelineView?.eventDays, types, previousMarkers);
     this.content.scrollTop = scroll;
     if (focusKey) {
-      const selector = focused instanceof HTMLButtonElement ? 'button:enabled' : 'summary';
+      const selector = focused instanceof HTMLButtonElement ? 'button:enabled' : 'summary, [data-research-overview-handle]';
       const replacement = focusKey.name === 'data-research-timeline-events' ? timelineEventButton(this.content, focusKey.value) :
-        focusRoot?.querySelector<HTMLElement>(`${selector}[${focusKey.name}="${CSS.escape(focusKey.value)}"]`);
+        focusRoot?.querySelector<HTMLElement>(`:is(${selector})[${focusKey.name}="${CSS.escape(focusKey.value)}"]`);
       replacement?.focus({ preventScroll: true });
     }
   }

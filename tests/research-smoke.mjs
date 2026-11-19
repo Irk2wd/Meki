@@ -210,6 +210,7 @@ try {
   await quickRange('最近 1 个月').click();
   assert.equal(await rangeButton.getAttribute('data-start'), '2024-03-31');
   assert.equal(await rangeButton.getAttribute('data-end'), '2024-03-31');
+  assert.equal(await page.locator('[data-research-overview][data-single-day] [role="slider"][aria-disabled="true"]').count(), 3);
   await page.clock.setFixedTime(new Date('2026-11-19T12:00:00+08:00'));
   await refresh.click();
   await idle();
@@ -265,6 +266,60 @@ try {
   await applyRange.click();
   assert.match(await rangeButton.innerText(), /2026-11-05 – 2026-11-14/);
   assert.equal(await page.locator('.research-entry').count(), 0);
+
+  const overviewRail = page.locator('[data-research-overview]');
+  const overviewHandle = part => overviewRail.locator(`[data-research-overview-handle="${part}"]`);
+  async function dragOverview(from, to, { relative = false, live } = {}) {
+    await overviewRail.scrollIntoViewIfNeeded();
+    const box = await overviewRail.boundingBox(), dayWidth = box.width / 19;
+    const handle = typeof from === 'string' ? await overviewHandle(from).boundingBox() : null;
+    const x = handle ? handle.x + handle.width / 2 : box.x + from * dayWidth;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move((relative ? x : box.x) + to * dayWidth, y, { steps: 4 });
+    if (live) await page.locator(`[data-research-range][data-start="${live[0]}"][data-end="${live[1]}"]`).waitFor();
+    await page.mouse.up();
+  }
+  async function assertRange(start, end) {
+    assert.equal(await rangeButton.getAttribute('data-start'), start);
+    assert.equal(await rangeButton.getAttribute('data-end'), end);
+  }
+  await page.locator('[data-research-reset-range]').click();
+  await dragOverview(4.5, 13.5, { live: ['2026-11-05', '2026-11-14'] });
+  await assertRange('2026-11-05', '2026-11-14');
+  await dragOverview('start', 3, { relative: true });
+  await assertRange('2026-11-08', '2026-11-14');
+  await dragOverview('end', -2, { relative: true });
+  await assertRange('2026-11-08', '2026-11-12');
+  const endHandle = overviewHandle('end');
+  await endHandle.press('ArrowLeft');
+  await assertRange('2026-11-08', '2026-11-11');
+  assert.ok(await endHandle.evaluate(handle => document.activeElement === handle));
+
+  const move = await overviewHandle('move').boundingBox();
+  const moveX = move.x + move.width / 2, moveY = move.y + move.height / 2;
+  const dayWidth = (await overviewRail.boundingBox()).width / 19;
+  await page.mouse.move(moveX, moveY);
+  await page.mouse.down();
+  await page.mouse.move(moveX + dayWidth / 4, moveY);
+  await page.waitForFunction(() => document.querySelector('.research-range-overview-window').style.getPropertyValue('--drag-left'));
+  assert.ok((await overviewHandle('move').boundingBox()).x > move.x);
+  await assertRange('2026-11-08', '2026-11-11');
+  await page.mouse.up();
+  assert.equal((await overviewHandle('move').boundingBox()).x, move.x);
+
+  await dragOverview('move', 18.9);
+  await assertRange('2026-11-16', '2026-11-19');
+  await dragOverview('move', 0.1);
+  await assertRange('2026-11-01', '2026-11-04');
+  await dragOverview('start', 10, { relative: true });
+  await assertRange('2026-11-04', '2026-11-04');
+  await dragOverview(13.5, 4.5);
+  await assertRange('2026-11-05', '2026-11-14');
+  assert.deepEqual(await phaseOrder(), ['validation', 'exploration', 'baseline']);
+  assert.equal(await page.locator('.research-entry').count(), 0);
+  pass('the overview brushes new ranges, resizes either edge, and moves a fixed interval within the project dates');
   pass('custom ranges and bounded pan and zoom clip coverage without opening an experiment list');
 
   const tile = command('read', ['tile-culling']);
