@@ -1311,11 +1311,13 @@ try {
     if (request.url().startsWith('https://report-preview.invalid/')) externalReportRequests.push(request.url());
   });
   await openBriefing('复测汇报 PPTX');
+  const nextSlide = report.locator('[data-report-next]');
   for (const [index, title] of ['First', 'Second', 'Third'].entries()) {
     await readyReportPage(index + 1);
     assert.match(await report.locator('.research-report-document').textContent(), new RegExp(`${title} report slide`));
-    if (index < 2) await report.locator('[data-report-next]').click();
+    if (index < 2) await nextSlide.press('Enter');
   }
+  assert.ok(await report.evaluate(dialog => dialog.contains(document.activeElement)));
   await page.keyboard.press('ArrowLeft');
   await readyReportPage(2);
   await page.keyboard.press('ArrowLeft');

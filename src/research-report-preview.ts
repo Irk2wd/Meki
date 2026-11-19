@@ -63,7 +63,7 @@ export class ResearchReportPreview {
       </div>
       <div class="research-report-stage" aria-busy="true"><div class="research-report-mount"></div>
         <p id="research-report-status" role="status"></p></div>
-      <footer class="research-report-pager">
+      <footer class="research-report-pager" tabindex="-1">
         <button type="button" class="secondary-button" data-report-prev disabled>${icon('back', 14)} ${ht("上一页")}</button>
         <output id="research-report-page" aria-live="polite"></output>
         <button type="button" class="secondary-button" data-report-next disabled>${ht("下一页")} ${icon('chevron', 14)}</button>
@@ -75,14 +75,19 @@ export class ResearchReportPreview {
     const stage = element('.research-report-stage');
     const status = element('#research-report-status');
     const counter = element('#research-report-page');
+    const pager = element('.research-report-pager');
     const previous = element<HTMLButtonElement>('[data-report-prev]');
     const next = element<HTMLButtonElement>('[data-report-next]');
     let request: AbortController | undefined, pages: Pages | undefined, page = 1, painting = false;
     let leavingForBody = false;
     const isActive = (controller: AbortController) => dialog.open && request === controller && !controller.signal.aborted;
     const controls = () => {
-      previous.disabled = !pages || painting || page <= 1;
-      next.disabled = !pages || painting || page >= pages.count;
+      const previousDisabled = !pages || painting || page <= 1;
+      const nextDisabled = !pages || painting || page >= pages.count;
+      const focus = document.activeElement;
+      if ((focus === previous && previousDisabled) || (focus === next && nextDisabled)) pager.focus({ preventScroll: true });
+      previous.disabled = previousDisabled;
+      next.disabled = nextDisabled;
       counter.textContent = pages ? t("第 {0} 页，共 {1} 页", page, pages.count) : '';
       stage.setAttribute('aria-busy', String(painting));
     };
