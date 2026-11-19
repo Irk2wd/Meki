@@ -9,7 +9,8 @@ export const escapeResearch = (value: string | number | boolean) => String(value
 
 export const researchOption = (value: string, label: string, selected: string) =>
   `<option value="${escapeResearch(value)}"${value === selected ? ' selected' : ''}>${escapeResearch(label)}</option>`;
-export const timelineIcon = (type?: ResearchType) => type?.icon || (type?.kind === 'comparison' ? 'image' : 'calendar');
+export const timelineIcon = (type?: ResearchType, comparison = false) =>
+  type?.icon || (type?.kind === 'comparison' || (!type && comparison) ? 'image' : 'calendar');
 
 export interface ResearchWidths { workspace: ResearchWidth; comparison: ResearchWidth }
 const goalModes = ['hidden', 'list', 'checklist'] as const;
@@ -95,7 +96,7 @@ export class ResearchTools {
       <ul class="research-project-list">${entries.map(({ record }, index) => {
         const type = types.get(record.type);
         return `<li><button type="button" data-research-event-choice="${record.id}"${index === 0 ? ' autofocus' : ''}>
-          ${icon(record.comparison && !type ? 'image' : timelineIcon(type), 17)}<span><strong>${escape(record.title)}</strong><small aria-hidden="true">${escape(type?.label || record.type)}</small></span></button></li>`;
+          ${icon(timelineIcon(type, Boolean(record.comparison)), 17)}<span><strong>${escape(record.title)}</strong><small aria-hidden="true">${escape(type?.label || record.type)}</small></span></button></li>`;
       }).join('')}</ul>`);
     this.dialog.querySelectorAll<HTMLButtonElement>('[data-research-event-choice]').forEach(button => {
       button.addEventListener('click', () => {

@@ -110,20 +110,27 @@
   border-radius: 14px;
   background: var(--bg);
 }
-.research-timeline { --label-width: clamp(119px, 16vw, 188px); }
+.research-timeline { --label-width: clamp(119px, 16vw, 188px); container: research-timeline / inline-size; }
 .research-timeline-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 11px; }
-.research-legend { display: flex; flex-wrap: wrap; gap: 5px 12px; color: var(--soft); font-size: 11px; }
+.research-legend { display: flex; align-items: center; gap: 14px; min-inline-size: 0; max-inline-size: 100%; color: var(--soft); font-size: 11px; }
+.research-legend-markers, .research-legend-events { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; }
+.research-legend-markers { flex: none; max-inline-size: 100%; }
+.research-legend-events { min-inline-size: 0; padding-inline-start: 14px; border-inline-start: 1px solid var(--border); }
+.research-legend-markers > span { display: inline-flex; align-items: center; gap: 5px; }
+.research-legend-markers > span::before { content: ''; flex: none; width: 13px; height: 6px; border-radius: 2px; background: var(--accent); }
+.research-legend-markers > .research-key-point::before { width: 6px; border-radius: 50%; background: var(--text); }
+.research-legend-markers > .research-key-today::before { width: 2px; height: 9px; background: var(--research-summary); }
+.research-key-event { display: inline-flex; align-items: center; gap: 4px; max-inline-size: 100%; overflow-wrap: anywhere; }
+.research-key-event svg { flex: none; color: var(--accent); }
+@container research-timeline (max-width: 480px) {
+  .research-legend:has(.research-legend-events) { flex-basis: 100%; flex-direction: column; align-items: stretch; gap: 7px; }
+  .research-legend-events { padding-inline-start: 0; padding-block-start: 7px; border-inline-start: 0; border-block-start: 1px solid var(--border); }
+}
 .research-timeline [data-research-range], .research-timeline [data-research-reset-range] { margin-right: 0; }
 .research-range-presets { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 7px; background: var(--side); }
 .research-range-presets button { display: block; padding: 4px 7px; border-radius: 5px; color: var(--soft); font-size: 11px; white-space: nowrap; }
 .research-range-presets [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .research-range-presets button:focus-visible { outline-offset: -2px; }
-.research-legend span::before { content: ''; display: inline-block; width: 13px; height: 6px; margin-right: 5px; vertical-align: 1px; border-radius: 2px; background: var(--accent); }
-.research-legend .research-key-point::before { width: 6px; height: 6px; border-radius: 50%; background: var(--text); }
-.research-legend .research-key-today::before { width: 2px; height: 9px; background: var(--research-summary); vertical-align: -1px; }
-.research-legend .research-key-event { display: inline-flex; gap: 4px; align-items: center; }
-.research-legend .research-key-event::before { display: none; }
-.research-key-event svg { color: var(--accent); }
 .research-timeline-axis, .research-timeline-row { display: grid; grid-template-columns: var(--label-width) minmax(0, 1fr); gap: 13px; }
 .research-timeline-axis { padding: 5px 7px 0; }
 .research-timeline-ruler { position: relative; height: 28px; border-radius: 6px; }

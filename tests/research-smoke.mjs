@@ -116,6 +116,9 @@ try {
   assert.ok((await page.evaluate(() => window.meki.refreshWorkspace())).tree.every(entry => !entry.relativePath.startsWith('.mekir')));
   const phases = page.locator('.research-timeline-row');
   const phaseOrder = () => phases.locator('[data-research-phase]').evaluateAll(rows => rows.map(row => row.dataset.researchPhase));
+  const legend = page.locator('.research-legend');
+  const markerLegend = legend.getByRole('group', { name: '时间线标记', exact: true });
+  const eventLegend = legend.getByRole('group', { name: '自定义事件', exact: true });
   const refresh = page.getByRole('button', { name: '刷新项目', exact: true });
   await page.clock.setFixedTime(new Date('2026-11-17T12:00:00+08:00'));
   await refresh.click();
@@ -178,7 +181,9 @@ try {
   await rangePicker.getByRole('alert').filter({ hasText: '结束日期不能早于开始日期。' }).waitFor();
   await rangePicker.getByLabel('结束日期').fill('2026-11-14');
   await applyRange.click();
-  assert.deepEqual(await phaseOrder(), ['validation', 'exploration']);
+  assert.deepEqual(await phaseOrder(), ['validation', 'exploration', 'baseline']);
+  const outsidePhase = phases.filter({ hasText: '基线测量' });
+  assert.equal(await outsidePhase.locator('.research-timeline-bar, .research-timeline-dot').count(), 0);
   assert.equal(await page.locator('.research-entry').count(), 0);
   assert.equal(await page.locator('[data-research-record=tile-culling]').count(), 0);
   assert.equal(await phases.filter({ hasText: '方案探索' }).locator('.research-timeline-bar').evaluate(bar => bar.style.getPropertyValue('--left')), '0%');
@@ -187,10 +192,11 @@ try {
   const ruler = page.locator('[data-research-axis]');
   const zoom = page.getByRole('button', { name: '放大时间轴', exact: true });
   await zoom.click();
-  const bounds = await ruler.boundingBox();
-  const x = fraction => bounds.x + bounds.width * fraction;
-  const y = bounds.y + bounds.height / 2;
   async function pan(from, to) {
+    await ruler.scrollIntoViewIfNeeded();
+    const bounds = await ruler.boundingBox();
+    const x = fraction => bounds.x + bounds.width * fraction;
+    const y = bounds.y + bounds.height / 2;
     await page.mouse.move(x(from), y);
     await page.mouse.down();
     await page.mouse.move(x(to), y, { steps: 4 });
@@ -506,6 +512,8 @@ try {
   pass('adoption decisions link back to comparable runs, manuscript versions and read-only images, CSV and manifests');
 
   await closeReader();
+  assert.equal(await eventLegend.count(), 0);
+  command('batch', [], { records: [{ id: 'baseline-meeting', type: 'group-meeting', title: '基线组会', date: '2026-11-05', phaseId: 'baseline' }] });
   const expanded = command('describe');
   expanded.project.phases.push(...Array.from({ length: 12 }, (_, i) => ({
     id: `extra-${i + 1}`, title: `补充阶段 ${i + 1}`, start: '2026-10-01', end: '2026-11-06',
@@ -515,6 +523,8 @@ try {
   await idle();
   const timelineView = page.locator('[data-research-destination=timeline]');
   await timelineView.click();
+  await legend.getByText('组会汇报', { exact: true }).waitFor();
+  const pagedLegend = await legend.innerHTML();
   const pageSize = page.getByRole('spinbutton', { name: '每页阶段数' });
   const pageNumber = page.locator('#research-phase-page-number');
   const nextPage = page.getByRole('button', { name: '下一页', exact: true });
@@ -547,15 +557,23 @@ try {
   for (let i = 0; i < 3; i++) await nextPage.click();
   assert.equal(await phases.count(), 3);
   assert.equal(await nextPage.isDisabled(), true);
+  assert.equal(await page.locator('[data-research-timeline-events~="baseline-meeting"]').count(), 0);
+  assert.equal(await legend.innerHTML(), pagedLegend);
+  const lastPage = await phaseOrder();
   await quickRange('最近 7 天').click();
-  await pageNumber.waitFor({ state: 'hidden' });
-  assert.equal(await phases.count(), 2);
+  assert.equal(await pageNumber.innerText(), '第 4 页，共 4 页');
+  assert.deepEqual(await phaseOrder(), lastPage);
+  assert.equal(await phases.locator('.research-timeline-bar').count(), 0);
+  await pan(.1, .9);
+  assert.equal(await pageNumber.innerText(), '第 4 页，共 4 页');
+  assert.deepEqual(await phaseOrder(), lastPage);
+  assert.equal(await legend.innerHTML(), pagedLegend);
   await page.locator('[data-research-reset-range]').click();
-  assert.deepEqual(await phaseOrder(), firstPage);
+  assert.deepEqual(await phaseOrder(), lastPage);
   await page.getByRole('button', { name: '全部阶段', exact: true }).click();
   assert.equal(await phases.count(), 15);
   assert.equal(await pageNumber.count(), 0);
-  pass('phase pagination supports a custom limit and show all, and preserves the sorted page across views');
+  pass('phase pagination preserves the sorted page and event legend across views and date ranges');
 
   async function showProjectPicker() {
     await page.locator('#research-sidebar [data-action=research-projects]').click();
@@ -930,6 +948,13 @@ try {
   await tools.getByRole('button', { name: '基线评测审阅', exact: true }).click();
   await page.locator('#research-reader-title').getByText('基线评测审阅').waitFor();
   await closeReader();
+  const legendContents = await legend.innerHTML();
+  assert.deepEqual(await markerLegend.locator('span').allTextContents(), ['阶段时段', '实验日期', '今天']);
+  assert.deepEqual(await eventLegend.locator('.research-key-event').allTextContents(), ['组会汇报', '可视化展示', '论文审阅']);
+  assert.equal(await eventLegend.evaluate(node => getComputedStyle(node).borderInlineStartWidth), '1px');
+  const [markerBox, eventBox] = await Promise.all([markerLegend.boundingBox(), eventLegend.boundingBox()]);
+  assert.ok(eventBox.x > markerBox.x + markerBox.width);
+  await legend.screenshot({ path: path.join(folder, 'timeline-legend-wide.png'), animations: 'disabled' });
   const week = quickRange('最近 7 天');
   await week.scrollIntoViewIfNeeded();
   const weekBox = await week.boundingBox();
@@ -939,10 +964,52 @@ try {
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await page.mouse.up();
   await page.waitForFunction(() => document.querySelector('[data-research-range-preset="7d"]')?.getAttribute('aria-pressed') === 'true');
-  await baseline.getByRole('button', { name: '打开事件 基线后续审阅' }).waitFor();
+  const followUp = baseline.getByRole('button', { name: '打开事件 基线后续审阅' });
+  await followUp.waitFor();
   assert.equal(await baseline.locator('.research-timeline-bar').count(), 0);
+  assert.equal(await legend.innerHTML(), legendContents);
   assert.deepEqual(errors, []);
   pass('project event icons, same-day drill-down, both width preferences and optional saved goals work end to end');
+
+  const todayLine = page.locator('.research-today-line');
+  assert.ok(await todayLine.count());
+  const selectedPhase = baseline.locator('[data-research-phase]');
+  await selectedPhase.click();
+  assert.equal(await selectedPhase.getAttribute('aria-pressed'), 'true');
+  await ruler.scrollIntoViewIfNeeded();
+  const axisTop = (await ruler.boundingBox()).y;
+  const positions = () => phases.evaluateAll(rows => rows.map(row => {
+    const { top, height } = row.getBoundingClientRect();
+    return { top, height };
+  }));
+  const beforePan = await positions();
+  const orderBeforePan = await phaseOrder();
+  await pan(.1, .9);
+  assert.ok((await rangeButton.getAttribute('data-end')) < '2026-11-18');
+  assert.equal(await todayLine.count(), 0);
+  assert.equal(await followUp.count(), 0);
+  assert.equal(await legend.innerHTML(), legendContents);
+  assert.equal((await ruler.boundingBox()).y, axisTop);
+  assert.deepEqual(await phaseOrder(), orderBeforePan);
+  assert.deepEqual(await positions(), beforePan);
+  assert.equal(await selectedPhase.getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('#research-journal-title').innerText(), '基线测量');
+  await week.click();
+  await followUp.waitFor();
+  assert.ok(await todayLine.count());
+  assert.equal(await legend.innerHTML(), legendContents);
+  assert.deepEqual(errors, []);
+  pass('timeline legend, phase rows and selection stay fixed while panning past today and the last visible event');
+
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(520, 760));
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('.research-legend-events')).borderBlockStartWidth === '1px');
+  assert.equal(await eventLegend.evaluate(node => getComputedStyle(node).borderInlineStartWidth), '0px');
+  const [stackedMarkers, stackedEvents] = await Promise.all([markerLegend.boundingBox(), eventLegend.boundingBox()]);
+  assert.equal(stackedEvents.x, stackedMarkers.x);
+  assert.ok(stackedEvents.y > stackedMarkers.y + stackedMarkers.height);
+  assert.equal(await legend.innerHTML(), legendContents);
+  await legend.screenshot({ path: path.join(folder, 'timeline-legend-narrow.png'), animations: 'disabled' });
+  pass('timeline markers and custom events switch from a vertical divider to stacked groups in narrow layouts');
 
   await fs.writeFile(path.join(folder, 'results.json'), JSON.stringify({ results, errors }, null, 2) + '\n');
   console.log(`Timeline screenshot: ${path.join(folder, 'timeline.png')}`);

@@ -91,9 +91,16 @@ function shiftRange(bounds: ResearchRange, start: number, length: number): Resea
   return { start: isoDay(left), end: isoDay(left + days - 1) };
 }
 
-function phaseInRange(phase: ResearchPhase, range: ResearchRange, today: string, events?: ResearchEntry[]) {
-  return (phase.start > today ? range.end === today : overlaps(phaseSpan(phase, today), range))
-    || events?.some(({ record }) => containsDay(range, record.date));
+function groupByPhase(entries: ResearchEntry[]) {
+  const phases = new Map<string, ResearchEntry[]>();
+  for (const entry of entries) {
+    const { phaseId } = entry.record;
+    if (!phaseId) continue;
+    const group = phases.get(phaseId);
+    if (group) group.push(entry);
+    else phases.set(phaseId, [entry]);
+  }
+  return phases;
 }
 
 function fieldValue(rule: ResearchField, value: ResearchValue) {
@@ -153,20 +160,21 @@ function experimentEnded({ fields, run }: ResearchEntry['record'], phaseEnded: b
 
 function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByPhase: Map<string, ResearchEntry[]>, eventsByPhase: Map<string, ResearchEntry[]>,
   { activePhase, today, range, bounds, selectedRange, presetId, page: requestedPage, pageSize, canCreatePhase, canCreateEvent, types }: TimelineOptions) {
-  const spans = phases.map(phase => ({ phase, span: phaseSpan(phase, today) }));
   const start = dayNumber(range.start), end = dayNumber(range.end), span = end - start + 1;
   const fullRange = range.start === bounds.start && range.end === bounds.end;
   const crossesYear = new Date(start * 86400000).getUTCFullYear() !== new Date(end * 86400000).getUTCFullYear();
   const position = (date: string, offset = 0) => (dayNumber(date) - start + offset) * 100 / span;
   const dot = (date: string, ended: boolean) => `<i class="research-timeline-dot${ended ? ' is-ended' : ''}" style="--point:${position(date, 0.5)}%"></i>`;
-  const hasToday = containsDay(range, today);
+  const todayLine = containsDay(range, today) ? `<i class="research-today-line" style="--point:${position(today, 0.5)}%"></i>` : '';
   const ticks = [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(start + (end - start) * i / 4)))];
-  const ordered = spans.filter(({ phase }) => phaseInRange(phase, range, today, eventsByPhase.get(phase.id))).map(({ phase, span }) => {
-    const assigned = entries.filter(({ record }) => record.phaseId === phase.id);
+  const experimentsByPhase = groupByPhase(entries);
+  const ordered = phases.map(phase => {
+    const span = phaseSpan(phase, today);
+    const assigned = experimentsByPhase.get(phase.id) || [];
     const latest = [...assigned, ...(progressByPhase.get(phase.id) || [])]
       .reduce((date, { record }) => record.date <= today && record.date > date ? record.date : date, '');
     const group: keyof typeof phaseGroupOrder = today < span.start ? 'upcoming' : today > span.end ? 'ended' : 'ongoing';
-    return { phase, span, group, latest, assigned: assigned.filter(({ record }) => containsDay(range, record.date)) };
+    return { phase, span, group, latest, assigned };
   }).sort((a, b) => {
     if (a.group !== b.group) return phaseGroupOrder[a.group] - phaseGroupOrder[b.group];
     if (a.group === 'ended') return b.span.end.localeCompare(a.span.end);
@@ -176,17 +184,21 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
   const limit = pageSize ?? Math.max(1, ordered.length);
   const pageCount = Math.max(1, Math.ceil(ordered.length / limit));
   const page = Math.max(1, Math.min(requestedPage, pageCount));
-  const visibleEventTypes = new Map<string, ResearchType>();
+  const usedTypes = new Set(phases.flatMap(phase => (eventsByPhase.get(phase.id) || []).map(({ record }) => record.type)));
+  const legendKey = (glyph: string, label: string) => `<span class="research-key-event">${icon(glyph, 13)}${escape(label)}</span>`;
+  const eventKeys = new Set([...types.values()].filter(type => usedTypes.has(type.id))
+    .map(type => legendKey(timelineIcon(type), type.label)));
+  if ([...usedTypes].some(id => !types.has(id))) eventKeys.add(legendKey(timelineIcon(undefined, true), t("可视化展示")));
   const phaseRows = ordered.slice((page - 1) * limit, page * limit).map(({ phase, span, group, latest, assigned }) => {
     const activity = new Map<string, boolean>();
     for (const { record } of assigned) {
+      if (!containsDay(range, record.date)) continue;
       activity.set(record.date, (activity.get(record.date) ?? true) && experimentEnded(record, group === 'ended'));
     }
+    const phaseEvents = eventsByPhase.get(phase.id) || [];
     const groups = new Map<string, ResearchEntry[]>();
-    for (const event of eventsByPhase.get(phase.id) || []) {
+    for (const event of phaseEvents) {
       if (!containsDay(range, event.record.date)) continue;
-      const type = types.get(event.record.type);
-      if (type) visibleEventTypes.set(type.id, type);
       const group = groups.get(event.record.date);
       if (group) group.push(event);
       else groups.set(event.record.date, [event]);
@@ -194,7 +206,7 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
     const markers = [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([date, events]) => {
       const comparisons = events.every(({ record }) => record.comparison);
       const glyphs = [...new Map(events.map(({ record }) => [record.type,
-        record.comparison && !types.has(record.type) ? 'image' : timelineIcon(types.get(record.type))])).values()].slice(0, 2);
+        timelineIcon(types.get(record.type), Boolean(record.comparison))])).values()].slice(0, 2);
       const extra = events.length - glyphs.length;
       const title = escape(events[0].record.title);
       const label = events.length === 1 ? (comparisons ? ht("打开可视化展示 {0}", title) : ht("打开事件 {0}", title))
@@ -210,8 +222,8 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
       <button type="button" class="research-timeline-label" data-research-phase="${phase.id}" aria-pressed="${activePhase === phase.id}">
         <strong>${escape(phase.title)} <span class="research-phase-status${group === 'ongoing' ? ' research-phase-ongoing' : ''}">${status}</span></strong>
         <small>${escape(phaseDates(phase, today, true))} · ${ht("{0} 条实验", assigned.length)}</small>${latest ? `<small>${ht("最近进展 {0}", escape(formatDay(dayNumber(latest), latest.slice(0, 4) !== today.slice(0, 4))))}</small>` : ''}</button>
-      <div class="research-timeline-track" data-research-track${fullRange ? '' : ' data-research-pan'}><span aria-hidden="true">${overlaps(span, range) ? `<i class="research-timeline-bar" style="--left:${left}%;--right:${right}%"></i>` : ''}${[...activity].map(([date, ended]) => dot(date, ended)).join('')}
-        ${hasToday ? `<i class="research-today-line" style="--point:${position(today, 0.5)}%"></i>` : ''}</span>${markers}</div>
+      <div class="research-timeline-track" data-research-track${fullRange ? '' : ' data-research-pan'}${phaseEvents.length ? ' data-research-has-events' : ''}><span aria-hidden="true">${overlaps(span, range) ? `<i class="research-timeline-bar" style="--left:${left}%;--right:${right}%"></i>` : ''}${[...activity].map(([date, ended]) => dot(date, ended)).join('')}
+        ${todayLine}</span>${markers}</div>
     </div>`;
   }).join('');
   const presetButtons = rangePresets.map(({ id, amount, unit }) => {
@@ -241,8 +253,13 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
         ${canCreateEvent ? `<button type="button" class="secondary-button" data-research-new="event">${icon('plus', 14)}${ht("添加事件")}</button>` : ''}
         ${canCreatePhase ? `<button type="button" class="secondary-button" data-research-new-phase>${icon('plus', 14)}${ht("新建阶段")}</button>` : ''}</div>
     </div>
-    <div class="research-timeline-meta"><div class="research-legend"><span>${ht("阶段时段")}</span><span class="research-key-point">${ht("实验日期")}</span>${hasToday ? `<span class="research-key-today">${ht("今天")}</span>` : ''}
-      ${[...visibleEventTypes.values()].map(type => `<span class="research-key-event">${icon(timelineIcon(type), 13)}${escape(type.label)}</span>`).join('')}</div>
+    <div class="research-timeline-meta">
+      <div class="research-legend" role="group" aria-label="${ht("时间线图例")}">
+        <div class="research-legend-markers" role="group" aria-label="${ht("时间线标记")}">
+          <span>${ht("阶段时段")}</span><span class="research-key-point">${ht("实验日期")}</span><span class="research-key-today">${ht("今天")}</span>
+        </div>
+        ${eventKeys.size ? `<div class="research-legend-events" role="group" aria-label="${ht("自定义事件")}">${[...eventKeys].join('')}</div>` : ''}
+      </div>
       <div class="research-axis-controls" role="group" aria-label="${ht("时间轴平移与缩放")}">
         ${[['prev', t("向前移动时间轴"), icon('back', 15), range.start === bounds.start],
           ['next', t("向后移动时间轴"), icon('chevron', 15), range.end === bounds.end],
@@ -251,7 +268,7 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
       </div>${phaseRows ? pager : ''}</div>
     <div class="research-timeline-axis" aria-hidden="true"><span></span><div class="research-timeline-ruler" data-research-axis${fullRange ? '' : ` data-research-pan title="${ht("拖动时间轴")}"`}>
       ${ticks.map((day, i) => `<span class="${ticks.length === 1 ? '' : i === 0 ? 'first' : i === ticks.length - 1 ? 'last' : 'middle'}" style="--tick:${(day - start + 0.5) * 100 / span}%">${escape(formatDay(day, crossesYear))}</span>`).join('')}
-    </div></div>${phaseRows || `<p class="research-empty-list">${ht("这个时段内没有研究阶段。")}</p>`}
+    </div></div>${phaseRows || `<p class="research-empty-list">${ht("此视图没有研究阶段。")}</p>`}
   </section>`;
   return { html, page };
 }
@@ -658,7 +675,6 @@ export class ResearchWorkspace {
 
   private setTimelineRange(selection?: TimelineRange, focus?: string | false) {
     this.timelineRange = selection;
-    this.phasePage = 1;
     const state = this.snapshot;
     const today = state && projectToday(state.project.timezone);
     const range = state && today && clipRange(resolveTimelineRange(selection, today), timelineBounds(state, today));
@@ -749,7 +765,8 @@ export class ResearchWorkspace {
         marker.style.left = `${left}px`;
         marker.style.setProperty('--event-lane', String(lane));
       }
-      track.style.setProperty('--event-lanes', String(ends.length));
+      const reserved = track.hasAttribute('data-research-has-events') ? 1 : 0;
+      track.style.setProperty('--event-lanes', String(Math.max(reserved, ends.length)));
     }
   }
 
@@ -834,16 +851,8 @@ export class ResearchWorkspace {
     const experiments = records.filter(isExperiment);
     const inView = records.filter(({ record }) => (!view?.typeIds || view.typeIds.includes(record.type)) &&
       (!view?.phaseIds || (record.phaseId && view.phaseIds.includes(record.phaseId))));
-    const eventsByPhase = new Map<string, ResearchEntry[]>();
-    for (const entry of inView) {
-      const { record } = entry;
-      if (!isEvent(entry) || !record.phaseId) continue;
-      const events = eventsByPhase.get(record.phaseId);
-      if (events) events.push(entry);
-      else eventsByPhase.set(record.phaseId, [entry]);
-    }
-    const phase = phases.find(item => item.id === this.phaseId &&
-      (!dateRange || phaseInRange(item, dateRange, today, eventsByPhase.get(item.id))));
+    const eventsByPhase = groupByPhase(inView.filter(isEvent));
+    const phase = phases.find(item => item.id === this.phaseId);
     if (!phase) this.phaseId = '';
     const sequence = active.page === 'summaries' ? inView.filter(isSummary) :
       active.page === 'view' ? inView : inView.filter(isExperiment);
