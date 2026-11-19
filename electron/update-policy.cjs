@@ -51,17 +51,20 @@ function compatible(manifest, { electron, arch, bootstrap = BOOTSTRAP_VERSION, n
     (manifest.nativeIcon === undefined || manifest.nativeIcon === nativeIcon) &&
     (manifest.platform === 'darwin' ? ['x64', 'arm64'].includes(arch) : arch === 'x64');
 }
+function versionFromTag(tag) {
+  const value = typeof tag === 'string' ? /^(?:mekir-)?v([\d.]+)$/.exec(tag)?.[1] : null;
+  version(value);
+  return value;
+}
 function releaseInfo(release, repository = REPOSITORY) {
   if (repository !== REPOSITORY) throw new Error(t("更新仓库无效。"));
   if (!release || release.draft || release.prerelease || !release.published_at || !Array.isArray(release.assets) || release.assets.length > 100) throw new Error(t("未找到可用的正式更新。"));
-  const tag = String(release.tag_name || '');
-  const value = /^(?:mekir-)?v([\d.]+)$/.exec(tag)?.[1];
-  version(value);
-  return { version: value, notes: String(release.body || '').slice(0, 16000), url: `https://github.com/${repository}/releases/tag/${tag}` };
+  const value = versionFromTag(release.tag_name);
+  return { version: value, notes: String(release.body || '').slice(0, 16000), url: `https://github.com/${repository}/releases/tag/${release.tag_name}` };
 }
 function asset(release, name) {
   const matches = release.assets.filter(item => item.name === name && item.state === 'uploaded');
   if (matches.length !== 1 || !Number.isSafeInteger(matches[0].id) || matches[0].id <= 0 || !Number.isSafeInteger(matches[0].size) || matches[0].size <= 0) throw new Error(t("此版本缺少应用内更新文件，请等待发布者补齐。"));
   return matches[0];
 }
-module.exports = { REPOSITORY, BOOTSTRAP_VERSION, MAX_PAYLOAD, MAX_DOWNLOAD, digest, hashPattern, version, newer, names, verifyManifest, compatible, releaseInfo, asset };
+module.exports = { REPOSITORY, BOOTSTRAP_VERSION, MAX_PAYLOAD, MAX_DOWNLOAD, digest, hashPattern, version, newer, names, verifyManifest, compatible, versionFromTag, releaseInfo, asset };

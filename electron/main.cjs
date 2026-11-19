@@ -11,6 +11,7 @@ const { WindowSessions } = require('./window-sessions.cjs');
 const { WindowManager } = require('./window-manager.cjs');
 const { UpdateService } = require('./update-service.cjs');
 const { GithubUpdates } = require('./update-network.cjs');
+const { MirrorUpdates } = require('./update-mirror.cjs');
 const { configureApp, PRODUCT_NAME } = require('./app-identity.cjs');
 const { syncDockIcon } = require('./app-icon.cjs');
 const bootstrap = globalThis[Symbol.for('meki.bootstrap')];
@@ -61,6 +62,7 @@ else {
     if (bootstrap?.runtime) {
       updates = new UpdateService({ runtime: bootstrap.runtime,
         network: new GithubUpdates(TEST_MODE && process.env.MEKI_TEST_UPDATE_SERVER ? { testOrigin: process.env.MEKI_TEST_UPDATE_SERVER } : {}),
+        mirror: TEST_MODE ? null : MirrorUpdates.configured(),
         notify: state => { for (const controller of manager?.controllers.values() || []) controller.window?.webContents.send('meki:update-state', state); },
       });
     }

@@ -28,10 +28,32 @@ async function server(initial) {
   const instance = http.createServer(async (request, response) => {
     if (request.url === '/__fixture_ready__') { response.writeHead(204).end(); return; }
     context.requests.push({ path: request.url, authorization: request.headers.authorization });
+    if (request.url.startsWith('/updates/')) {
+      const { mirror, current } = context;
+      const { manifest, payload, installer } = names(current.manifest.version, current.manifest.platform);
+      if (mirror && request.url === `/updates/latest/${manifest}`) {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify(mirror)); return;
+      }
+      const bytes = mirror && new Map([
+        [`/updates/releases/${mirror.tag}/${payload}`, context.mirrorBytes || current.compressed],
+        [`/updates/releases/${mirror.tag}/${installer}`, current.installer],
+      ]).get(request.url);
+      if (!bytes) { response.writeHead(404).end(); return; }
+      response.setHeader('Content-Length', bytes.length);
+      if (context.holdMirror) response.write(bytes.subarray(0, 1));
+      else response.end(bytes);
+      return;
+    }
     if (request.url.startsWith('/repos/')) {
       if (!request.url.startsWith('/repos/Irk2wd/Meki/') || !context.publicAvailable) { response.writeHead(404).end(); return; }
       if (request.headers.authorization) { response.writeHead(401).end(); return; }
       if (context.errorStatus) { response.writeHead(context.errorStatus).end(); return; }
+      if (request.url.includes('/releases/tags/')) {
+        if (!request.url.endsWith('/releases/tags/' + context.current.release.tag_name)) { response.writeHead(404).end(); return; }
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify(context.current.release)); return;
+      }
       if (request.url.includes('/releases?')) {
         const { searchParams } = new URL(request.url, context.origin);
         const size = Number(searchParams.get('per_page')), page = Number(searchParams.get('page'));

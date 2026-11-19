@@ -8,13 +8,19 @@ const crypto = require('node:crypto');
 const zlib = require('node:zlib');
 const { Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
-const { names, newer, verifyManifest, compatible, releaseInfo, asset, REPOSITORY } = require('./update-policy.cjs');
+const { names, newer, verifyManifest, compatible, versionFromTag, releaseInfo, asset, REPOSITORY } = require('./update-policy.cjs');
 const { hashFile, atomicJson, regular, directory } = require('./update-runtime.cjs');
 const { GithubUpdates } = require('./update-network.cjs');
 
+function matchingAsset(release, file) {
+  const download = asset(release, file.name);
+  if (download.size !== file.size || download.digest && download.digest !== `sha256:${file.sha256}`) throw new Error(t("发布文件与签名清单不一致。"));
+  return download;
+}
+
 class UpdateService {
-  constructor({ runtime, network = new GithubUpdates(), notify = () => {}, clock = Date.now, timers = { setTimeout, clearTimeout } }) {
-    Object.assign(this, { runtime, network, notify, clock, timers });
+  constructor({ runtime, network = new GithubUpdates(), mirror = null, notify = () => {}, clock = Date.now, timers = { setTimeout, clearTimeout } }) {
+    Object.assign(this, { runtime, network, mirror, notify, clock, timers });
     this.preferencesFile = path.join(runtime.root, 'notifications-v1.json');
     this.preferences = { automatic: true, dismissedVersion: null };
     try {
@@ -69,34 +75,72 @@ class UpdateService {
   snapshot() { return { ...this.state }; }
   set(patch) { Object.assign(this.state, patch); this.notify(this.snapshot()); return this.snapshot(); }
   busy() { if (this.controller) throw new Error(t("更新操作正在进行，请先取消或等待完成。")); }
+  async checkMirror(signal) {
+    if (!this.mirror) return null;
+    const { platform, key, version: current } = this.runtime;
+    try {
+      const { tag, manifest: envelope, notes } = await this.mirror.latest(names(current, platform).manifest, signal);
+      const version = versionFromTag(tag);
+      const manifest = verifyManifest(envelope, key, { version, platform });
+      if (newer(current, version)) return null;
+      const info = { version, notes: notes.slice(0, 16000), url: `https://github.com/${REPOSITORY}/releases/tag/${tag}` };
+      if (version === current) return { info };
+      const kind = compatible(manifest, this.runtime) ? 'payload' : 'installer';
+      return { info, envelope, manifest, kind, mirrorTag: tag };
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return null;
+    }
+  }
+  async checkGithub(signal) {
+    const { platform, key, version: current } = this.runtime;
+    const release = await this.network.latest(signal, platform);
+    const info = releaseInfo(release, this.network.repository);
+    if (!newer(info.version, current)) return { info };
+    const envelope = await this.network.manifest(asset(release, names(info.version, platform).manifest), signal);
+    const manifest = verifyManifest(envelope, key, { version: info.version, platform });
+    const kind = compatible(manifest, this.runtime) ? 'payload' : 'installer';
+    return { info, envelope, manifest, kind, download: matchingAsset(release, manifest[kind]) };
+  }
   async check() {
     this.busy(); const controller = this.controller = new AbortController();
     this.candidate = null; this.ready = null;
     this.set({ status: 'checking', latestVersion: null, notes: '', releaseUrl: null, repository: REPOSITORY, kind: null, total: 0, downloaded: 0, notificationVersion: null, message: t("正在检查更新…") });
     try {
-      const network = this.network, release = await network.latest(controller.signal, this.runtime.platform);
-      const info = releaseInfo(release, network.repository);
-      this.set({ repository: network.repository });
-      if (!newer(info.version, this.runtime.version)) return this.set({ status: 'current', latestVersion: info.version, notes: info.notes, releaseUrl: info.url, message: t("当前已是最新版本。") });
-      const envelope = await network.manifest(asset(release, names(info.version, this.runtime.platform).manifest), controller.signal);
-      const manifest = verifyManifest(envelope, this.runtime.key, { version: info.version, platform: this.runtime.platform });
-      const kind = compatible(manifest, this.runtime) ? 'payload' : 'installer', file = manifest[kind], download = asset(release, file.name);
-      if (download.size !== file.size || download.digest && download.digest !== `sha256:${file.sha256}`) throw new Error(t("发布文件与签名清单不一致。"));
-      this.candidate = { envelope, manifest, kind, download, network };
-      return this.set({ status: 'available', latestVersion: info.version, notes: info.notes, releaseUrl: info.url, kind, total: file.size,
+      const candidate = await this.checkMirror(controller.signal) || await this.checkGithub(controller.signal);
+      const { info, manifest, kind } = candidate;
+      if (!manifest) return this.set({ status: 'current', latestVersion: info.version, notes: info.notes, releaseUrl: info.url, message: t("当前已是最新版本。") });
+      this.candidate = candidate;
+      return this.set({ status: 'available', latestVersion: info.version, notes: info.notes, releaseUrl: info.url, kind, total: manifest[kind].size,
         notificationVersion: this.state.automatic && this.preferences.dismissedVersion !== info.version ? info.version : null,
         message: kind === 'payload' ? t("有新版本。只下载程序代码，安装后重启生效。") : t("此版本更新了运行环境或应用图标，需要下载安装器。") });
     } catch (error) { return this.set({ status: controller.signal.aborted ? 'idle' : 'error', message: controller.signal.aborted ? t("已取消检查。") : error.message }); }
     finally { this.controller = null; this.lastChecked = this.clock(); }
+  }
+  async downloadCandidate(candidate, file, temporary, signal) {
+    const progress = (downloaded, total) => this.set({ downloaded, total });
+    if (candidate.mirrorTag) {
+      try {
+        return await this.mirror.download(candidate.mirrorTag, file, temporary, signal, progress);
+      } catch (error) {
+        if (signal.aborted) throw error;
+        await fsp.unlink(temporary).catch(error => { if (error.code !== 'ENOENT') throw error; });
+        signal.throwIfAborted();
+        this.set({ downloaded: 0, message: t("镜像下载失败，正在从 GitHub 下载…") });
+      }
+      const release = await this.network.releaseForTag(candidate.mirrorTag, signal);
+      return this.network.download(matchingAsset(release, file), file, temporary, signal, progress);
+    }
+    return this.network.download(candidate.download, file, temporary, signal, progress);
   }
   async download() {
     this.busy(); if (!this.candidate) throw new Error(t("请先检查更新。"));
     const candidate = this.candidate, { manifest, envelope, kind } = candidate;
     const controller = this.controller = new AbortController(); const file = manifest[kind];
     const temporary = path.join(this.runtime.root, `${crypto.randomUUID()}.download`), unpacked = `${temporary}.unpacked`;
-    this.set({ status: 'downloading', downloaded: 0, message: t("正在下载并校验更新…") });
+    this.set({ status: 'downloading', downloaded: 0, message: candidate.mirrorTag ? t("正在从镜像下载并校验更新…") : t("正在下载并校验更新…") });
     try {
-      await candidate.network.download(candidate.download, file, temporary, controller.signal, (downloaded, total) => this.set({ downloaded, total }));
+      await this.downloadCandidate(candidate, file, temporary, controller.signal);
       if (kind === 'payload') {
         let size = 0; const hash = crypto.createHash('sha256');
         await pipeline(fs.createReadStream(temporary), zlib.createGunzip(), new Transform({ transform(chunk, _encoding, done) {

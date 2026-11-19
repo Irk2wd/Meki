@@ -1,15 +1,18 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mirrorUrl } from '../electron/update-mirror.cjs';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export async function stageApplication(sourceRoot = root) {
   const pkg = JSON.parse(await fs.readFile(path.join(sourceRoot, 'package.json'), 'utf8'));
+  const mirror = process.env.MEKI_UPDATE_MIRROR_URL || pkg.updateMirror;
+  const updateMirror = mirror ? mirrorUrl(mirror).href : undefined;
   const release = path.join(sourceRoot, 'release');
   await fs.mkdir(release, { recursive: true });
   const stage = await fs.mkdtemp(path.join(release, 'stage-'));
   const { name, productName, version, description, main, author, license, repository, homepage } = pkg;
-  await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify({ name, productName, version, description, main, author, license, repository, homepage }, null, 2));
+  await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify({ name, productName, version, description, main, author, license, repository, homepage, updateMirror }, null, 2));
   for (const file of ['dist', 'electron', 'assets', 'LICENSE', 'THIRD_PARTY_NOTICES.txt', 'README.md']) {
     // Local builds may put dist on another drive through a directory junction.
     // A distributable must contain those bytes, never a link to the build machine.
