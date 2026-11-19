@@ -7,9 +7,9 @@ import { _electron as electron } from 'playwright';
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const results = path.join(root, 'test-results');
-await fs.mkdir(results, { recursive: true });
-const run = await fs.realpath(await fs.mkdtemp(path.join(results, 'themes-')));
+const resultRoot = path.join(root, 'test-results');
+await fs.mkdir(resultRoot, { recursive: true });
+const run = await fs.realpath(await fs.mkdtemp(path.join(resultRoot, 'themes-')));
 const file = path.join(run, '渲染研究手记.md');
 const exported = path.join(run, 'journal.html');
 const pdf = path.join(run, 'journal.pdf');
@@ -44,7 +44,8 @@ const env = {
   MEKI_TEST_EXPORT_PDF_PATH: pdf, MEKI_TEST_DISCARD: 'discard',
 };
 delete env.ELECTRON_RUN_AS_NODE;
-const errors = [], remote = [];
+const results = [], errors = [], remote = [];
+const pass = message => { results.push(message); console.log(`PASS ${message}`); };
 let app, page;
 
 async function ready(window) {
@@ -129,7 +130,7 @@ try {
   await page.locator('#source-editor .cm-content').waitFor();
   assert.equal(await computed('#source-editor .cm-editor', 'background-color'), await computed('body', 'background-color'));
   await page.locator('[data-mode="visual"]').click();
-  console.log('PASS textured themes keep the editor, source, previews and exported text on solid backgrounds');
+  pass('textured themes keep the editor, source, previews and exported text on solid backgrounds');
 
   const newWindow = app.waitForEvent('window');
   await page.evaluate(() => window.meki.newWindow());
@@ -155,7 +156,7 @@ try {
   await action('export-pdf');
   assert.equal((await fs.readFile(pdf)).toString('ascii', 0, 5), '%PDF-');
   assert.equal(await fs.readFile(file, 'utf8'), markdown);
-  console.log('PASS import broadcasts to open windows, rejects malformed updates, and exports the applied texture and layout');
+  pass('import broadcasts to open windows, rejects malformed updates, and exports the applied texture and layout');
 
   await close();
   await launch();
@@ -168,7 +169,9 @@ try {
   assert.equal(await computed('#document-scroll', 'background-image'), 'none');
   assert.deepEqual(errors, []);
   assert.deepEqual(remote, []);
-  console.log(`PASS restart and removal work offline. Screenshots: ${run}`);
+  pass('restart and removal work offline');
 } finally {
   await close();
+  await fs.writeFile(path.join(run, 'results.json'), JSON.stringify({ results, errors }, null, 2));
+  console.log(`Evidence: ${run}`);
 }

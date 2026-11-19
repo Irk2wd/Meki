@@ -71,7 +71,8 @@ try {
   await page.locator('[data-theme="night"]').click(); await waitReady(9, 'night');
   assert.equal((await assertSvg(page, 9)).sizes[0].background, 'rgb(32, 37, 33)');
   assert.ok(await page.locator('.meki-diagram svg').nth(6).evaluate(svg => [...svg.querySelectorAll('.mindmap-node rect')].every(node => getComputedStyle(node).fill !== 'rgb(0, 0, 0)')));
-  await page.locator('.ProseMirror h1').click();
+  await action('style');
+  await page.locator('#style-panel').waitFor({ state: 'hidden' });
   await page.screenshot({ path: path.join(run, 'night.png') });
   pass('paper, linen and night themes update every diagram without editing the source');
 
