@@ -22,6 +22,23 @@ async function sourceText() { return page.locator('#source-editor .cm-line').eva
 async function waitText(expected) { await page.waitForFunction(value => [...document.querySelectorAll('#source-editor .cm-line')].map(node => node.textContent).join('\n') === value, expected); }
 async function selectFirstTwoLines() { await page.locator('#source-editor .cm-content').focus(); await page.keyboard.press(start); await page.keyboard.press('Shift+ArrowDown'); await page.keyboard.press('Shift+ArrowDown'); }
 async function accelerator(command) { return app.evaluate(({ Menu }, id) => Menu.getApplicationMenu().getMenuItemById(`command-${id}`).accelerator, command); }
+async function pressAndClickMenu(shortcut, command) {
+  await page.evaluate(() => {
+    delete document.documentElement.dataset.testMenuProcessed;
+    const stop = window.meki.onCommand(name => {
+      if (name !== 'test-heading-menu-barrier') return;
+      stop();
+      document.documentElement.dataset.testMenuProcessed = 'true';
+    });
+  });
+  await page.keyboard.press(shortcut);
+  await app.evaluate(({ Menu, BrowserWindow }, id) => {
+    Menu.getApplicationMenu().getMenuItemById(`command-${id}`).click();
+    // Wait for earlier menu IPC on this channel before the test changes focus.
+    BrowserWindow.getAllWindows()[0].webContents.send('meki:command', 'test-heading-menu-barrier');
+  }, command);
+  await page.waitForFunction(() => document.documentElement.dataset.testMenuProcessed === 'true');
+}
 try {
   app = await electron.launch({ executablePath: process.env.MEKI_EXECUTABLE || require('electron'), args: process.env.MEKI_EXECUTABLE ? ['--open', file] : [root, '--open', file], env, timeout: 30000 });
   page = await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
@@ -66,11 +83,11 @@ try {
   pass('a source selection formats only the selected lines and can return them to paragraph text');
 
   const unchanged = await sourceText();
-  await action('find'); await page.locator('#find-query').fill('search'); await page.keyboard.press(`${mod}+1`);
-  await app.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById('command-format-h1').click());
+  await action('find'); await page.locator('#find-query').fill('search');
+  await pressAndClickMenu(`${mod}+1`, 'format-h1');
   assert.equal(await sourceText(), unchanged); assert.equal(await page.locator('#find-query').inputValue(), 'search'); await action('find-close');
   await action('shortcut-settings'); await page.locator('#shortcuts-dialog').waitFor({ state: 'visible' });
-  await page.keyboard.press(`${mod}+2`); await app.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById('command-format-h2').click());
+  await pressAndClickMenu(`${mod}+2`, 'format-h2');
   assert.equal(await sourceText(), unchanged); assert.equal(await page.locator('#shortcuts-dialog').isVisible(), true);
   await page.locator('[data-shortcut-id="format-h2"][data-shortcut-action="record"]').click(); await page.keyboard.press(`${mod}+j`);
   await page.waitForFunction(() => document.querySelector('#shortcut-feedback')?.textContent === '快捷键已保存。');
