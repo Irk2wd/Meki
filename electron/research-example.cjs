@@ -8,6 +8,7 @@ const exampleProject = {
   title: '实时渲染性能研究',
   description: '研究遮挡剔除对 GPU 帧时间的影响。以下记录与数值为示例数据。',
   timezone: 'Asia/Shanghai',
+  start: '2026-11-01',
   instructions: [
     '每个完成的运行写一条实验记录。以运行的实际日期和固定 ID 登记，记录场景、显卡和分辨率。',
     'GPU 帧时间使用毫秒。缺少有效测量时在正文解释原因，保留原始配置、日志或报告的相对链接。',
@@ -16,7 +17,9 @@ const exampleProject = {
   phases: [
     { id: 'baseline', title: '基线测量', start: '2026-11-02', end: '2026-11-06' },
     { id: 'exploration', title: '方案探索', start: '2026-11-05', end: '2026-11-13' },
-    { id: 'validation', title: '复测与验证', start: '2026-11-12', end: '2026-11-18' },
+    { id: 'validation', title: '复测与验证', start: '2026-11-12', end: '2026-11-18',
+      description: '固定相机轨迹和评测口径，在树林场景复测遮挡剔除和基线的表现。',
+      goals: [{ text: '补采同视角基线' }, { text: '复核逐轮计时' }] },
   ],
   recordTypes: [
     {
@@ -35,6 +38,7 @@ const exampleProject = {
       fields: [],
       template: '# {{title}}\n\n## 结论\n\n## 依据\n\n{{sources}}\n\n## 下一步\n',
     },
+    { id: 'group-meeting', label: '组会汇报', kind: 'event', icon: 'presentation', fields: [], template: '# {{title}}\n\n## 汇报要点\n\n## 后续事项\n' },
   ],
   views: [
     { id: 'timeline', label: '时间线', layout: 'timeline', order: 'oldest', fieldIds: ['scene', 'gpu_ms', 'outcome'] },

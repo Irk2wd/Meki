@@ -1,7 +1,17 @@
 export type ResearchValue = string | number | boolean;
 
 export interface ResearchRange { start: string; end: string }
-export interface ResearchPhase { id: string; title: string; start: string; end?: string | null }
+export interface ResearchGoal { text: string; done?: boolean }
+export interface ResearchPhase {
+  id: string;
+  title: string;
+  start: string;
+  end?: string | null;
+  description?: string;
+  goals?: ResearchGoal[];
+}
+export type ResearchGoalMode = 'hidden' | 'list' | 'checklist';
+export type ResearchWidth = 'comfort' | 'edge';
 export interface ResearchField {
   id: string;
   label: string;
@@ -18,7 +28,8 @@ export interface ResearchField {
 export interface ResearchType {
   id: string;
   label: string;
-  kind: 'entry' | 'summary' | 'comparison';
+  kind: 'entry' | 'summary' | 'comparison' | 'event';
+  icon?: string;
   description?: string;
   fields: ResearchField[];
   template: string;
@@ -95,6 +106,8 @@ export interface ResearchProject {
   title: string;
   description?: string;
   timezone: string;
+  start?: string;
+  phaseGoals?: ResearchGoalMode;
   instructions?: string[];
   phases: ResearchPhase[];
   recordTypes: ResearchType[];

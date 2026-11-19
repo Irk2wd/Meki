@@ -16,7 +16,10 @@
 .research-comparison-editor textarea { display: block; margin-block: 4px 0; min-height: 85px; resize: vertical; }
 .research-comparison-caption-field { display: block; margin-top: 12px; color: var(--soft); font-size: 12px; }
 
-#research-comparison-dialog { width: min(1320px, calc(100vw - 30px)); max-height: calc(100vh - 36px); overflow: auto; }
+#research-comparison-dialog { width: min(1140px, calc(100vw - clamp(32px, 10vw, 140px))); max-height: calc(100vh - 36px); overflow: auto; border-radius: 16px; }
+#research-comparison-dialog[data-width="edge"] { width: calc(100vw - 16px); max-width: none; max-height: calc(100vh - 18px); }
+.research-comparison-heading { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.research-comparison-heading button { flex: none; }
 #research-comparison-dialog .dialog-heading { margin-bottom: 12px; }
 #research-comparison-dialog .dialog-heading h2 { margin: 0; overflow-wrap: anywhere; }
 #research-comparison-dialog .dialog-heading time { display: block; margin-top: 4px; font: 11px var(--mono); color: var(--soft); }

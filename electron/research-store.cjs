@@ -635,6 +635,10 @@ const projectGuide = `# mekiR 研究项目的 Agent 指引
 
 ## 修改字段、模板和视图
 
+阶段可配置 \`description\` 和 \`goals: [{text, done?}]\`。项目的 \`phaseGoals\` 可设为 \`hidden\`、\`list\` 或 \`checklist\`，切换显示方式会保留已录入的目标。时间线截至项目时区的今天，起点由 \`project.start\` 指定，省略时从阶段和记录推断。
+
+组会和审阅等事件使用 \`kind: "event"\` 的记录类型。用 \`describe.format.timeline.events.icons\` 查看可选图标。类型的 \`icon\` 保存图标 ID。用 \`batch\` 写入事件类型、实际发生日期、阶段 ID、字段和 Markdown 正文。
+
 从 \`describe.project\` 复制配置，按任务需求修改 \`instructions\`、记录类型、字段、模板、阶段或视图。用 \`configure <目录> --input <文件或 ->\` 提交包含 \`ifRevision\` 和 \`project\` 的对象，\`ifRevision\` 取自 \`describe.revision\`。
 
 在 \`phases\` 中填写必需的 \`start\`。结束日期未定时省略 \`end\` 或将其设为 \`null\`，确认结束后填入实际日期。阶段从开始日期起显示为进行中，固定结束日期当天仍计入。

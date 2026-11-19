@@ -3,6 +3,7 @@
 const { isDeepStrictEqual } = require('node:util');
 const { DOCUMENT_SCHEME, RESEARCH_ID } = require('./research-links.mjs');
 const { comparisonImages, comparisonLimits, evidenceImageMime } = require('./research-comparison.mjs');
+const eventIcons = require('./research-event-icons.json');
 
 const METADATA = '.mekir';
 const MANIFEST = `${METADATA}/project.json`;
@@ -149,11 +150,15 @@ function validateField(rule, typeId) {
 }
 
 function validateProject(project) {
-  object(project, 'project', ['version', 'id', 'title', 'description', 'timezone', 'instructions', 'phases', 'recordTypes', 'views', 'defaultView', 'evidenceSources', 'savedFilters']);
+  object(project, 'project', ['version', 'id', 'title', 'description', 'timezone', 'start', 'phaseGoals', 'instructions', 'phases', 'recordTypes', 'views', 'defaultView', 'evidenceSources', 'savedFilters']);
   assert(project.version === 1, 'project.version must be 1.');
   id(project.id, 'project.id');
   string(project.title, 'project.title');
   if (project.description !== undefined) string(project.description, 'project.description', { limit: 2000 });
+  if (project.start !== undefined) date(project.start, 'project.start');
+  if (project.phaseGoals !== undefined) {
+    assert(['hidden', 'list', 'checklist'].includes(project.phaseGoals), 'project.phaseGoals must be hidden, list, or checklist.');
+  }
   string(project.timezone, 'project.timezone');
   try { new Intl.DateTimeFormat('en', { timeZone: project.timezone }); }
   catch { throw new Error('project.timezone must be a valid time zone such as Asia/Shanghai.'); }
@@ -163,22 +168,35 @@ function validateProject(project) {
   }
   array(project.phases, 'project.phases', 64);
   for (const phase of project.phases) {
-    object(phase, 'phase', ['id', 'title', 'start', 'end']);
+    object(phase, 'phase', ['id', 'title', 'start', 'end', 'description', 'goals']);
     id(phase.id, 'phase.id');
     const label = `phases.${phase.id}`;
     string(phase.title, `${label}.title`);
     if (phase.end == null) date(phase.start, `${label}.start`);
     else range(phase.start, phase.end, label);
+    if (phase.description !== undefined) string(phase.description, `${label}.description`, { limit: 2000 });
+    if (phase.goals !== undefined) {
+      array(phase.goals, `${label}.goals`, 32);
+      for (const goal of phase.goals) {
+        object(goal, 'phase goal', ['text', 'done']);
+        string(goal.text, 'phase goal text', { limit: 240 });
+        if (goal.done !== undefined) assert(typeof goal.done === 'boolean', 'phase goal done must be a boolean.');
+      }
+    }
   }
   unique(project.phases.map(phase => phase.id), 'project.phases');
 
   array(project.recordTypes, 'project.recordTypes', 24);
   assert(project.recordTypes.length > 0, 'Define at least one record type.');
   for (const type of project.recordTypes) {
-    object(type, 'record type', ['id', 'label', 'kind', 'description', 'fields', 'template']);
+    object(type, 'record type', ['id', 'label', 'kind', 'icon', 'description', 'fields', 'template']);
     id(type.id, 'record type.id');
     string(type.label, `recordTypes.${type.id}.label`);
-    assert(['entry', 'summary', 'comparison'].includes(type.kind), `recordTypes.${type.id}.kind must be entry, summary, or comparison.`);
+    assert(['entry', 'summary', 'comparison', 'event'].includes(type.kind), `recordTypes.${type.id}.kind must be entry, summary, comparison, or event.`);
+    if (type.icon !== undefined) {
+      assert((type.kind === 'event' || type.kind === 'comparison') && typeof type.icon === 'string' && Object.hasOwn(eventIcons, type.icon),
+        `recordTypes.${type.id}.icon must be a configured timeline icon on an event or comparison type.`);
+    }
     if (type.description !== undefined) string(type.description, `recordTypes.${type.id}.description`, { limit: 1000 });
     array(type.fields, `recordTypes.${type.id}.fields`, 32);
     type.fields.forEach(rule => validateField(rule, type.id));
@@ -316,6 +334,7 @@ function relationshipIssues(record, project) {
   if (type?.kind === 'comparison') {
     if (!record.comparison || !record.phaseId) issues.push('An image comparison needs a grid and a research phase.');
   } else if (record.comparison) issues.push('A comparison grid requires a comparison record type.');
+  if (type?.kind === 'event' && !record.phaseId) issues.push('A timeline event needs a research phase.');
   if (record.phaseId && !project.phases.some(phase => phase.id === record.phaseId)) issues.push(`Unknown phase: ${record.phaseId}.`);
   if (record.relatedProjects?.length) {
     if (type?.kind !== 'summary') issues.push('Only phase summaries can link to other projects.');

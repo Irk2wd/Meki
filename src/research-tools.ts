@@ -1,5 +1,6 @@
 import { ht, t } from '../electron/i18n.mjs';
-import type { ResearchEntry, ResearchFilter, ResearchImportPreview, ResearchPhase, ResearchRelationKind, ResearchSnapshot } from '../shared/research';
+import eventIcons from '../electron/research-event-icons.json';
+import type { ResearchEntry, ResearchFilter, ResearchGoalMode, ResearchImportPreview, ResearchPhase, ResearchRelationKind, ResearchSnapshot, ResearchType, ResearchWidth } from '../shared/research';
 import { icon } from './icons';
 
 export const escapeResearch = (value: string | number | boolean) => String(value).replace(/[&<>"']/g, char => ({
@@ -8,6 +9,10 @@ export const escapeResearch = (value: string | number | boolean) => String(value
 
 export const researchOption = (value: string, label: string, selected: string) =>
   `<option value="${escapeResearch(value)}"${value === selected ? ' selected' : ''}>${escapeResearch(label)}</option>`;
+export const timelineIcon = (type?: ResearchType) => type?.icon || (type?.kind === 'comparison' ? 'image' : 'calendar');
+
+export interface ResearchWidths { workspace: ResearchWidth; comparison: ResearchWidth }
+const goalModes = ['hidden', 'list', 'checklist'] as const;
 
 export function relationLabels(): Record<ResearchRelationKind, string> {
   return { retest: t("复测"), replaces: t("替代"), compares: t("候选对照"), 'paper-adopted': t("论文采用"), 'paper-version': t("论文版本") };
@@ -83,17 +88,120 @@ export class ResearchTools {
     });
   }
 
-  chooseComparison(date: string, entries: ResearchEntry[], open: (id: string) => Promise<void>) {
+  chooseTimelineEvents(date: string, entries: ResearchEntry[], types: Map<string, ResearchType>, open: (id: string) => Promise<void>) {
     if (this.dialog.open) return;
-    this.show(`${heading(t("{0} 的可视化展示", date))}
-      <ul class="research-project-list">${entries.map(({ record }, index) => `<li>
-        <button type="button" data-research-comparison-choice="${record.id}"${index === 0 ? ' autofocus' : ''}>
-          ${icon('image', 17)}<strong>${escape(record.title)}</strong></button></li>`).join('')}</ul>`);
-    this.dialog.querySelectorAll<HTMLButtonElement>('[data-research-comparison-choice]').forEach(button => {
+    const comparisons = entries.every(({ record }) => record.comparison);
+    this.show(`${heading(comparisons ? t("{0} 的可视化展示", date) : t("{0} 的事件", date))}
+      <ul class="research-project-list">${entries.map(({ record }, index) => {
+        const type = types.get(record.type);
+        return `<li><button type="button" data-research-event-choice="${record.id}"${index === 0 ? ' autofocus' : ''}>
+          ${icon(record.comparison && !type ? 'image' : timelineIcon(type), 17)}<span><strong>${escape(record.title)}</strong><small aria-hidden="true">${escape(type?.label || record.type)}</small></span></button></li>`;
+      }).join('')}</ul>`);
+    this.dialog.querySelectorAll<HTMLButtonElement>('[data-research-event-choice]').forEach(button => {
       button.addEventListener('click', () => {
         this.dialog.close();
-        void open(button.dataset.researchComparisonChoice!).catch(error => this.notify(String(error), true));
+        void open(button.dataset.researchEventChoice!).catch(error => this.notify(String(error), true));
       });
+    });
+  }
+
+  editTimelineSettings({ root, project, revision }: ResearchSnapshot, widths: ResearchWidths, saveWidths: (next: ResearchWidths) => void, focus: () => void) {
+    if (this.dialog.open) return;
+    const widthOptions = (selected: ResearchWidth) => option('comfort', t("舒适"), selected) + option('edge', t("贴边"), selected);
+    const goalLabels = [t("隐藏"), t("仅列出"), t("可勾选")];
+    this.show(`<form>${heading(t("时间线设置"))}
+      <div class="research-form-grid">
+        <label>${ht("页面宽度")}<select name="workspace" autofocus>${widthOptions(widths.workspace)}</select></label>
+        <label>${ht("可视化弹窗宽度")}<select name="comparison">${widthOptions(widths.comparison)}</select></label>
+        <label>${ht("阶段目标")}<select name="goals">${goalModes.map((mode, i) => option(mode, goalLabels[i], project.phaseGoals ?? 'list')).join('')}</select></label>
+        <label>${ht("项目开始日期（可选）")}<input name="start" type="date" value="${escape(project.start || '')}"></label>
+      </div>${feedback}<div class="research-actions">
+        <button type="button" class="secondary-button" data-tools-close>${ht("取消")}</button>
+        <button type="submit" class="primary-button">${ht("保存")}</button></div></form>`);
+    this.submit(async data => {
+      const phaseGoals = data.get('goals') as ResearchGoalMode;
+      const start = String(data.get('start'));
+      if (phaseGoals !== (project.phaseGoals ?? 'list') || start !== (project.start ?? '')) {
+        const updated = { ...project, phaseGoals };
+        if (start) updated.start = start;
+        else delete updated.start;
+        await window.meki.configureResearchProject(root, { ifRevision: revision, project: updated });
+      }
+      saveWidths({ workspace: data.get('workspace') as ResearchWidth, comparison: data.get('comparison') as ResearchWidth });
+      await this.refresh();
+      this.dialog.close();
+      focus();
+    });
+  }
+
+  editEventTypes({ root, project, revision, comparisonType }: ResearchSnapshot, focus: () => void) {
+    if (this.dialog.open) return;
+    const types = [...project.recordTypes.filter(type => type.kind === 'event' || type.kind === 'comparison')];
+    const implicitComparison = !types.some(type => type.kind === 'comparison');
+    if (implicitComparison) types.unshift(comparisonType);
+    const iconLabel = (key: string) => t(eventIcons[key as keyof typeof eventIcons]);
+    const preview = (key: string) => `${icon(key, 17)}<span>${escape(iconLabel(key))}</span>${icon('down', 14)}`;
+    const row = (type: ResearchType) => `<div class="research-event-type-row" data-event-type="${type.id}" data-event-icon="${timelineIcon(type)}">
+      <label>${ht("类型名称")}<input maxlength="240" required value="${escape(type.label)}"></label>
+      <div class="research-event-type-icon"><span>${ht("图标")}</span>
+        <button type="button" class="secondary-button" data-pick-event-icon aria-expanded="false" aria-label="${ht("选择图标")}">${preview(timelineIcon(type))}</button></div>
+      <div class="research-event-icon-choices" role="group" aria-label="${ht("备选图标")}" hidden></div>
+    </div>`;
+    this.show(`<form>${heading(t("项目事件类型"))}
+      <div class="research-event-type-list">${types.map(row).join('')}</div>
+      <button type="button" class="secondary-button" data-add-event-type>${icon('plus', 14)} ${ht("添加类型")}</button>
+      ${feedback}<div class="research-actions">
+        <button type="button" class="secondary-button" data-tools-close>${ht("取消")}</button>
+        <button type="submit" class="primary-button">${ht("保存")}</button></div></form>`, 'research-event-types-dialog');
+    const form = this.dialog.querySelector('form')!;
+    const list = form.querySelector('.research-event-type-list')!;
+    const closePicker = (button: HTMLButtonElement) => {
+      button.setAttribute('aria-expanded', 'false');
+      button.closest('.research-event-type-row')!.querySelector<HTMLElement>('.research-event-icon-choices')!.hidden = true;
+    };
+    form.addEventListener('click', event => {
+      const button = (event.target as Element).closest('button');
+      if (!button || this.submitting) return;
+      if ('addEventType' in button.dataset) {
+        const type: ResearchType = { id: `event-${crypto.randomUUID()}`, label: '', kind: 'event', icon: 'calendar', fields: [], template: '# {{title}}\n' };
+        types.push(type);
+        list.insertAdjacentHTML('beforeend', row(type));
+        list.lastElementChild?.querySelector('input')?.focus();
+      } else if ('pickEventIcon' in button.dataset) {
+        const opening = button.getAttribute('aria-expanded') === 'false';
+        form.querySelectorAll<HTMLButtonElement>('[data-pick-event-icon][aria-expanded=true]').forEach(closePicker);
+        if (!opening) return;
+        const row = button.closest<HTMLElement>('.research-event-type-row')!;
+        const choices = row.querySelector<HTMLElement>('.research-event-icon-choices')!;
+        choices.innerHTML = Object.keys(eventIcons).map(key => `<button type="button" data-event-icon-option="${key}"
+          aria-pressed="${key === row.dataset.eventIcon}">${icon(key, 18)}<span>${escape(iconLabel(key))}</span></button>`).join('');
+        choices.hidden = false;
+        button.setAttribute('aria-expanded', 'true');
+        choices.querySelector<HTMLElement>('[aria-pressed=true]')?.focus({ preventScroll: true });
+      } else if (button.dataset.eventIconOption) {
+        const row = button.closest<HTMLElement>('.research-event-type-row')!;
+        const picker = row.querySelector<HTMLButtonElement>('[data-pick-event-icon]')!;
+        row.dataset.eventIcon = button.dataset.eventIconOption;
+        picker.innerHTML = preview(row.dataset.eventIcon);
+        closePicker(picker);
+        picker.focus({ preventScroll: true });
+      }
+    });
+    this.submit(async () => {
+      const edited = [...list.querySelectorAll<HTMLElement>('.research-event-type-row')].flatMap((row, i) => {
+        const type = types[i], label = row.querySelector('input')!.value.trim(), glyph = row.dataset.eventIcon!;
+        if (!label) throw new Error(t("请填写事件类型名称。"));
+        if (implicitComparison && type === comparisonType && label === type.label && glyph === timelineIcon(type)) return [];
+        return [{ ...type, label, icon: glyph }];
+      });
+      const changes = new Map(edited.map(type => [type.id, type]));
+      const recordTypes = project.recordTypes.map(type => changes.get(type.id) ?? type);
+      const existing = new Set(recordTypes.map(type => type.id));
+      recordTypes.push(...edited.filter(type => !existing.has(type.id)));
+      await window.meki.configureResearchProject(root, { ifRevision: revision, project: { ...project, recordTypes } });
+      await this.refresh();
+      this.dialog.close();
+      focus();
     });
   }
 
@@ -105,6 +213,8 @@ export class ResearchTools {
         <label class="wide">${ht("阶段名称")}<input name="title" value="${escapeResearch(original?.title ?? '')}" required maxlength="240" autofocus></label>
         <label>${ht("开始日期")}<input name="start" type="date" value="${escapeResearch(original?.start ?? today)}" required></label>
         <label>${ht("结束日期（可选）")}<input name="end" type="date" value="${escapeResearch(original?.end ?? '')}"></label>
+        <label class="wide">${ht("阶段说明")}<textarea name="description" rows="3" maxlength="2000">${escape(original?.description || '')}</textarea></label>
+        ${project.phaseGoals !== 'hidden' ? `<label class="wide">${ht("阶段目标（每行一项）")}<textarea name="goals" rows="4">${escape(original?.goals?.map(goal => goal.text).join('\n') || '')}</textarea></label>` : ''}
       </div>
       ${feedback}<div class="research-actions">
         <button type="button" class="secondary-button" data-tools-close>${ht("取消")}</button>
@@ -114,7 +224,13 @@ export class ResearchTools {
       const title = String(data.get('title')).trim();
       const start = String(data.get('start')), end = String(data.get('end'));
       if (end && end < start) throw new Error(t("结束日期不能早于开始日期。"));
-      const phase: ResearchPhase = { id, title, start, ...(end ? { end } : {}) };
+      const description = String(data.get('description')).trim();
+      const goalText = data.get('goals');
+      const previous = original?.goals || [];
+      const goals = goalText === null ? previous : String(goalText).split(/\r?\n/).map(value => value.trim()).filter(Boolean)
+        .map(text => previous.find(goal => goal.text === text) || { text });
+      const phase: ResearchPhase = { id, title, start, ...(end ? { end } : {}),
+        ...(description ? { description } : {}), ...(goals.length ? { goals } : {}) };
       const phases = original ? project.phases.map(item => item.id === id ? phase : item) : [...project.phases, phase];
       await window.meki.configureResearchProject(root, { ifRevision: revision, project: { ...project, phases } });
       await this.refresh();

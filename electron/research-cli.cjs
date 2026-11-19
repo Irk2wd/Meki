@@ -87,6 +87,16 @@ async function main(args) {
         },
         relationKinds: RELATION_KINDS, archiveFilterFields: RUN_FILTER_FIELDS,
         phase: { start: 'required inclusive date', end: 'inclusive date when known. Omit or set to null for an ongoing or planned phase.' },
+        timeline: {
+          start: 'Optional project.start (inclusive YYYY-MM-DD). Otherwise inferred from phases and dated records. The visible timeline ends on today in project.timezone.',
+          phaseGoals: 'project.phaseGoals: hidden, list (default), or checklist. Changing the display preserves saved goals.',
+          phaseDetails: { description: 'optional text', goals: [{ text: 'goal text', done: 'optional JSON boolean' }] },
+          events: {
+            kind: 'Use project.recordTypes with kind event for dated records, or comparison for image grids.',
+            icons: Object.keys(require('./research-event-icons.json')),
+            record: 'Use batch with the configured type ID, title, occurrence date, phaseId, fields, and Markdown body.',
+          },
+        },
         comparison: {
           type: comparisonType(project).id, phaseId: 'required phase ID', body: 'Markdown caption', limits: comparisonLimits,
           comparison: { columns: ['column label'], rows: [{ label: 'row label', images: ['indexed image evidence ID or null for an empty cell'] }] },

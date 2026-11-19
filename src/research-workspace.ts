@@ -3,7 +3,7 @@ import { comparisonImages } from '../electron/research-comparison.mjs';
 import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSnapshot, ResearchType, ResearchValue, ResearchView } from '../shared/research';
 import { icon } from './icons';
 import { ComparisonGridEditor, ComparisonViewer } from './research-comparison';
-import { escapeResearch as escape, relationLabels, researchOption as option, ResearchTools, runFields } from './research-tools';
+import { escapeResearch as escape, relationLabels, researchOption as option, ResearchTools, runFields, timelineIcon, type ResearchWidths } from './research-tools';
 import './research-workspace.css';
 
 const errorText = (error: unknown) => String(error).replace(/^Error: (?:Error invoking remote method '[^']+': Error: )?/, '');
@@ -24,6 +24,7 @@ const rangePresets = [
 type RangePreset = typeof rangePresets[number];
 type TimelineRange = ResearchRange | RangePreset;
 const pageSizeKey = 'mekir.research.phasesPerPage';
+const widthsKey = 'mekir.research.widths';
 const defaultPageSize = 10;
 const validPageSize = (size: number) => Number.isSafeInteger(size) && size > 0;
 
@@ -35,6 +36,13 @@ function savedPageSize() {
     if (validPageSize(size)) return size;
   } catch { /* Display preferences are optional. */ }
   return defaultPageSize;
+}
+
+function savedWidths(): ResearchWidths {
+  try {
+    const saved = JSON.parse(localStorage.getItem(widthsKey) || '{}');
+    return { workspace: saved.workspace === 'comfort' ? 'comfort' : 'edge', comparison: saved.comparison === 'comfort' ? 'comfort' : 'edge' };
+  } catch { return { workspace: 'edge', comparison: 'edge' }; }
 }
 
 function projectToday(timeZone: string) {
@@ -62,6 +70,30 @@ function resolveTimelineRange(selection: TimelineRange | undefined, today: strin
   start.setUTCMonth(start.getUTCMonth() - selection.amount + 1, 0);
   start.setUTCDate(Math.min(day, start.getUTCDate()) + 1);
   return { start: start.toISOString().slice(0, 10), end: today };
+}
+
+function timelineBounds({ project, records }: ResearchSnapshot, today: string): ResearchRange {
+  const first = project.start ?? [...project.phases.map(phase => phase.start), ...records.map(({ record }) => record.date)]
+    .reduce((earliest, date) => date < earliest ? date : earliest, today);
+  return { start: first < today ? first : today, end: today };
+}
+
+function clipRange(range: ResearchRange | undefined, bounds: ResearchRange) {
+  if (!range) return bounds;
+  const clip = (date: string) => date < bounds.start ? bounds.start : date > bounds.end ? bounds.end : date;
+  return { start: clip(range.start), end: clip(range.end) };
+}
+
+function shiftRange(bounds: ResearchRange, start: number, length: number): ResearchRange {
+  const first = dayNumber(bounds.start), last = dayNumber(bounds.end);
+  const days = Math.max(1, Math.min(length, last - first + 1));
+  const left = Math.max(first, Math.min(start, last - days + 1));
+  return { start: isoDay(left), end: isoDay(left + days - 1) };
+}
+
+function phaseInRange(phase: ResearchPhase, range: ResearchRange, today: string, events?: ResearchEntry[]) {
+  return (phase.start > today ? range.end === today : overlaps(phaseSpan(phase, today), range))
+    || events?.some(({ record }) => containsDay(range, record.date));
 }
 
 function fieldValue(rule: ResearchField, value: ResearchValue) {
@@ -94,11 +126,15 @@ function fieldRuleDetails(rule: ResearchField) {
 interface TimelineOptions {
   activePhase: string;
   today: string;
-  range?: ResearchRange;
+  range: ResearchRange;
+  bounds: ResearchRange;
+  selectedRange: boolean;
   presetId?: RangePreset['id'];
   page: number;
   pageSize: number | null;
   canCreatePhase: boolean;
+  canCreateEvent: boolean;
+  types: Map<string, ResearchType>;
 }
 
 const phaseGroupOrder = { ongoing: 0, ended: 1, upcoming: 2 } as const;
@@ -115,22 +151,20 @@ function experimentEnded({ fields, run }: ResearchEntry['record'], phaseEnded: b
   return phaseEnded;
 }
 
-function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByPhase: Map<string, ResearchEntry[]>,
-  { activePhase, today, range: selection, presetId, page: requestedPage, pageSize, canCreatePhase }: TimelineOptions) {
+function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByPhase: Map<string, ResearchEntry[]>, eventsByPhase: Map<string, ResearchEntry[]>,
+  { activePhase, today, range, bounds, selectedRange, presetId, page: requestedPage, pageSize, canCreatePhase, canCreateEvent, types }: TimelineOptions) {
   const spans = phases.map(phase => ({ phase, span: phaseSpan(phase, today) }));
-  const comparisons = [...progressByPhase.values()].flat().filter(({ record }) => record.comparison);
-  const dates = [...spans.flatMap(({ span }) => [span.start, span.end]), ...[...entries, ...comparisons].map(({ record }) => record.date)].sort();
-  const range = selection || { start: dates[0] || today, end: dates.at(-1) || today };
   const start = dayNumber(range.start), end = dayNumber(range.end), span = end - start + 1;
+  const fullRange = range.start === bounds.start && range.end === bounds.end;
   const crossesYear = new Date(start * 86400000).getUTCFullYear() !== new Date(end * 86400000).getUTCFullYear();
   const position = (date: string, offset = 0) => (dayNumber(date) - start + offset) * 100 / span;
   const dot = (date: string, ended: boolean) => `<i class="research-timeline-dot${ended ? ' is-ended' : ''}" style="--point:${position(date, 0.5)}%"></i>`;
   const hasToday = containsDay(range, today);
   const ticks = [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(start + (end - start) * i / 4)))];
-  const ordered = spans.filter(({ span }) => overlaps(span, range)).map(({ phase, span }) => {
+  const ordered = spans.filter(({ phase }) => phaseInRange(phase, range, today, eventsByPhase.get(phase.id))).map(({ phase, span }) => {
     const assigned = entries.filter(({ record }) => record.phaseId === phase.id);
     const latest = [...assigned, ...(progressByPhase.get(phase.id) || [])]
-      .reduce((date, { record }) => record.date > date ? record.date : date, '');
+      .reduce((date, { record }) => record.date <= today && record.date > date ? record.date : date, '');
     const group: keyof typeof phaseGroupOrder = today < span.start ? 'upcoming' : today > span.end ? 'ended' : 'ongoing';
     return { phase, span, group, latest, assigned: assigned.filter(({ record }) => containsDay(range, record.date)) };
   }).sort((a, b) => {
@@ -142,22 +176,33 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
   const limit = pageSize ?? Math.max(1, ordered.length);
   const pageCount = Math.max(1, Math.ceil(ordered.length / limit));
   const page = Math.max(1, Math.min(requestedPage, pageCount));
+  const visibleEventTypes = new Map<string, ResearchType>();
   const phaseRows = ordered.slice((page - 1) * limit, page * limit).map(({ phase, span, group, latest, assigned }) => {
     const activity = new Map<string, boolean>();
     for (const { record } of assigned) {
       activity.set(record.date, (activity.get(record.date) ?? true) && experimentEnded(record, group === 'ended'));
     }
-    const displays = new Map<string, string[]>();
-    for (const { record } of progressByPhase.get(phase.id) || []) {
-      if (!record.comparison || !containsDay(range, record.date)) continue;
-      const titles = displays.get(record.date);
-      if (titles) titles.push(record.title);
-      else displays.set(record.date, [record.title]);
+    const groups = new Map<string, ResearchEntry[]>();
+    for (const event of eventsByPhase.get(phase.id) || []) {
+      if (!containsDay(range, event.record.date)) continue;
+      const type = types.get(event.record.type);
+      if (type) visibleEventTypes.set(type.id, type);
+      const group = groups.get(event.record.date);
+      if (group) group.push(event);
+      else groups.set(event.record.date, [event]);
     }
-    const markers = [...displays].sort(([a], [b]) => a.localeCompare(b)).map(([date, titles]) => {
-      const label = titles.length === 1 ? ht("打开可视化展示 {0}", escape(titles[0])) : ht("{0} 的 {1} 条可视化展示", date, titles.length);
-      return `<button type="button" class="research-timeline-comparison" style="--point:${position(date, 0.5)}%"
-        data-research-comparison-phase="${phase.id}" data-date="${date}" aria-haspopup="dialog" aria-label="${label}" title="${label}">${icon('image', 14)}</button>`;
+    const markers = [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([date, events]) => {
+      const comparisons = events.every(({ record }) => record.comparison);
+      const glyphs = [...new Map(events.map(({ record }) => [record.type,
+        record.comparison && !types.has(record.type) ? 'image' : timelineIcon(types.get(record.type))])).values()].slice(0, 2);
+      const extra = events.length - glyphs.length;
+      const title = escape(events[0].record.title);
+      const label = events.length === 1 ? (comparisons ? ht("打开可视化展示 {0}", title) : ht("打开事件 {0}", title))
+        : comparisons ? ht("{0} 的 {1} 条可视化展示", date, events.length) : ht("{0} 的 {1} 个事件", date, events.length);
+      return `<button type="button" class="research-timeline-event${comparisons ? ' research-timeline-comparison' : ''}"
+        style="--point:${position(date, 0.5)}%" data-research-timeline-events="${events.map(({ record }) => record.id).join(' ')}" data-date="${date}"
+        ${events.length > 1 || comparisons ? 'aria-haspopup="dialog"' : ''} aria-label="${label}" title="${label}">
+        ${glyphs.map(glyph => icon(glyph, 14)).join('')}${extra ? `<small aria-hidden="true">+${extra}</small>` : ''}</button>`;
     }).join('');
     const left = Math.max(0, position(span.start)), right = Math.max(0, 100 - position(span.end, 1));
     const status = group === 'ongoing' ? ht("进行中") : group === 'ended' ? ht("已结束") : ht("未开始");
@@ -165,7 +210,7 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
       <button type="button" class="research-timeline-label" data-research-phase="${phase.id}" aria-pressed="${activePhase === phase.id}">
         <strong>${escape(phase.title)} <span class="research-phase-status${group === 'ongoing' ? ' research-phase-ongoing' : ''}">${status}</span></strong>
         <small>${escape(phaseDates(phase, today, true))} · ${ht("{0} 条实验", assigned.length)}</small>${latest ? `<small>${ht("最近进展 {0}", escape(formatDay(dayNumber(latest), latest.slice(0, 4) !== today.slice(0, 4))))}</small>` : ''}</button>
-      <div class="research-timeline-track"><span aria-hidden="true"><i class="research-timeline-bar" style="--left:${left}%;--right:${right}%"></i>${[...activity].map(([date, ended]) => dot(date, ended)).join('')}
+      <div class="research-timeline-track" data-research-track${fullRange ? '' : ' data-research-pan'}><span aria-hidden="true">${overlaps(span, range) ? `<i class="research-timeline-bar" style="--left:${left}%;--right:${right}%"></i>` : ''}${[...activity].map(([date, ended]) => dot(date, ended)).join('')}
         ${hasToday ? `<i class="research-today-line" style="--point:${position(today, 0.5)}%"></i>` : ''}</span>${markers}</div>
     </div>`;
   }).join('');
@@ -190,14 +235,23 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
     <div class="research-section-heading"><h2 id="research-range-title">${ht("研究阶段")}</h2>
       <div class="research-actions"><div class="research-range-presets" role="group" aria-label="${ht("快捷时间范围")}">${presetButtons}</div>
         <button type="button" class="secondary-button" data-research-range data-start="${range.start}" data-end="${range.end}"
-        title="${ht("选择时间范围")}"${selection ? ` aria-label="${ht("选择时间范围")} · ${escape(rangeText(range))}"` : ''}>${icon('timeline', 14)}${selection ? escape(rangeText(range)) : ht("选择时间范围")}</button>
-        ${selection ? `<button type="button" class="secondary-button" data-research-reset-range>${ht("全部时段")}</button>` : ''}
+        title="${ht("选择时间范围")}" aria-label="${ht("选择时间范围")} · ${escape(rangeText(range))}">${icon('timeline', 14)}${escape(rangeText(range))}</button>
+        ${selectedRange ? `<button type="button" class="secondary-button" data-research-reset-range>${ht("全部时段")}</button>` : ''}
+        <button type="button" class="secondary-button" data-research-event-types>${icon('calendar', 14)}${ht("事件类型")}</button>
+        ${canCreateEvent ? `<button type="button" class="secondary-button" data-research-new="event">${icon('plus', 14)}${ht("添加事件")}</button>` : ''}
         ${canCreatePhase ? `<button type="button" class="secondary-button" data-research-new-phase>${icon('plus', 14)}${ht("新建阶段")}</button>` : ''}</div>
     </div>
-    ${phaseRows ? `<div class="research-timeline-meta"><div class="research-legend"><span>${ht("阶段时段")}</span><span class="research-key-point">${ht("实验日期")}</span>${hasToday ? `<span class="research-key-today">${ht("今天")}</span>` : ''}</div>${pager}</div>
-    <div class="research-timeline-axis" aria-hidden="true"><span></span><div class="research-timeline-ruler"${span > 1 ? ` data-research-axis data-start="${start}" data-end="${end}" title="${ht("拖动刻度选取时间范围")}"` : ''}>
+    <div class="research-timeline-meta"><div class="research-legend"><span>${ht("阶段时段")}</span><span class="research-key-point">${ht("实验日期")}</span>${hasToday ? `<span class="research-key-today">${ht("今天")}</span>` : ''}
+      ${[...visibleEventTypes.values()].map(type => `<span class="research-key-event">${icon(timelineIcon(type), 13)}${escape(type.label)}</span>`).join('')}</div>
+      <div class="research-axis-controls" role="group" aria-label="${ht("时间轴平移与缩放")}">
+        ${[['prev', t("向前移动时间轴"), icon('back', 15), range.start === bounds.start],
+          ['next', t("向后移动时间轴"), icon('chevron', 15), range.end === bounds.end],
+          ['out', t("缩小时间轴"), '−', fullRange], ['in', t("放大时间轴"), '+', span === 1]].map(([id, label, glyph, disabled]) =>
+          `<button type="button" class="icon-button" data-research-axis-action="${id}" aria-label="${escape(String(label))}" title="${escape(String(label))}"${disabled ? ' disabled' : ''}>${glyph}</button>`).join('')}
+      </div>${phaseRows ? pager : ''}</div>
+    <div class="research-timeline-axis" aria-hidden="true"><span></span><div class="research-timeline-ruler" data-research-axis${fullRange ? '' : ` data-research-pan title="${ht("拖动时间轴")}"`}>
       ${ticks.map((day, i) => `<span class="${ticks.length === 1 ? '' : i === 0 ? 'first' : i === ticks.length - 1 ? 'last' : 'middle'}" style="--tick:${(day - start + 0.5) * 100 / span}%">${escape(formatDay(day, crossesYear))}</span>`).join('')}
-    </div></div>${phaseRows}` : `<p class="research-empty-list">${ht("这个时段内没有研究阶段。")}</p>`}
+    </div></div>${phaseRows || `<p class="research-empty-list">${ht("这个时段内没有研究阶段。")}</p>`}
   </section>`;
   return { html, page };
 }
@@ -247,7 +301,7 @@ interface Hooks {
 }
 
 interface ViewPosition { phaseId: string; date: string; scroll: number; page: number; range?: TimelineRange }
-interface AxisBrush { axis: HTMLElement; pointerId: number; clientX: number }
+interface AxisPan { pointerId: number; x: number; y: number; width: number; start: number; days: number; bounds: ResearchRange; moving: boolean }
 
 export class ResearchWorkspace {
   private panel = document.createElement('section');
@@ -270,7 +324,9 @@ export class ResearchWorkspace {
   private phasePage = 1;
   private phasePageSize = savedPageSize();
   private recordFilter?: ResearchFilter;
-  private axisBrush?: AxisBrush;
+  private axisPan?: AxisPan;
+  private widths = savedWidths();
+  private eventLayout = new ResizeObserver(() => this.layoutTimelineEvents());
   private positions = new Map<string, ViewPosition>();
   private readerContexts = new Map<string, ResearchSnapshot>();
   private readerReturn?: { scroll: number; origin?: HTMLButtonElement };
@@ -280,6 +336,7 @@ export class ResearchWorkspace {
   private formProject: ResearchSnapshot | null = null;
   private initialFieldValues = new Map<string, string>();
   private submitting = false;
+  private savingGoals = false;
 
   constructor(private host: HTMLElement, private sidebar: HTMLElement, private hooks: Hooks) {
     this.tools = new ResearchTools(() => this.refresh(), hooks.notify);
@@ -289,6 +346,7 @@ export class ResearchWorkspace {
     this.content.className = 'research-content';
     this.panel.append(this.toolbar, this.content);
     this.host.prepend(this.panel);
+    this.eventLayout.observe(this.content);
     this.dialog.id = 'research-record-dialog';
     this.projectPicker.id = 'research-project-picker';
     this.rangePicker.id = 'research-range-picker';
@@ -309,6 +367,8 @@ export class ResearchWorkspace {
           return;
         }
         this.setPhasePageSize(target.value === '' ? null : target.valueAsNumber);
+      } else if (target.dataset.researchGoal !== undefined) {
+        void this.setGoal(Number(target.dataset.researchGoal), target.checked);
       }
     });
     this.content.addEventListener('keydown', event => {
@@ -317,12 +377,21 @@ export class ResearchWorkspace {
       event.preventDefault();
       target.blur();
     });
-    this.content.addEventListener('pointerdown', event => this.beginAxisBrush(event));
-    this.content.addEventListener('pointermove', event => this.updateAxisBrush(event));
-    this.content.addEventListener('pointerup', event => this.finishAxisBrush(event));
-    this.content.addEventListener('lostpointercapture', event => {
-      if (this.axisBrush?.pointerId === event.pointerId) this.clearAxisBrush();
+    this.content.addEventListener('pointerdown', event => this.beginAxisPan(event));
+    this.content.addEventListener('pointermove', event => this.updateAxisPan(event));
+    for (const name of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
+      this.content.addEventListener(name, event => this.finishAxisPan(event));
+    }
+    this.content.addEventListener('pointerleave', event => {
+      if (!this.axisPan?.moving) this.finishAxisPan(event);
     });
+    this.content.addEventListener('wheel', event => {
+      const axis = (event.target as Element).closest('[data-research-axis], [data-research-track]');
+      if (!axis || !(event.ctrlKey || event.metaKey) || this.hooks.blocked()) return;
+      event.preventDefault();
+      const { left, width } = axis.getBoundingClientRect();
+      this.moveAxis(event.deltaY < 0 ? 'in' : 'out', Math.max(0, Math.min(1, (event.clientX - left) / width)), false);
+    }, { passive: false });
     this.dialog.addEventListener('cancel', event => { if (this.submitting) event.preventDefault(); });
     this.dialog.addEventListener('click', event => {
       const button = (event.target as Element).closest('button');
@@ -376,7 +445,8 @@ export class ResearchWorkspace {
   }
 
   hide() {
-    this.clearAxisBrush();
+    this.axisPan = undefined;
+    this.content.classList.remove('research-axis-panning');
     this.closeReader(false);
     this.panel.hidden = this.sidebar.hidden = true;
     this.host.classList.remove('research-mode');
@@ -472,13 +542,14 @@ export class ResearchWorkspace {
     if (root) await this.tools.evidence(root, id, sourceDocument);
   }
 
-  async openReference(id: string, origin?: HTMLButtonElement) {
+  async openReference(id: string, origin?: HTMLButtonElement, back?: () => void) {
     const state = this.snapshot;
     if (!state) return;
     if (state.records.some(({ record }) => record.id === id && record.comparison)) {
       const document = await window.meki.readResearchRecord(state.root, id);
       if (this.hooks.root() !== state.root) return;
       this.comparisonViewer.show(state.root, document, {
+        width: this.widths.comparison, back,
         evidence: file => this.tools.evidence(state.root, file, undefined, t("返回对比")),
         edit: () => this.hooks.open(state.root, id, origin, true),
         error: error => this.hooks.notify(errorText(error), true),
@@ -511,19 +582,20 @@ export class ResearchWorkspace {
       this.timelineRange = undefined;
       this.phasePage = 1;
       this.recordFilter = undefined;
-      this.clearAxisBrush();
+      this.axisPan = undefined;
+      this.content.classList.remove('research-axis-panning');
       this.positions.clear();
       this.readerContexts.clear();
       this.content.scrollTop = 0;
     }
-    if (this.axisBrush) return;
+    if (this.axisPan?.moving) return;
     const number = ++this.loadNumber;
     this.loading = Boolean(root) && !this.signature;
     if (!this.signature) this.render();
     try {
       const includeLinked = !this.snapshot || this.destination(this.snapshot).page === 'summaries';
       const snapshot = root ? await window.meki.researchSnapshot(this.recordFilter, includeLinked) : null;
-      if (number !== this.loadNumber || root !== this.hooks.root() || this.axisBrush) return;
+      if (number !== this.loadNumber || root !== this.hooks.root() || this.axisPan?.moving) return;
       const signature = JSON.stringify([snapshot, this.recordFilter]);
       const today = snapshot ? projectToday(snapshot.project.timezone) : '';
       this.loading = false;
@@ -540,7 +612,7 @@ export class ResearchWorkspace {
       if (!snapshot?.project.phases.some(phase => phase.id === this.phaseId)) this.phaseId = '';
       this.render();
     } catch (error) {
-      if (number !== this.loadNumber || root !== this.hooks.root() || this.axisBrush) return;
+      if (number !== this.loadNumber || root !== this.hooks.root() || this.axisPan?.moving) return;
       this.loading = false;
       this.snapshot = null;
       const message = errorText(error);
@@ -548,13 +620,13 @@ export class ResearchWorkspace {
     }
   }
 
-  private openRangePicker(range: ResearchRange) {
+  private openRangePicker(range: ResearchRange, bounds: ResearchRange) {
     this.rangePicker.innerHTML = `<form>
       <div class="dialog-heading"><h2 id="research-range-picker-title">${ht("选择时间范围")}</h2>
         <button type="button" class="icon-button" data-research-cancel aria-label="${ht("取消")}">${icon('close', 15)}</button></div>
       <div class="research-form-grid">
-        <label>${ht("开始日期")}<input name="start" type="date" min="0001-01-01" max="9999-12-31" value="${range.start}" required autofocus></label>
-        <label>${ht("结束日期")}<input name="end" type="date" min="0001-01-01" max="9999-12-31" value="${range.end}" required></label>
+        <label>${ht("开始日期")}<input name="start" type="date" min="${bounds.start}" max="${bounds.end}" value="${range.start}" required autofocus></label>
+        <label>${ht("结束日期")}<input name="end" type="date" min="${bounds.start}" max="${bounds.end}" value="${range.end}" required></label>
       </div>
       <p class="research-form-error" role="alert"></p>
       <div class="research-actions"><button type="submit" class="primary-button">${ht("应用")}</button></div>
@@ -562,14 +634,17 @@ export class ResearchWorkspace {
     this.rangePicker.showModal();
   }
 
-  private setTimelineRange(selection?: TimelineRange) {
+  private setTimelineRange(selection?: TimelineRange, focus?: string | false) {
     this.timelineRange = selection;
     this.phasePage = 1;
-    const range = this.snapshot && resolveTimelineRange(selection, projectToday(this.snapshot.project.timezone));
+    const state = this.snapshot;
+    const today = state && projectToday(state.project.timezone);
+    const range = state && today && clipRange(resolveTimelineRange(selection, today), timelineBounds(state, today));
     if (range && this.date && !containsDay(range, this.date)) this.date = '';
     this.render();
+    if (focus === false) return;
     const button = selection && 'id' in selection ? `[data-research-range-preset="${selection.id}"]` : '[data-research-range]';
-    this.content.querySelector<HTMLButtonElement>(button)?.focus({ preventScroll: true });
+    (this.content.querySelector<HTMLButtonElement>(focus || button) || this.content.querySelector<HTMLButtonElement>(button))?.focus({ preventScroll: true });
   }
 
   private setPhasePageSize(size: number | null) {
@@ -586,39 +661,94 @@ export class ResearchWorkspace {
     this.content.querySelector<HTMLButtonElement>('[data-research-filter]')?.focus({ preventScroll: true });
   }
 
-  private beginAxisBrush(event: PointerEvent) {
-    const axis = (event.target as Element).closest<HTMLElement>('[data-research-axis]');
-    if (!axis || event.button !== 0 || this.axisBrush || this.hooks.blocked()) return;
-    this.axisBrush = { axis, pointerId: event.pointerId, clientX: event.clientX };
-    axis.setPointerCapture(event.pointerId);
+  private axisWindow() {
+    if (!this.snapshot) return;
+    const today = projectToday(this.snapshot.project.timezone);
+    const bounds = timelineBounds(this.snapshot, today);
+    const range = clipRange(resolveTimelineRange(this.timelineRange, today), bounds);
+    const start = dayNumber(range.start);
+    return { bounds, start, days: dayNumber(range.end) - start + 1 };
   }
 
-  private updateAxisBrush(event: PointerEvent) {
-    const brush = this.axisBrush;
-    if (!brush || brush.pointerId !== event.pointerId) return;
-    const bounds = brush.axis.getBoundingClientRect();
-    const fraction = (x: number) => Math.max(0, Math.min(1, (x - bounds.left) / bounds.width));
-    const left = fraction(Math.min(brush.clientX, event.clientX)), right = fraction(Math.max(brush.clientX, event.clientX));
-    brush.axis.style.setProperty('--selection-left', `${left * 100}%`);
-    brush.axis.style.setProperty('--selection-right', `${(1 - right) * 100}%`);
-    return { left, right };
+  private moveAxis(action: string, anchor = 0.5, focus = true) {
+    const viewport = this.axisWindow();
+    if (!viewport) return;
+    const { bounds, start, days } = viewport;
+    const shift = Math.max(1, Math.round(days / 5));
+    const size = action === 'in' ? Math.max(1, Math.floor(days * 2 / 3)) : action === 'out' ? Math.ceil(days * 3 / 2) : days;
+    const next = action === 'prev' ? start - shift : action === 'next' ? start + shift : Math.round(start + (days - size) * anchor);
+    const range = shiftRange(bounds, next, size);
+    if (dayNumber(range.start) === start && dayNumber(range.end) === start + days - 1) return;
+    this.setTimelineRange(range, focus ? `[data-research-axis-action="${action}"]:enabled` : false);
   }
 
-  private finishAxisBrush(event: PointerEvent) {
-    const brush = this.axisBrush;
-    if (!brush || brush.pointerId !== event.pointerId) return;
-    const selection = this.updateAxisBrush(event);
-    this.clearAxisBrush();
-    if (!selection || Math.abs(event.clientX - brush.clientX) < 4) return;
-    const start = Number(brush.axis.dataset.start), end = Number(brush.axis.dataset.end);
-    const dayAt = (fraction: number) => isoDay(Math.min(end, start + Math.floor(fraction * (end - start + 1))));
-    this.setTimelineRange({ start: dayAt(selection.left), end: dayAt(selection.right) });
+  private beginAxisPan(event: PointerEvent) {
+    const target = event.target as Element, axis = target.closest<HTMLElement>('[data-research-pan]');
+    if (!axis || target.closest('button') || event.button !== 0 || this.axisPan || this.hooks.blocked()) return;
+    const viewport = this.axisWindow(), width = axis.clientWidth;
+    if (viewport && width) this.axisPan = { ...viewport, width, pointerId: event.pointerId, x: event.clientX, y: event.clientY, moving: false };
   }
 
-  private clearAxisBrush() {
-    this.axisBrush?.axis.style.removeProperty('--selection-left');
-    this.axisBrush?.axis.style.removeProperty('--selection-right');
-    this.axisBrush = undefined;
+  private updateAxisPan(event: PointerEvent) {
+    const pan = this.axisPan;
+    if (!pan || pan.pointerId !== event.pointerId) return;
+    const distance = event.clientX - pan.x;
+    if (!pan.moving) {
+      if (Math.abs(distance) < 5 || Math.abs(distance) < Math.abs(event.clientY - pan.y)) return;
+      pan.moving = true;
+      this.content.setPointerCapture(event.pointerId);
+      this.content.classList.add('research-axis-panning');
+    }
+    const next = shiftRange(pan.bounds, pan.start - Math.round(distance / pan.width * pan.days), pan.days);
+    const current = this.axisWindow();
+    if (current && dayNumber(next.start) !== current.start) this.setTimelineRange(next, false);
+  }
+
+  private finishAxisPan(event: PointerEvent) {
+    if (this.axisPan?.pointerId !== event.pointerId) return;
+    const moving = this.axisPan.moving;
+    this.axisPan = undefined;
+    this.content.classList.remove('research-axis-panning');
+    if (moving) void this.refresh();
+  }
+
+  private layoutTimelineEvents() {
+    for (const track of this.content.querySelectorAll<HTMLElement>('[data-research-track]')) {
+      const width = track.clientWidth;
+      if (!width) continue;
+      const ends: number[] = [];
+      for (const marker of track.querySelectorAll<HTMLButtonElement>('.research-timeline-event')) {
+        const x = width * parseFloat(marker.style.getPropertyValue('--point')) / 100;
+        const size = marker.offsetWidth;
+        const left = Math.max(0, Math.min(x - size / 2, width - size));
+        const available = ends.findIndex(end => end + 5 <= left);
+        const lane = available < 0 ? ends.length : available;
+        ends[lane] = left + size;
+        marker.style.left = `${left}px`;
+        marker.style.setProperty('--event-lane', String(lane));
+      }
+      track.style.setProperty('--event-lanes', String(ends.length));
+    }
+  }
+
+  private async setGoal(index: number, done: boolean) {
+    const state = this.snapshot, phase = state?.project.phases.find(phase => phase.id === this.phaseId);
+    if (!state || !phase?.goals?.[index] || this.savingGoals) return;
+    this.savingGoals = true;
+    this.content.querySelectorAll<HTMLInputElement>('[data-research-goal]').forEach(input => { input.disabled = true; });
+    const goals = phase.goals.map((goal, i) => i === index ? { ...goal, done } : goal);
+    const phases = state.project.phases.map(item => item.id === phase.id ? { ...phase, goals } : item);
+    try {
+      await window.meki.configureResearchProject(state.root, { ifRevision: state.revision, project: { ...state.project, phases } });
+    } catch (error) { this.hooks.notify(errorText(error), true); }
+    finally {
+      this.savingGoals = false;
+      await this.refresh();
+      if (this.snapshot?.root === state.root && this.phaseId === phase.id) {
+        this.render();
+        this.content.querySelector<HTMLElement>(`[data-research-goal="${index}"]`)?.focus({ preventScroll: true });
+      }
+    }
   }
 
   private destination(state: ResearchSnapshot) {
@@ -647,6 +777,7 @@ export class ResearchWorkspace {
     const scroll = this.content.scrollTop;
     const today = state ? projectToday(state.project.timezone) : '';
     this.renderedDay = today;
+    this.panel.dataset.width = this.widths.workspace;
     const toggle = `<button type="button" class="icon-button" data-action="sidebar" aria-label="${ht("显示或隐藏侧栏")}" title="${ht("显示或隐藏侧栏")}">${icon('layout', 17)}</button>`;
     this.renderSidebar(state, active || undefined);
     this.toolbar.innerHTML = `<div>${toggle}<span>${escape(active?.label || t("科研项目"))}</span></div>
@@ -664,22 +795,35 @@ export class ResearchWorkspace {
     const view = active.view;
     const projectPage = active.page === 'timeline';
     const selection = projectPage ? this.timelineRange : undefined;
-    const dateRange = resolveTimelineRange(selection, today);
+    const bounds = timelineBounds(state, today);
+    const dateRange = projectPage ? clipRange(resolveTimelineRange(selection, today), bounds) : undefined;
+    if (dateRange && this.date && !containsDay(dateRange, this.date)) this.date = '';
+    const types = new Map(project.recordTypes.map(type => [type.id, type]));
     const summaryTypes = new Set(project.recordTypes.filter(type => type.kind === 'summary').map(type => type.id));
     const isSummary = ({ record }: ResearchEntry) => summaryTypes.has(record.type) || Boolean(record.coverage);
-    const isExperiment = (item: ResearchEntry) => !isSummary(item) && !item.record.comparison;
+    const isEvent = ({ record }: ResearchEntry) => Boolean(record.comparison) || types.get(record.type)?.kind === 'event';
+    const isExperiment = (item: ResearchEntry) => !isSummary(item) && !isEvent(item);
     const phases = project.phases.filter(phase => !view?.phaseIds || view.phaseIds.includes(phase.id));
-    const phase = phases.find(item => item.id === this.phaseId && (!dateRange || overlaps(phaseSpan(item, today), dateRange)));
-    if (!phase) this.phaseId = '';
     const summaries = records.filter(isSummary);
     const experiments = records.filter(isExperiment);
     const inView = records.filter(({ record }) => (!view?.typeIds || view.typeIds.includes(record.type)) &&
       (!view?.phaseIds || (record.phaseId && view.phaseIds.includes(record.phaseId))));
+    const eventsByPhase = new Map<string, ResearchEntry[]>();
+    for (const entry of inView) {
+      const { record } = entry;
+      if (!isEvent(entry) || !record.phaseId) continue;
+      const events = eventsByPhase.get(record.phaseId);
+      if (events) events.push(entry);
+      else eventsByPhase.set(record.phaseId, [entry]);
+    }
+    const phase = phases.find(item => item.id === this.phaseId &&
+      (!dateRange || phaseInRange(item, dateRange, today, eventsByPhase.get(item.id))));
+    if (!phase) this.phaseId = '';
     const sequence = active.page === 'summaries' ? inView.filter(isSummary) :
       active.page === 'view' ? inView : inView.filter(isExperiment);
     const matching = state.matchingIds && new Set(state.matchingIds);
     const matches = ({ record }: ResearchEntry) => !matching || matching.has(record.id);
-    const entries = sequence.filter(({ record }) => (!phase || record.phaseId === phase.id) &&
+    const entries = projectPage && !phase ? [] : sequence.filter(({ record }) => (!phase || record.phaseId === phase.id) &&
       (!this.date || record.date === this.date) && (!dateRange || containsDay(dateRange, record.date)))
       .filter(matches).sort((a, b) => view?.order === 'oldest' ? sortEntries(a, b) : sortEntries(b, a));
     const linkedSummaries = active.page === 'summaries' ? (state.linkedSummaries || [])
@@ -687,19 +831,13 @@ export class ResearchWorkspace {
       .sort((a, b) => view?.order === 'oldest' ? sortEntries(a, b) : sortEntries(b, a)) : [];
     const summariesByPhase = new Map(projectPage ? phases.map(phase => [phase.id,
       summaries.filter(({ record }) => summaryCoversPhase(record, phase, project.phases, today))]) : []);
-    const comparisonsByPhase = new Map<string, ResearchEntry[]>();
-    for (const entry of records) {
-      const { record } = entry;
-      if (!record.comparison || !record.phaseId) continue;
-      const comparisons = comparisonsByPhase.get(record.phaseId);
-      if (comparisons) comparisons.push(entry);
-      else comparisonsByPhase.set(record.phaseId, [entry]);
-    }
     const progressByPhase = new Map(projectPage ? phases.map(phase => [phase.id,
-      [...(summariesByPhase.get(phase.id) || []), ...(comparisonsByPhase.get(phase.id) || [])]]) : []);
-    const timelineView = projectPage ? timeline(phases, sequence, progressByPhase, {
-      activePhase: phase?.id || '', today, range: dateRange, presetId: selection && 'id' in selection ? selection.id : undefined,
+      [...(summariesByPhase.get(phase.id) || []), ...(eventsByPhase.get(phase.id) || [])]]) : []);
+    const timelineView = dateRange ? timeline(phases, sequence, progressByPhase, eventsByPhase, {
+      activePhase: phase?.id || '', today, range: dateRange, bounds, selectedRange: Boolean(selection),
+      presetId: selection && 'id' in selection ? selection.id : undefined, types,
       page: this.phasePage, pageSize: this.phasePageSize, canCreatePhase: !view?.phaseIds,
+      canCreateEvent: project.recordTypes.some(type => type.kind === 'event'),
     }) : undefined;
     if (timelineView) this.phasePage = timelineView.page;
     const phaseTitle = phase ? `<h2 id="research-journal-title">${escape(phase.title)}</h2><p class="research-phase-range">${escape(phaseDates(phase, today))}</p>`
@@ -716,16 +854,19 @@ export class ResearchWorkspace {
       </header>
       ${problems.length ? `<details class="research-problems"><summary>${ht("{0} 份文档无法读取", problems.length)}</summary><ul>${problems.map(item => `<li><code>${escape(item.file)}</code> · ${escape(item.message)}</li>`).join('')}</ul></details>` : ''}
       ${timelineView?.html || ''}
-      ${active.page === 'rules' ? this.renderRules(state) : active.page === 'sources' ? this.renderSources(state) : `
+      ${active.page === 'rules' ? this.renderRules(state) : active.page === 'sources' ? this.renderSources(state) :
+      projectPage && !phase ? `<div class="research-actions research-timeline-shortcuts">${newEntry}${newSummary}
+        <button type="button" class="secondary-button" data-research-filter aria-haspopup="dialog" aria-pressed="${Boolean(this.recordFilter)}">${icon('search', 14)} ${ht("研究筛选")}</button></div>` : `
         <section class="research-journal" aria-labelledby="research-journal-title">
           <div class="research-section-heading"><div>${phaseTitle}</div>
             <div class="research-actions">${active.page === 'summaries' ? newSummary : newEntry}
               ${phase && projectPage ? `<button type="button" class="secondary-button" data-research-edit-phase="${phase.id}">${icon('settings', 14)}${ht("编辑阶段")}</button>` : ''}
               ${phase || this.date || this.recordFilter ? `<button type="button" class="secondary-button" data-research-clear>${ht("清除筛选")}</button>` : ''}</div>
           </div>
+          ${phase && projectPage ? this.renderPhaseDetails(phase, project.phaseGoals) : ''}
           ${phase && projectPage ? this.renderStageSummaries((summariesByPhase.get(phase.id) || []).filter(matches), newSummary) : ''}
-          ${phase && projectPage ? this.renderPhaseComparisons((comparisonsByPhase.get(phase.id) || []).filter(matches)) : ''}
-          ${projectPage && !phase && newSummary ? `<div class="research-summary-shortcut">${newSummary}</div>` : ''}
+          ${phase && projectPage ? this.renderPhaseComparisons((eventsByPhase.get(phase.id) || []).filter(entry => entry.record.comparison && matches(entry))) : ''}
+          ${phase && projectPage ? this.renderPhaseEvents((eventsByPhase.get(phase.id) || []).filter(entry => !entry.record.comparison && matches(entry)), types) : ''}
           <div class="research-record-filters">
             ${phase && projectPage ? `<h3>${ht("实验记录")} <span>${entries.length}</span></h3>` : ''}
             <div class="research-filters"><button type="button" class="secondary-button" data-research-filter aria-haspopup="dialog" aria-pressed="${Boolean(this.recordFilter)}">${icon('search', 14)} ${ht("研究筛选")}</button>
@@ -739,7 +880,29 @@ export class ResearchWorkspace {
           ${entries.length || linkedSummaries.length ? '' : `<p class="research-empty-list">${ht("这个视图中没有符合条件的记录。")}</p>`}
         </section>`}
     `;
+    this.layoutTimelineEvents();
     this.content.scrollTop = scroll;
+  }
+
+  private renderPhaseDetails(phase: ResearchPhase, mode: ResearchSnapshot['project']['phaseGoals']) {
+    const goals = mode === 'hidden' ? [] : phase.goals || [];
+    if (!phase.description && !goals.length) return '';
+    const checklist = mode === 'checklist';
+    return `<div class="research-phase-details">
+      ${phase.description ? `<div><h3>${ht("阶段说明")}</h3><p>${escape(phase.description)}</p></div>` : ''}
+      ${goals.length ? `<div><h3>${ht("阶段目标")}${checklist ? `<span>${goals.filter(goal => goal.done).length}/${goals.length}</span>` : ''}</h3>
+        <ul${checklist ? ' class="research-goal-checklist"' : ''}>${goals.map((goal, index) => checklist
+          ? `<li><label><input type="checkbox" data-research-goal="${index}"${goal.done ? ' checked' : ''}${this.savingGoals ? ' disabled' : ''}> ${escape(goal.text)}</label></li>`
+          : `<li>${escape(goal.text)}</li>`).join('')}</ul></div>` : ''}
+    </div>`;
+  }
+
+  private renderPhaseEvents(entries: ResearchEntry[], types: Map<string, ResearchType>) {
+    if (!entries.length) return '';
+    return `<section class="research-phase-summaries"><h3>${ht("阶段事件")}</h3><ul>${entries.map(({ record }) =>
+      `<li><button type="button" data-research-record="${record.id}">${icon(timelineIcon(types.get(record.type)), 17)}
+      <span><strong>${escape(record.title)}</strong><small>${record.date} · ${escape(types.get(record.type)?.label || record.type)}</small></span>${icon('chevron', 14)}</button>
+      <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button></li>`).join('')}</ul></section>`;
   }
 
   private renderStageSummaries(entries: ResearchEntry[], create: string) {
@@ -805,6 +968,10 @@ export class ResearchWorkspace {
 
   private renderRules({ project, root, manifestFile }: ResearchSnapshot) {
     return `<section class="research-rules" aria-label="${ht("项目规则")}">
+      <div class="research-actions research-settings-actions">
+        <button type="button" class="secondary-button" data-research-settings>${icon('settings', 15)}${ht("时间线设置")}</button>
+        <button type="button" class="secondary-button" data-research-event-types>${icon('calendar', 15)}${ht("事件类型")}</button>
+      </div>
       <div><code>${escape(manifestFile)}</code> · ${escape(project.timezone)}
         <button type="button" class="secondary-button" data-research-copy-root>${ht("复制项目路径")}</button>
       </div>
@@ -851,15 +1018,21 @@ export class ResearchWorkspace {
   }
 
   private async click(event: MouseEvent) {
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button');
+    const target = event.target as Element;
+    const button = target.closest<HTMLButtonElement>('button') || (target.closest('[data-research-track]')
+      ? target.closest('.research-timeline-row')?.querySelector<HTMLButtonElement>('[data-research-phase]') : null);
     const state = this.snapshot;
     if (!button || !state || this.hooks.blocked()) return;
     const data = button.dataset;
-    if (data.researchComparisonPhase) {
-      const comparisons = state.records.filter(({ record }) => record.comparison &&
-        record.phaseId === data.researchComparisonPhase && record.date === data.date);
-      if (comparisons.length === 1) await this.openReference(comparisons[0].record.id, button);
-      else if (comparisons.length) this.tools.chooseComparison(data.date!, comparisons, id => this.openReference(id, button));
+    if (data.researchTimelineEvents) {
+      const ids = new Set(data.researchTimelineEvents.split(' '));
+      const events = state.records.filter(({ record }) => ids.has(record.id));
+      if (events.length === 1) await this.openReference(events[0].record.id, button);
+      else if (events.length) {
+        const types = new Map(state.project.recordTypes.map(type => [type.id, type]));
+        const choose = () => this.tools.chooseTimelineEvents(data.date!, events, types, id => this.openReference(id, button, choose));
+        choose();
+      }
       return;
     }
     if (data.researchRecord) {
@@ -877,6 +1050,20 @@ export class ResearchWorkspace {
       return;
     }
     if ('researchFilter' in data) { this.tools.filter(state, this.recordFilter, filter => this.setRecordFilter(filter)); return; }
+    if ('researchSettings' in data || 'researchEventTypes' in data) {
+      await this.refresh();
+      const latest = this.snapshot;
+      if (!latest || latest.root !== state.root) return;
+      const selector = 'researchSettings' in data ? '[data-research-settings]' : '[data-research-event-types]';
+      const focus = () => this.content.querySelector<HTMLButtonElement>(selector)?.focus({ preventScroll: true });
+      if ('researchEventTypes' in data) this.tools.editEventTypes(latest, focus);
+      else this.tools.editTimelineSettings(latest, this.widths, widths => {
+        this.widths = widths;
+        try { localStorage.setItem(widthsKey, JSON.stringify(widths)); } catch { /* Display preferences are optional. */ }
+        this.render();
+      }, focus);
+      return;
+    }
     if ('researchEditDescription' in data) {
       await this.refresh();
       const latest = this.snapshot;
@@ -943,7 +1130,9 @@ export class ResearchWorkspace {
       else this.render();
       this.content.querySelector<HTMLInputElement>('#research-date')?.focus({ preventScroll: true });
     } else if ('researchRange' in data) {
-      this.openRangePicker({ start: data.start!, end: data.end! });
+      this.openRangePicker({ start: data.start!, end: data.end! }, timelineBounds(state, projectToday(state.project.timezone)));
+    } else if (data.researchAxisAction) {
+      this.moveAxis(data.researchAxisAction);
     } else if ('researchResetRange' in data) {
       this.setTimelineRange();
     } else if (data.researchRangePreset) {
@@ -982,7 +1171,7 @@ export class ResearchWorkspace {
     const projects = state.knownProjects || [];
     const unavailableProjects = (record?.relatedProjects || []).filter(id => !projects.some(project => project.id === id));
     this.dialog.innerHTML = `<form>
-      <div class="dialog-heading"><h2>${escape(record ? t("编辑记录属性") : comparison ? t("新建可视化展示") : kind === 'summary' ? t("插入阶段总结") : t("新建研究记录"))}</h2>
+      <div class="dialog-heading"><h2>${escape(record ? t("编辑记录属性") : comparison ? t("新建可视化展示") : kind === 'summary' ? t("插入阶段总结") : kind === 'event' ? t("添加事件") : t("新建研究记录"))}</h2>
         <button type="button" class="icon-button" data-research-cancel aria-label="${ht("关闭") }">${icon('close', 15)}</button></div>
       <div class="research-form-grid">
         <label class="wide">${ht("记录标题")}<input name="title" required maxlength="240" value="${escape(record?.title || '')}" autofocus></label>
@@ -1067,7 +1256,7 @@ export class ResearchWorkspace {
     description.hidden = !type.description;
     this.dialog.querySelector<HTMLElement>('[data-research-date-label]')!.textContent = summary ? t("撰写日期") : t("发生日期");
     this.dialog.querySelector<HTMLElement>('[data-research-summary]')!.hidden = !summary;
-    this.input('phaseId').required = type.kind === 'comparison';
+    this.input('phaseId').required = type.kind === 'comparison' || type.kind === 'event';
     for (const key of ['start', 'end']) this.input(key).required = summary;
     const record = this.editing?.record;
     const editingSameType = record?.type === type.id;

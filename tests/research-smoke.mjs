@@ -142,9 +142,10 @@ try {
   pass('phase order keeps active phases first and sorts ended phases by end date despite later summaries');
 
   const rangeButton = page.locator('[data-research-range]');
+  assert.equal(await page.locator('.research-entry').count(), 0);
   const quickRange = (name) => page.getByRole('group', { name: '快捷时间范围' }).getByRole('button', { name, exact: true });
   for (const [name, start] of [['最近 7 天', '2026-11-13'], ['最近 14 天', '2026-11-06'],
-    ['最近 1 个月', '2026-10-20'], ['最近 3 个月', '2026-08-20']]) {
+    ['最近 1 个月', '2026-11-01'], ['最近 3 个月', '2026-11-01']]) {
     const preset = quickRange(name);
     await preset.click();
     assert.equal(await preset.getAttribute('aria-pressed'), 'true');
@@ -153,17 +154,20 @@ try {
   }
   await page.clock.setFixedTime(new Date('2024-03-31T12:00:00+08:00'));
   await quickRange('最近 1 个月').click();
-  assert.equal(await rangeButton.getAttribute('data-start'), '2024-03-01');
+  assert.equal(await rangeButton.getAttribute('data-start'), '2024-03-31');
   assert.equal(await rangeButton.getAttribute('data-end'), '2024-03-31');
   await page.clock.setFixedTime(new Date('2026-11-19T12:00:00+08:00'));
   await refresh.click();
   await idle();
   assert.equal(await quickRange('最近 1 个月').getAttribute('aria-pressed'), 'true');
-  assert.equal(await rangeButton.getAttribute('data-start'), '2026-10-20');
+  assert.equal(await rangeButton.getAttribute('data-start'), '2026-11-01');
   await quickRange('最近 7 天').click();
+  assert.equal(await page.locator('.research-entry').count(), 0);
+  await page.locator('[data-research-phase=validation]').click();
   assert.equal(await page.locator('.research-entry').count(), 1);
+  await page.locator('[data-research-phase=validation]').click();
   await page.locator('[data-research-reset-range]').click();
-  pass('today-based date range shortcuts use inclusive days and clamp to the calendar month');
+  pass('date presets use inclusive days and respect the project start and time zone');
 
   const rangePicker = page.getByRole('dialog', { name: '选择时间范围' });
   const applyRange = rangePicker.getByRole('button', { name: '应用' });
@@ -175,22 +179,36 @@ try {
   await rangePicker.getByLabel('结束日期').fill('2026-11-14');
   await applyRange.click();
   assert.deepEqual(await phaseOrder(), ['validation', 'exploration']);
-  assert.equal(await page.locator('.research-entry').count(), 2);
+  assert.equal(await page.locator('.research-entry').count(), 0);
   assert.equal(await page.locator('[data-research-record=tile-culling]').count(), 0);
   assert.equal(await phases.filter({ hasText: '方案探索' }).locator('.research-timeline-bar').evaluate(bar => bar.style.getPropertyValue('--left')), '0%');
   await page.locator('[data-research-reset-range]').click();
 
   const ruler = page.locator('[data-research-axis]');
+  const zoom = page.getByRole('button', { name: '放大时间轴', exact: true });
+  await zoom.click();
   const bounds = await ruler.boundingBox();
-  const x = day => bounds.x + bounds.width * (day - 2 + 0.5) / 17;
+  const x = fraction => bounds.x + bounds.width * fraction;
   const y = bounds.y + bounds.height / 2;
-  await page.mouse.move(x(14), y);
-  await page.mouse.down();
-  await page.mouse.move(x(5), y, { steps: 4 });
-  await page.mouse.up();
+  async function pan(from, to) {
+    await page.mouse.move(x(from), y);
+    await page.mouse.down();
+    await page.mouse.move(x(to), y, { steps: 4 });
+    await page.mouse.up();
+  }
+  await pan(.9, .1);
+  assert.match(await rangeButton.innerText(), /2026-11-08 – 2026-11-19/);
+  assert.ok(await page.getByRole('button', { name: '向后移动时间轴' }).isDisabled());
+  await pan(.1, .9);
+  assert.match(await rangeButton.innerText(), /2026-11-01 – 2026-11-12/);
+  assert.ok(await page.getByRole('button', { name: '向前移动时间轴' }).isDisabled());
+  await rangeButton.click();
+  await rangePicker.getByLabel('开始日期').fill('2026-11-05');
+  await rangePicker.getByLabel('结束日期').fill('2026-11-14');
+  await applyRange.click();
   assert.match(await rangeButton.innerText(), /2026-11-05 – 2026-11-14/);
-  assert.equal(await page.locator('.research-entry').count(), 3);
-  pass('date range selection and axis drag clip coverage and filter experiments');
+  assert.equal(await page.locator('.research-entry').count(), 0);
+  pass('custom ranges and bounded pan and zoom clip coverage without opening an experiment list');
 
   const tile = command('read', ['tile-culling']);
   const filler = Array.from({ length: 14 }, (_, i) => `第 ${i + 1} 次记录依次检查相机轨迹、可见性与帧时间。`).join('\n\n');
@@ -512,13 +530,13 @@ try {
   assert.equal(firstPage.length, 4);
   assert.deepEqual(firstPage, ['validation', 'exploration', 'baseline', 'extra-1']);
   const timeSpan = [await rangeButton.getAttribute('data-start'), await rangeButton.getAttribute('data-end')];
-  const journal = await page.locator('#research-journal-title').innerText();
+  const journal = await page.locator('#research-journal-title').allTextContents();
   await nextPage.click();
   const secondPage = await phaseOrder();
   assert.equal(secondPage.length, 4);
   assert.ok(secondPage.every(id => !firstPage.includes(id)));
   assert.deepEqual([await rangeButton.getAttribute('data-start'), await rangeButton.getAttribute('data-end')], timeSpan);
-  assert.equal(await page.locator('#research-journal-title').innerText(), journal);
+  assert.deepEqual(await page.locator('#research-journal-title').allTextContents(), journal);
   await page.locator('[data-research-destination=entries]').click();
   await timelineView.click();
   assert.deepEqual(await phaseOrder(), secondPage);
@@ -570,7 +588,8 @@ try {
   const firstPeer = await createPeer('复现实验项目');
   const secondPeer = { root: path.join(folder, 'paper-analysis'), id: 'paper-analysis', title: '论文分析项目' };
   commandAt(secondPeer.root, 'init', [], {
-    version: 1, id: secondPeer.id, title: secondPeer.title, timezone: 'Asia/Shanghai', phases: [],
+    version: 1, id: secondPeer.id, title: secondPeer.title, timezone: 'Asia/Shanghai',
+    phases: [{ id: 'drafting', title: '稿件修改', start: '2026-11-17' }],
     instructions: ['稿件版本使用 Git 提交号。'],
     recordTypes: [{ id: 'writing', label: '写作记录', kind: 'entry', description: '追踪稿件的章节修改。',
       fields: [{ id: 'chapter', label: '章节', type: 'text', required: true }, { id: 'draft', label: '稿件版本', type: 'text' }],
@@ -580,7 +599,7 @@ try {
   const paperRules = commandAt(secondPeer.root, 'describe');
   assert.deepEqual(paperRules.project.instructions, ['稿件版本使用 Git 提交号。']);
   commandAt(secondPeer.root, 'batch', [], { ifProjectRevision: paperRules.revision, records: [{
-    id: 'methods', ifRevision: null, type: 'writing', title: '方法章节修改', date: '2026-11-18',
+    id: 'methods', ifRevision: null, type: 'writing', title: '方法章节修改', date: '2026-11-18', phaseId: 'drafting',
     fields: { chapter: '方法', draft: 'commit-d17' },
   }] });
   assert.match(commandAt(secondPeer.root, 'read', ['methods']).body, /方法 · commit-d17/);
@@ -597,6 +616,7 @@ try {
   await page.locator('.research-overview p').getByText('追踪论文的章节修改。', { exact: true }).waitFor();
   assert.equal(commandAt(secondPeer.root, 'describe').project.description, '追踪论文的章节修改。');
   pass('a project without a description can add one from the overview');
+  await page.locator('[data-research-phase=drafting]').click();
   const paperEntry = page.locator('.research-entry').filter({ hasText: '方法章节修改' });
   assert.match(await paperEntry.locator('.research-entry-meta').innerText(), /章节 方法/);
   assert.doesNotMatch(await paperEntry.locator('.research-entry-meta').innerText(), /稿件版本/);
@@ -703,18 +723,13 @@ try {
   await ongoingRow.getByText('进行中', { exact: true }).waitFor();
   await futureRow.getByText('未开始', { exact: true }).waitFor();
   assert.equal(await futureRow.locator('[data-research-phase]').getAttribute('data-research-phase'), futureId);
+  assert.equal(await futureRow.locator('.research-timeline-bar').count(), 0);
   const bar = ongoingRow.locator('.research-timeline-bar');
   const rightEdge = () => bar.evaluate(item => parseFloat(item.style.getPropertyValue('--right')));
-  const before = await rightEdge();
-  const axisStart = Date.parse(await rangeButton.getAttribute('data-start'));
-  const axisEnd = Date.parse(await rangeButton.getAttribute('data-end'));
-  const axisDays = (axisEnd - axisStart) / 86400000 + 1;
+  assert.equal(await rightEdge(), 0);
   await page.clock.setFixedTime(new Date('2026-11-19T16:00:00Z'));
-  await page.waitForFunction(({ id, right }) => {
-    const item = document.querySelector(`[data-research-phase="${id}"]`)?.closest('.research-timeline-row')?.querySelector('.research-timeline-bar');
-    return Number.parseFloat(item?.style.getPropertyValue('--right')) < right;
-  }, { id: ongoingId, right: before });
-  assert.ok(Math.abs(before - await rightEdge() - 100 / axisDays) < 0.000001);
+  await page.waitForFunction(() => document.querySelector('[data-research-range]').dataset.end === '2026-11-20');
+  assert.equal(await rightEdge(), 0);
   await ongoingRow.getByText('进行中', { exact: true }).waitFor();
   await ongoingRow.click();
   await page.getByRole('button', { name: '插入阶段总结', exact: true }).click();
@@ -844,8 +859,83 @@ try {
     await comparison.getByRole('button', { name: '关闭可视化展示' }).click();
     assert.equal(await baseline.locator('[data-research-phase]').getAttribute('aria-pressed'), 'false');
   }
-  assert.deepEqual(errors, []);
   pass('same-day backfilled comparisons appear once, align with the finished experiment dot and open individually');
+
+  await page.locator('[data-research-event-types]').click();
+  const eventTypeRow = tools.locator('[data-event-type=group-meeting]');
+  await eventTypeRow.getByRole('button', { name: '选择图标' }).click();
+  const gallery = tools.getByRole('group', { name: '备选图标' });
+  assert.equal(await gallery.getByRole('button').count(), 16);
+  await gallery.getByRole('button', { name: '讨论', exact: true }).click();
+  await tools.getByRole('button', { name: '添加类型' }).click();
+  const newType = tools.locator('.research-event-type-row').last();
+  await newType.getByLabel('类型名称').fill('论文审阅');
+  await newType.getByRole('button', { name: '选择图标' }).click();
+  await gallery.getByRole('button', { name: '文档', exact: true }).click();
+  await tools.getByRole('button', { name: '保存', exact: true }).click();
+  await tools.waitFor({ state: 'hidden' });
+  const eventConfig = command('describe');
+  assert.equal(eventConfig.format.timeline.events.icons.length, 16);
+  assert.equal(eventConfig.project.recordTypes.find(type => type.id === 'group-meeting').icon, 'people');
+  const review = eventConfig.project.recordTypes.find(type => type.label === '论文审阅');
+  assert.deepEqual([review.kind, review.icon], ['event', 'page']);
+
+  await page.getByRole('button', { name: '添加事件', exact: true }).click();
+  await dialog.locator('[name=type]').selectOption(review.id);
+  await dialog.locator('[name=phaseId]').selectOption('baseline');
+  await dialog.locator('[name=title]').fill('基线评测审阅');
+  await dialog.locator('[name=date]').fill(sameDay);
+  await dialog.getByRole('button', { name: '创建并编辑' }).click();
+  await page.locator('#research-reader-title').getByText('基线评测审阅').waitFor();
+  assert.equal(command('list', ['--type', review.id]).records[0].record.date, sameDay);
+  await closeReader();
+  const mixed = baseline.getByRole('button', { name: `${sameDay} 的 3 个事件` });
+  await mixed.waitFor();
+  assert.equal(await mixed.locator('svg').count(), 2);
+  assert.match(await mixed.innerText(), /\+1/);
+
+  const validationPhase = page.locator('[data-research-phase=validation]');
+  await validationPhase.click();
+  assert.match(await page.locator('.research-phase-details').innerText(), /补采同视角基线/);
+  assert.equal(await page.locator('[data-research-goal]').count(), 0);
+  const setGoals = async (mode, widths) => {
+    await page.locator('[data-research-destination=rules]').click();
+    await page.getByRole('button', { name: '时间线设置' }).click();
+    await tools.locator('[name=goals]').selectOption(mode);
+    if (widths) {
+      await tools.locator('[name=workspace]').selectOption(widths);
+      await tools.locator('[name=comparison]').selectOption(widths);
+    }
+    await tools.getByRole('button', { name: '保存', exact: true }).click();
+    await tools.waitFor({ state: 'hidden' });
+    await timelineView.click();
+  };
+  await setGoals('checklist', 'comfort');
+  assert.equal(await page.locator('#research-workspace').getAttribute('data-width'), 'comfort');
+  const goal = page.locator('[data-research-goal="0"]');
+  await goal.check();
+  await page.waitForFunction(() => document.querySelector('[data-research-goal="0"]')?.matches(':checked:enabled'));
+  assert.equal(command('describe').project.phases.find(phase => phase.id === 'validation').goals[0].done, true);
+  await setGoals('hidden');
+  assert.equal(await page.getByRole('heading', { name: '阶段目标', exact: true }).count(), 0);
+  await setGoals('checklist');
+  assert.equal(await goal.isChecked(), true);
+  await mixed.click();
+  await tools.getByRole('heading', { name: `${sameDay} 的事件` }).waitFor();
+  await tools.getByRole('button', { name: titles[0], exact: true }).click();
+  await comparison.waitFor({ state: 'visible' });
+  assert.equal(await comparison.getAttribute('data-width'), 'comfort');
+  await comparison.getByRole('button', { name: '返回当天事件' }).click();
+  await tools.getByRole('button', { name: '基线评测审阅', exact: true }).click();
+  await page.locator('#research-reader-title').getByText('基线评测审阅').waitFor();
+  await closeReader();
+  command('batch', [], { records: [{ id: 'follow-up', type: review.id, title: '基线后续审阅', date: '2026-11-18', phaseId: 'baseline' }] });
+  await refresh.click();
+  await quickRange('最近 7 天').click();
+  await baseline.getByRole('button', { name: '打开事件 基线后续审阅' }).waitFor();
+  assert.equal(await baseline.locator('.research-timeline-bar').count(), 0);
+  assert.deepEqual(errors, []);
+  pass('project event icons, same-day drill-down, both width preferences and optional saved goals work end to end');
 
   await fs.writeFile(path.join(folder, 'results.json'), JSON.stringify({ results, errors }, null, 2) + '\n');
   console.log(`Timeline screenshot: ${path.join(folder, 'timeline.png')}`);

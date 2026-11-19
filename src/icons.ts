@@ -32,6 +32,18 @@ const paths: Record<string, string> = {
   refresh: '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17"/>',
   back: '<path d="m14 6-6 6 6 6"/>',
   image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1"/><path d="m21 15-5-5-7 7-3-3-3 3"/>',
+  presentation: '<path d="M3 3h18v12H3zM12 15v7m-5-2 5-4 5 4M7 11l3-3 3 2 4-4"/>',
+  flag: '<path d="M5 22V3c5-4 9 4 15 0v12c-6 4-10-4-15 0"/>',
+  camera: '<path d="M4 7h4l2-3h4l2 3h4a1 1 0 0 1 1 1v11H3V8a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.5"/>',
+  flask: '<path d="M9 3h6m-5 0v7L4.5 19A1.3 1.3 0 0 0 6 21h12a1.3 1.3 0 0 0 1.5-2L14 10V3M7 15h10"/>',
+  people: '<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2m2-15a3 3 0 0 1 0 6m4 9v-2a4 4 0 0 0-4-4"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+  bookmark: '<path d="M6 3h12v18l-6-4-6 4z"/>',
+  chart: '<path d="M3 4v16h18M6 15l4-4 4 2 6-7"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4m8-4v4M3 10h18m-13 5h.01m4 0h.01m4 0h.01"/>',
+  bulb: '<path d="M9 18v-3a6 6 0 1 1 6 0v3M9 18h6m-5 3h4"/>',
+  branch: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10m12-8a7 7 0 0 1-7 7H6"/>',
+  warning: '<path d="M12 3 2 21h20zM12 9v4m0 4h.01"/>',
 };
 export function icon(name: string, size = 18) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.page}</svg>`;

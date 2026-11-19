@@ -1,7 +1,7 @@
 import DOMPurify from 'dompurify';
 import { ht, t } from '../electron/i18n.mjs';
 import { comparisonLimits, evidenceImageMime } from '../electron/research-comparison.mjs';
-import type { ResearchComparison, ResearchDocument, ResearchEvidenceFile, ResearchReference } from '../shared/research';
+import type { ResearchComparison, ResearchDocument, ResearchEvidenceFile, ResearchReference, ResearchWidth } from '../shared/research';
 import { icon } from './icons';
 import { renderMarkdown } from './markdown-render';
 import { escapeResearch as escape, researchOption as option } from './research-tools';
@@ -124,14 +124,19 @@ export class ComparisonViewer {
   }
 
   show(root: string, { record, body }: ResearchDocument, actions: {
+    width: ResearchWidth;
+    back?(): void;
     evidence(id: string): Promise<void>;
     edit(): Promise<void>;
     error(error: unknown): void;
   }) {
     if (!record.comparison || this.dialog.open) return;
     this.clear();
+    this.dialog.dataset.width = actions.width;
     const { columns, rows } = record.comparison;
-    this.dialog.innerHTML = `<div class="dialog-heading"><div><h2 id="research-comparison-title">${escape(record.title)}</h2><time>${escape(record.date)}</time></div>
+    this.dialog.innerHTML = `<div class="dialog-heading"><div class="research-comparison-heading">
+      ${actions.back ? `<button type="button" class="icon-button" data-comparison-back aria-label="${ht("返回当天事件")}" title="${ht("返回当天事件")}">${icon('back', 17)}</button>` : ''}
+      <div><h2 id="research-comparison-title">${escape(record.title)}</h2><time>${escape(record.date)}</time></div></div>
       <button type="button" class="icon-button" data-comparison-close aria-label="${ht("关闭可视化展示")}">${icon('close', 16)}</button></div>
       <div class="research-comparison-toolbar"><div class="research-actions" role="group" aria-label="${ht("缩放")}">
         <button type="button" class="secondary-button" data-comparison-mode="fit">${ht("适应视口")}</button>
@@ -146,6 +151,10 @@ export class ComparisonViewer {
     const caption = this.dialog.querySelector('.research-comparison-caption > div');
     if (caption) caption.innerHTML = DOMPurify.sanitize(renderMarkdown(body).html);
     this.dialog.querySelector('[data-comparison-close]')!.addEventListener('click', () => this.dialog.close());
+    this.dialog.querySelector('[data-comparison-back]')?.addEventListener('click', () => {
+      this.dialog.close();
+      actions.back?.();
+    });
     this.dialog.querySelector('[data-comparison-edit]')!.addEventListener('click', () => { this.dialog.close(); void actions.edit().catch(actions.error); });
     for (const button of this.dialog.querySelectorAll<HTMLButtonElement>('[data-comparison-mode]')) {
       button.addEventListener('click', () => this.reset(button.dataset.comparisonMode as ZoomMode));
