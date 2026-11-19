@@ -46,6 +46,8 @@
 
 安装包同步也有独立定时器。下载中断后会继续传输，服务器拒绝续传时会重新下载。后续发布沿用正常的 GitHub 发版流程。`scripts/serve-update-mirror.go` 通过 HTTPS 提供这些文件。
 
+两项同步任务空闲时，按应用和平台清理已被新索引替代的镜像文件，包括旧安装包和旧版续传文件。保留当前索引对应的文件和正在准备发布的新版续传文件。历史版本可从 GitHub Releases 下载。
+
 在阿里云上用 `systemctl list-timers 'meki-mirror-*'` 查看同步和证书续期，用 `journalctl -u meki-mirror-sync -u meki-mirror-installers` 查看同步结果。8443 提供下载，80 用于 Let's Encrypt 验证和续期。
 
 客户端默认地址在 `package.json` 的 `updateMirror` 中。换用其他镜像时，可以设置 GitHub 仓库变量 `MEKI_UPDATE_MIRROR_URL`，也可以在本地打包前设置同名环境变量。已经发布的版本从自身打包时的配置读取地址。

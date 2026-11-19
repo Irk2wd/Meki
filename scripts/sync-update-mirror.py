@@ -19,6 +19,9 @@ HEADERS = {'User-Agent': 'Meki-update-mirror', 'Cache-Control': 'no-cache'}
 TAG = re.compile(r'(mekir-)?v((?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]{0,5}))')
 EDITIONS = {'Meki': 'io.meki.editor', 'mekiR': 'io.meki.research'}
 PLATFORMS = {'windows': ('win32', 'Setup-x64.exe'), 'macos': ('darwin', 'macOS-universal.dmg')}
+SYNC_LOCK = '.sync.lock'
+INSTALLERS_LOCK = '.sync-installers.lock'
+PARTIAL = re.compile(r'\.(.+)\.[1-9][0-9]*\.part')
 
 
 def public_releases():
@@ -49,11 +52,20 @@ def usable_asset(asset, limit):
             and re.fullmatch(r'sha256:[0-9a-f]{64}', asset.get('digest') or ''))
 
 
+def asset_names(edition, version, target):
+    return (f'{edition}-update-{target}.json', f'{edition}-{version}-{target}-app.asar.gz',
+            f'{edition}-{version}-{PLATFORMS[target][1]}')
+
+
+def version_key(version):
+    return tuple(map(int, version.split('.')))
+
+
 def select_updates():
     selected = {}
     for tag, release in public_releases():
         standalone, version = tag.groups()
-        sort_key = tuple(map(int, version.split('.')))
+        sort_key = version_key(version)
         files = {}
         for asset in release['assets']:
             if asset['state'] == 'uploaded':
@@ -61,11 +73,11 @@ def select_updates():
         for edition in EDITIONS:
             if standalone and edition != 'mekiR':
                 continue
-            for target, (_, extension) in PLATFORMS.items():
-                manifest = f'{edition}-update-{target}.json'
+            for target in PLATFORMS:
+                names = asset_names(edition, version, target)
+                manifest = names[0]
                 if manifest in selected and selected[manifest][0] >= sort_key:
                     continue
-                names = (manifest, f'{edition}-{version}-{target}-app.asar.gz', f'{edition}-{version}-{extension}')
                 groups = [files.get(name, []) for name in names]
                 limits = (65536, 512 * 1024 ** 2, 2 * 1024 ** 3)
                 if all(len(group) == 1 and usable_asset(group[0], limit) for group, limit in zip(groups, limits)):
@@ -166,6 +178,65 @@ def sync_update(root, plan, installers_only):
     print(f'Published {manifest_asset["name"]} for {tag}', flush=True)
 
 
+def prune_old_releases(root):
+    releases = root / 'releases'
+    if releases.is_symlink() or not releases.is_dir():
+        return
+
+    published = {}
+    for edition in EDITIONS:
+        for target in PLATFORMS:
+            pointer = root / 'latest' / f'{edition}-update-{target}.json'
+            try:
+                tag = TAG.fullmatch(json.loads(pointer.read_bytes())['tag'])
+                if not tag or (tag[1] and edition != 'mekiR'):
+                    raise ValueError('invalid release tag')
+                _, payload, _ = asset_names(edition, tag[2], target)
+                if not (releases / tag[0] / payload).is_file():
+                    raise ValueError('published payload is missing')
+            except FileNotFoundError:
+                continue
+            except (KeyError, TypeError, ValueError) as error:
+                print(f'Skipping cleanup for {pointer.name}: {error}', flush=True)
+                continue
+            published[edition, target] = version_key(tag[2])
+
+    removed = reclaimed = 0
+    for folder in releases.iterdir():
+        tag = TAG.fullmatch(folder.name)
+        if not tag or folder.is_symlink() or not folder.is_dir():
+            continue
+        version = tag[2]
+        release_version = version_key(version)
+        obsolete = {name for (edition, target), current in published.items()
+                    if release_version < current
+                    for name in asset_names(edition, version, target)}
+        if not obsolete:
+            continue
+        for file in folder.iterdir():
+            partial = PARTIAL.fullmatch(file.name)
+            name = partial[1] if partial else file.name
+            if name in obsolete and not file.is_symlink() and file.is_file():
+                reclaimed += file.stat().st_size
+                file.unlink()
+                removed += 1
+        if not any(folder.iterdir()):
+            folder.rmdir()
+    if removed:
+        print(f'Pruned {removed} superseded mirror files ({reclaimed} bytes)', flush=True)
+
+
+def prune_when_idle(root):
+    # Either worker can clean the shared release directories once both locks are free.
+    with (root / SYNC_LOCK).open('a') as sync, (root / INSTALLERS_LOCK).open('a') as installers:
+        try:
+            fcntl.flock(sync, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(installers, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        prune_old_releases(root)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory', type=Path)
@@ -173,16 +244,19 @@ def main():
     args = parser.parse_args()
     root = args.directory.resolve()
     (root / 'latest').mkdir(parents=True, exist_ok=True)
-    lock_name = '.sync-installers.lock' if args.installers_only else '.sync.lock'
-    with (root / lock_name).open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        updates = list(select_updates())
-        if not updates:
-            raise RuntimeError('No complete GitHub releases found')
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            jobs = [executor.submit(sync_update, root, update, args.installers_only) for update in updates]
-            for job in jobs:
-                job.result()
+    lock_name = INSTALLERS_LOCK if args.installers_only else SYNC_LOCK
+    try:
+        with (root / lock_name).open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            updates = list(select_updates())
+            if not updates:
+                raise RuntimeError('No complete GitHub releases found')
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                jobs = [executor.submit(sync_update, root, update, args.installers_only) for update in updates]
+                for job in jobs:
+                    job.result()
+    finally:
+        prune_when_idle(root)
 
 
 if __name__ == '__main__':
