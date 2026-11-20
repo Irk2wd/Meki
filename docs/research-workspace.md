@@ -57,6 +57,8 @@ node electron/research-cli.cjs resolve /path/to/project capture-notes
 
 在「资料」登记论文仓库和实验归档，分别使用固定的来源 ID。登记原图、逐轮计时表或论文版本后，可在正文写 `[树冠原图](mekir:forest-canopy)`，也可在记录属性填写证据 ID。图片、CSV、JSON 和常用文本在 mekiR 中只读预览。其他文件可定位到来源目录。使用预览的返回箭头可回到正文。
 
+CSV 和 TSV 以表格显示。对于没有表头的数据，取消「首行作为列名」即可把第一行作为数据查看。长表按行翻页，宽表可以切换列组。
+
 项目在 `.mekir/project.json` 保存来源 ID，在 `.mekir/index.json` 保存证据 ID、来源 ID 和相对路径。本机目录绑定存放在 `~/.mekir/sources/`。盘符或挂载点变化时，在「资料」对原来源执行「重新绑定目录」。目录内相对路径变化时，用原证据 ID 重新登记文件。
 
 ```sh

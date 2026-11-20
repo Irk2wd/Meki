@@ -83,6 +83,15 @@ async function previewEvidence(file, reference, source) {
   if (file.size > previewLimit || (!mime && !textFiles.has(ext))) return result;
   const { bytes } = await readBytes(file.path, previewLimit);
   if (mime) return { ...result, kind: 'image', mime, content: bytes.toString('base64') };
+  if (ext === '.csv' || ext === '.tsv') {
+    const bom = bytes.length >= 2 ? bytes.readUInt16BE(0) : 0;
+    const encoding = bom === 0xfffe ? 'utf-16le' : bom === 0xfeff ? 'utf-16be' : 'utf-8';
+    try {
+      const content = new TextDecoder(encoding, { fatal: true }).decode(bytes);
+      if (!content.includes('\0')) return { ...result, kind: ext.slice(1), content: content.replace(/\r\n/g, '\n') };
+    } catch { /* Files in other encodings can still be opened at their source. */ }
+    return result;
+  }
   return { ...result, kind: 'text', content: decodeDocument(bytes).content };
 }
 

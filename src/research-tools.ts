@@ -3,6 +3,7 @@ import eventIcons from '../electron/research-event-icons.json';
 import type { ResearchEntry, ResearchFilter, ResearchGoalMode, ResearchImportPreview, ResearchPhase, ResearchReference, ResearchRelationKind, ResearchSnapshot, ResearchType, ResearchWidth } from '../shared/research';
 import { icon } from './icons';
 import { ResearchReportPreview } from './research-report-preview';
+import { showEvidenceTable } from './research-evidence-table';
 
 export const escapeResearch = (value: string | number | boolean) => String(value).replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -296,12 +297,14 @@ export class ResearchTools {
     if (origin) this.dialog.addEventListener('close', () => {
       if (!this.dialog.open && origin.isConnected) origin.focus({ preventScroll: true });
     }, { once: true });
-    const body = this.dialog.querySelector('.research-evidence-content')!;
+    const body = this.dialog.querySelector<HTMLElement>('.research-evidence-content')!;
     if (file.kind === 'image') {
       const image = document.createElement('img');
       image.src = `data:${file.mime};base64,${file.content}`;
       image.alt = file.title;
       body.append(image);
+    } else if (file.kind === 'csv' || file.kind === 'tsv') {
+      showEvidenceTable(body, file.content ?? '', file.kind === 'tsv' ? '\t' : ',', file.title);
     } else {
       const text = document.createElement(file.kind === 'text' ? 'pre' : 'p');
       text.textContent = file.content ?? t("可在原目录中查看此文件。");

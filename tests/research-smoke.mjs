@@ -637,7 +637,9 @@ try {
   await fs.mkdir(path.join(archive, 'performance', '20261112_final3000'));
   await fs.writeFile(canopy, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jT4sAAAAASUVORK5CYII=', 'base64'));
   await fs.writeFile(path.join(archiveRun, 'RUN.md'), '# 森林四视角报告\n\n## 研究问题\n比较树冠剔除前后的帧时间。\n');
-  await fs.writeFile(path.join(archiveRun, 'timings.csv'), 'round,gpu_ms\n1,10.9\n');
+  const timingRows = ['round,gpu_ms,note', '001,10.9,"two, views\r\nwith ""canopy"""',
+    ...Array.from({ length: 50 }, (_, i) => [i + 2, 11, i === 49 ? '=1+2' : ''].join(','))];
+  await fs.writeFile(path.join(archiveRun, 'timings.csv'), '\uFEFF' + timingRows.join('\r\n') + '\r\n');
   await fs.writeFile(path.join(archiveRun, 'run_manifest.json'), JSON.stringify({ run_id: 'final30000', created_at: '2026-11-17',
     model: 'Electric Dreams', camera: '固定四视角', protocol: '同模型同相机逐轮计时' }));
   await page.locator('[data-research-destination=sources]').click();
@@ -717,7 +719,15 @@ try {
   await related.getByRole('button', { name: '森林四视角报告' }).click();
   await page.locator('#research-reader-title').getByText('森林四视角报告').waitFor();
   await related.getByRole('button', { name: 'timings.csv', exact: true }).click();
-  await tools.locator('pre').getByText(/10\.9/).waitFor();
+  const timingTable = tools.getByRole('table', { name: 'timings.csv' });
+  await timingTable.getByRole('columnheader', { name: 'gpu_ms' }).waitFor();
+  assert.deepEqual(await timingTable.locator('tbody tr').first().locator('td').allTextContents(), ['001', '10.9', 'two, views\nwith "canopy"']);
+  assert.equal(await timingTable.locator('tbody tr').count(), 50);
+  await tools.getByRole('button', { name: '下一页', exact: true }).click();
+  assert.deepEqual(await timingTable.getByRole('cell').allTextContents(), ['51', '11', '=1+2']);
+  await tools.getByLabel('首行作为列名').uncheck();
+  await timingTable.getByRole('columnheader', { name: '列 1', exact: true }).waitFor();
+  assert.deepEqual(await timingTable.locator('tbody tr').first().locator('td').allTextContents(), ['round', 'gpu_ms', 'note']);
   await tools.getByRole('button', { name: '返回正文' }).click();
   const manifestLink = related.getByRole('button', { name: 'run_manifest.json', exact: true });
   const reportScroll = await documentScroll.evaluate(element => element.scrollTop);
