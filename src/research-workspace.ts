@@ -166,10 +166,11 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
   const ordered = phases.map(phase => {
     const span = phaseSpan(phase, today);
     const assigned = experimentsByPhase.get(phase.id) || [];
-    const latest = [...assigned, ...(progressByPhase.get(phase.id) || [])]
-      .reduce((date, { record }) => record.date <= today && record.date > date ? record.date : date, '');
+    const update = [...assigned, ...(progressByPhase.get(phase.id) || [])].reduce<ResearchEntry | undefined>(
+      (last, item) => item.record.date <= today && (!last || sortEntries(last, item) < 0) ? item : last, undefined);
+    const latest = update?.record.date || '';
     const group: keyof typeof phaseGroupOrder = today < span.start ? 'upcoming' : today > span.end ? 'ended' : 'ongoing';
-    return { phase, span, group, latest, assigned };
+    return { phase, span, group, latest, assigned, update };
   }).sort((a, b) => {
     if (a.group !== b.group) return phaseGroupOrder[a.group] - phaseGroupOrder[b.group];
     if (a.group === 'ended') return b.span.end.localeCompare(a.span.end);
@@ -185,7 +186,7 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
     .map(type => legendKey(timelineIcon(type), type.label)));
   if ([...usedTypes].some(id => !types.has(id))) eventKeys.add(legendKey(timelineIcon(undefined, true), t("可视化展示")));
   const eventDays = new Map<string, TimelineEventDay[]>();
-  const phaseRows = ordered.slice((page - 1) * limit, page * limit).map(({ phase, span, group, latest, assigned }) => {
+  const phaseRows = ordered.slice((page - 1) * limit, page * limit).map(({ phase, span, group, latest, assigned, update }) => {
     const activity = new Map<string, boolean>();
     for (const { record } of assigned) {
       if (!containsDay(range, record.date)) continue;
@@ -203,10 +204,12 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
       .map(([date, entries]) => ({ point: position(date, 0.5) / 100, entries: entries.sort(sortEntries) })));
     const left = Math.max(0, position(span.start)), right = Math.max(0, 100 - position(span.end, 1));
     const status = group === 'ongoing' ? ht("进行中") : group === 'ended' ? ht("已结束") : ht("未开始");
-    return `<div class="research-timeline-row">
+    const progress = update?.excerpt || update?.record.title || phase.description;
+    return `<div class="research-timeline-row" data-status="${group}">
       <button type="button" class="research-timeline-label" data-research-phase="${phase.id}" aria-pressed="${activePhase === phase.id}">
         <strong>${escape(phase.title)} <span class="research-phase-status${group === 'ongoing' ? ' research-phase-ongoing' : ''}">${status}</span></strong>
-        <small>${escape(phaseDates(phase, today, true))} · ${ht("{0} 条实验", assigned.length)}</small>${latest ? `<small>${ht("最近进展 {0}", escape(formatDay(dayNumber(latest), latest.slice(0, 4) !== today.slice(0, 4))))}</small>` : ''}</button>
+        ${progress ? `<span class="research-phase-progress" title="${escape(progress)}">${escape(progress)}</span>` : ''}
+        <small class="research-phase-facts"><span>${escape(phaseDates(phase, today, true))} · ${ht("{0} 条实验", assigned.length)}</span>${latest ? `<span>${ht("最近进展 {0}", escape(formatDay(dayNumber(latest), latest.slice(0, 4) !== today.slice(0, 4))))}</span>` : ''}</small></button>
       <div class="research-timeline-track" data-research-track${fullRange ? '' : ' data-research-pan'}${phaseEvents.length ? ' data-research-has-events' : ''}><span aria-hidden="true">${overlaps(span, range) ? `<i class="research-timeline-bar" style="--left:${left}%;--right:${right}%"></i>` : ''}${[...activity].map(([date, ended]) => dot(date, ended)).join('')}
         ${todayLine}</span>${groups.size ? `<div class="research-timeline-events" data-phase="${phase.id}"></div>` : ''}</div>
     </div>`;
@@ -233,10 +236,7 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
       <div class="research-actions"><div class="research-range-presets" role="group" aria-label="${ht("快捷时间范围")}">${presetButtons}</div>
         <button type="button" class="secondary-button" data-research-range data-start="${range.start}" data-end="${range.end}"
         title="${ht("选择时间范围")}" aria-label="${ht("选择时间范围")} · ${escape(rangeText(range))}">${icon('timeline', 14)}${escape(rangeText(range))}</button>
-        ${selectedRange ? `<button type="button" class="secondary-button" data-research-reset-range>${ht("全部时段")}</button>` : ''}
-        <button type="button" class="secondary-button" data-research-event-types>${icon('calendar', 14)}${ht("事件类型")}</button>
-        ${canCreateEvent ? `<button type="button" class="secondary-button" data-research-new="event">${icon('plus', 14)}${ht("添加事件")}</button>` : ''}
-        ${canCreatePhase ? `<button type="button" class="secondary-button" data-research-new-phase>${icon('plus', 14)}${ht("新建阶段")}</button>` : ''}</div>
+        ${selectedRange ? `<button type="button" class="text-button" data-research-reset-range>${ht("全部时段")}</button>` : ''}</div>
     </div>
     <div class="research-timeline-meta">
       <div class="research-legend" role="group" aria-label="${ht("时间线图例")}">
@@ -250,11 +250,16 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
           ['next', t("向后移动时间轴"), icon('chevron', 15), range.end === bounds.end],
           ['out', t("缩小时间轴"), '−', fullRange], ['in', t("放大时间轴"), '+', span === 1]].map(([id, label, glyph, disabled]) =>
           `<button type="button" class="icon-button" data-research-axis-action="${id}" aria-label="${escape(String(label))}" title="${escape(String(label))}"${disabled ? ' disabled' : ''}>${glyph}</button>`).join('')}
-      </div>${phaseRows ? pager : ''}</div>
+      </div></div>
     ${timelineOverview(range, bounds, ordered.map(({ span }) => span))}
     <div class="research-timeline-axis" aria-hidden="true"><span></span><div class="research-timeline-ruler" data-research-axis${fullRange ? '' : ` data-research-pan title="${ht("拖动时间轴")}"`}>
       ${ticks.map((day, i) => `<span class="${ticks.length === 1 ? '' : i === 0 ? 'first' : i === ticks.length - 1 ? 'last' : 'middle'}" style="--tick:${(day - start + 0.5) * 100 / span}%">${escape(formatDay(day, crossesYear))}</span>`).join('')}
     </div></div>${phaseRows || `<p class="research-empty-list">${ht("此视图没有研究阶段。")}</p>`}
+    <footer class="research-timeline-footer"><div class="research-actions">
+      ${canCreatePhase ? `<button type="button" class="text-button" data-research-new-phase>${icon('plus', 14)}${ht("新建阶段")}</button>` : ''}
+      ${canCreateEvent ? `<button type="button" class="text-button" data-research-new="event">${icon('plus', 14)}${ht("添加事件")}</button>` : ''}
+      <button type="button" class="text-button" data-research-event-types>${icon('calendar', 14)}${ht("事件类型")}</button>
+    </div>${phaseRows ? pager : ''}</footer>
   </section>`;
   return { html, page, eventDays };
 }

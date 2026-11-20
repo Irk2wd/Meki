@@ -141,6 +141,7 @@ export interface ResearchRecord {
 
 export interface ResearchEntry {
   record: ResearchRecord;
+  excerpt?: string;
   revision: string;
   relativePath: string;
   issues: string[];

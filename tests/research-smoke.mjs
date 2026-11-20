@@ -183,6 +183,8 @@ try {
   await idle();
   assert.deepEqual(await phaseOrder(), ['validation', 'exploration', 'baseline']);
   assert.match(await phases.filter({ hasText: '方案探索' }).innerText(), /最近进展 11\/16/);
+  assert.equal(await phases.filter({ hasText: '方案探索' }).locator('.research-phase-progress').textContent(), '保守阈值稳定了遮挡边缘，适合进入复测。');
+  assert.ok(await page.locator('.research-timeline-footer [data-research-event-types]').isVisible());
   const retrospective = command('read', ['exploration-review']);
   command('batch', [], { records: [{ id: retrospective.record.id, ifRevision: retrospective.revision, date: '2026-11-19' }] });
   await refresh.click();

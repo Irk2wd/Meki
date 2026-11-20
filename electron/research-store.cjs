@@ -41,6 +41,24 @@ function recordReference({ record, relativePath }) {
   return { id: record.id, title: record.title, date: record.date, relativePath };
 }
 
+function progressExcerpt(body) {
+  let fence = '';
+  for (const raw of body.slice(0, 8192).split(/\r?\n/)) {
+    const line = raw.trim();
+    const marker = line.match(/^(`{3,}|~{3,})/);
+    if (marker) {
+      if (!fence) fence = marker[1];
+      else if (marker[1].startsWith(fence)) fence = '';
+      continue;
+    }
+    if (fence || !line || /^(?:#{1,6}(?:\s|$)|[|<>!]|[-+*]\s|[-=_*]{3,}$|\d+[.)]\s)/.test(line)) continue;
+    const plain = line.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/(\*\*|__|`)(.+?)\1/g, '$2').trim();
+    if (plain) return Array.from(plain.split(/(?<=[。！？])|(?<=[.!?])\s/)[0]).slice(0, 120).join('');
+  }
+  return '';
+}
+
 function portablePath(file) {
   return file.split(path.sep).join('/');
 }
@@ -168,7 +186,7 @@ class ResearchStore {
     return publicRecord(await this.readFile(target, recordId));
   }
 
-  async catalog(bodyIds = new Set(), matches) {
+  async catalog(bodyIds = new Set(), matches, withExcerpts = false) {
     const items = new Map();
     const problems = [];
     const seen = new Set();
@@ -188,6 +206,7 @@ class ResearchStore {
           seen.add(recordId);
           const item = await this.readFile(target, recordId);
           if (matches?.(item)) matchingIds.push(recordId);
+          if (withExcerpts) item.excerpt = progressExcerpt(item.body);
           if (!bodyIds.has(recordId)) delete item.body;
           items.set(recordId, item);
         } catch (error) {
@@ -366,10 +385,10 @@ class ResearchStore {
 
   async snapshot(filter) {
     const { project, revision } = await this.manifest();
-    const { items, problems, matchingIds } = await this.catalog(new Set(), filter && researchMatcher(validateFilter(filter), project));
+    const { items, problems, matchingIds } = await this.catalog(new Set(), filter && researchMatcher(validateFilter(filter), project), true);
     const index = await this.documentIndex(items, await this.readIndex());
-    const records = [...items.values()].map(({ record, revision, relativePath }) => ({
-      record, revision, relativePath,
+    const records = [...items.values()].map(({ record, revision, relativePath, excerpt }) => ({
+      record, revision, relativePath, ...(excerpt ? { excerpt } : {}),
       issues: [
         ...relationshipIssues(record, project),
         ...fieldIssues(record, project.recordTypes.find(type => type.id === record.type)).map(issue => issue.message),
