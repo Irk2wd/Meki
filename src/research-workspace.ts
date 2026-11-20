@@ -1109,8 +1109,9 @@ export class ResearchWorkspace {
   private renderStageSummaries(entries: ResearchEntry[], create: string) {
     return `<section class="research-phase-summaries" aria-labelledby="research-phase-summaries-title">
       <div class="research-section-heading"><h3 id="research-phase-summaries-title">${ht("阶段总结")}</h3>${create}</div>
-      ${entries.length ? `<ul>${entries.sort((a, b) => sortEntries(b, a)).map(({ record }) => `<li class="research-summary-item"><button type="button" data-research-record="${record.id}">
+      ${entries.length ? `<ul>${entries.sort((a, b) => sortEntries(b, a)).map(({ record, excerpt }) => `<li class="research-summary-item"><button type="button" data-research-record="${record.id}">
         ${icon('report', 18)}<span><strong>${escape(record.title)}</strong>
+          ${excerpt ? `<span class="research-summary-lede">${escape(excerpt)}</span>` : ''}
           <small>${record.coverage ? ht("覆盖 {0}", escape(rangeText(record.coverage))) + ' · ' : ''}${ht("撰写于 {0}", escape(record.date))}</small></span>${icon('chevron', 14)}</button>
         <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button></li>`).join('')}</ul>`
         : `<p class="research-empty-list">${ht("这个阶段还没有总结。")}</p>`}

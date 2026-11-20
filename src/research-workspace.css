@@ -310,6 +310,12 @@
 .research-phase-pages .icon-button { width: 27px; height: 27px; border: 1px solid var(--border); }
 
 .research-journal { padding-bottom: 17px; }
+.research-summary-lede { display: block; margin: 4px 0; color: var(--text); font-size: 13px; line-height: 1.65; }
+:root[data-paper-margins] .research-content { background-blend-mode: soft-light; background-color: var(--side); }
+:root[data-paper-margins] .research-content :is(h1, h2, .research-timeline-label strong, .research-summary-item strong) {
+  font-family: Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif;
+}
+:root[data-paper-margins] .research-summary-item { padding-block: 6px; }
 .research-phase-range { margin: 3px 0 0; color: var(--soft); font: 11px var(--mono); }
 .research-timeline-shortcuts { margin-top: 12px; }
 .research-phase-details { display: flex; flex-wrap: wrap; gap: 14px 26px; padding-block: 14px 5px; }

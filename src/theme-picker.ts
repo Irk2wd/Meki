@@ -2,6 +2,7 @@ import { t } from '../electron/i18n.mjs';
 import { builtinThemes, resolveTheme, type ResolvedTheme } from '../electron/theme-format.mjs';
 import type { Settings } from '../shared/meki';
 import { themeVariables } from './theme-styles';
+import './paper-margins.css';
 
 function builtinLabel(id: string): string {
   switch (id) {
@@ -55,6 +56,7 @@ export class ThemePicker {
     root.dataset.theme = theme.id;
     root.dataset.themeBase = theme.base;
     root.toggleAttribute('data-theme-background', Boolean(theme.background));
+    root.toggleAttribute('data-paper-margins', theme.background?.placement === 'margins');
     for (const [name, value] of Object.entries(themeVariables(theme))) root.style.setProperty(name, value);
 
     if (changed) {

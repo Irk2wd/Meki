@@ -174,7 +174,8 @@ export function validateThemePackage(input) {
     return [key, value];
   }));
   if (Object.hasOwn(input, 'background')) {
-    const background = fields(input.background, { image: 1, size: 1, repeat: 1, position: 1 }, 'background');
+    const background = fields(input.background, { image: 1, size: 1, repeat: 1, position: 1, placement: 1 }, 'background');
+    if (Object.hasOwn(input.background, 'placement') && !['canvas', 'margins'].includes(input.background.placement)) throw invalid('background.placement');
     if (!Object.hasOwn(input.background, 'image')) throw invalid('background.image');
     theme.background = Object.fromEntries(background.map(([key, value]) => [key, key === 'image' ? backgroundImage(value) : cssValue(value, `background.${key}`)]));
   }

@@ -8,6 +8,7 @@ import { resolveTheme } from '../electron/theme-format.mjs';
 import { cssDeclarations, themeVariables } from './theme-styles';
 import extensionCSS from './markdown-extensions.css?inline';
 import diagramCSS from './diagrams.css?inline';
+import paperMarginsCSS from './paper-margins.css?inline';
 import type { Settings } from '../shared/meki';
 import { codeDefaults } from './code-options';
 import { typingDefaults } from './typing-rules';
@@ -51,8 +52,9 @@ body{margin:0;padding:48px 24px;background-image:var(--theme-image);background-s
 .meki-document,.meki-page{margin:auto;max-width:${settings.lineWidth || 780}px}.meki-document img{max-width:100%}
 .meki-page{background:var(--bg);}
 @page{background:${theme.palette.bg}}@media print{body{padding:0}}`;
-  const css = `${canvas}\n${appearance}\n${extensionCSS}\n${diagramCSS}\n${math.css}`.replace(/<\/style/gi, '<\\/style');
+  const paperMargins = theme.background?.placement === 'margins';
+  const css = `${canvas}\n${paperMargins ? paperMarginsCSS : ''}\n${appearance}\n${extensionCSS}\n${diagramCSS}\n${math.css}`.replace(/<\/style/gi, '<\\/style');
   const article = `<article class="meki-document">${holder.innerHTML}</article>`;
   const page = theme.background ? `<div class="meki-page">${article}</div>` : article;
-  return `<!doctype html><html lang="${getLocale()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http: file:; style-src 'unsafe-inline'; font-src data:;"><title>${title}</title><style>${css}</style></head><body>${page}</body></html>`;
+  return `<!doctype html><html lang="${getLocale()}"${paperMargins ? ' data-paper-margins' : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http: file:; style-src 'unsafe-inline'; font-src data:;"><title>${title}</title><style>${css}</style></head><body>${page}</body></html>`;
 }
