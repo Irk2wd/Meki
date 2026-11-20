@@ -84,7 +84,7 @@ try {
   const titlebarColor = await computed('.titlebar', 'color');
   for (const [id, css, expected] of [
     ['manuscript', 'border-bottom-style', 'double'],
-    ['kraft', 'border-bottom-width', '2px'],
+    ['kraft', 'border-bottom-width', '1px'],
     ['graph', 'border-left-width', '4px'],
     ['cyber', 'font-family', /monospace/],
   ]) {
@@ -100,6 +100,7 @@ try {
     assert.equal(await tile.locator('.theme-sample > span').evaluate(sample => getComputedStyle(sample).backgroundColor), pageColor);
     if (id === 'kraft') {
       assert.equal(await page.locator('html[data-paper-margins]').count(), 1);
+      assert.equal(await computed('#document-scroll', 'background-blend-mode'), 'soft-light');
       assert.equal(await computed('#visual-editor .ProseMirror > p', 'background-color'), pageColor);
       assert.match(await computed('#visual-editor .milkdown', 'background-image'), /linear-gradient/);
       assert.match(background, /^url\("data:image\/png;base64,/);
