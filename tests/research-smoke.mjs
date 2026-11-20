@@ -1452,7 +1452,15 @@ try {
   await sizeWindow(1280);
   await navDivider().waitFor();
   assert.equal(await listDivider().count(), 0);
+  await selectTheme('kraft');
   await openColumns();
+  for (const selector of ['.research-content', '#document-scroll']) {
+    const texture = await page.locator(selector).evaluate(el => getComputedStyle(el).backgroundImage);
+    assert.match(texture, /^url\(/);
+    assert.doesNotMatch(texture, /gradient\(/);
+  }
+  assert.equal(await listDivider().evaluate(el => getComputedStyle(el, '::before').width), '1px');
+  assert.equal(await page.locator('#document-scroll .milkdown').evaluate(el => getComputedStyle(el).boxShadow), 'none');
   const [nav, list, preview] = await widths();
   await dragWidth(navDivider(), 48);
   assert.deepEqual(await widths(), [nav + 48, list - 48, preview]);
@@ -1474,6 +1482,8 @@ try {
   await sizeWindow(740);
   await page.waitForFunction(() => document.querySelector('#research-workspace').inert);
   assert.equal(await listDivider().count(), 0);
+  assert.equal(await page.locator('.research-reader-scrim').evaluate(el => getComputedStyle(el).backgroundImage), 'none');
+  assert.equal(await page.locator('#document-surface').evaluate(el => getComputedStyle(el).boxShadow), 'none');
   await sizeWindow(1280);
   await listDivider().waitFor();
   assert.deepEqual(await widths(), adjusted);
@@ -1493,6 +1503,7 @@ try {
   await listDivider().dblclick();
   assert.deepEqual(await widths(), [nav, list, preview]);
   pass('both research dividers resize adjacent columns, support keyboard and cancel, and restore widths after resize and restart');
+  pass('paper texture remains in the reading margins with flat dividers in split and overlay views');
   assert.deepEqual(errors, []);
 
   await fs.writeFile(path.join(folder, 'results.json'), JSON.stringify({ results, errors }, null, 2) + '\n');

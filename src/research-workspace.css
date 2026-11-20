@@ -336,12 +336,9 @@
 
 .research-journal { padding-bottom: 17px; }
 .research-summary-lede { display: block; margin: 4px 0; color: var(--text); font-size: 13px; line-height: 1.65; }
-:root[data-paper-margins] .research-content {
-  background-image: linear-gradient(to right, transparent, var(--bg) 13px calc(100% - 13px), transparent), var(--theme-image);
-  background-color: color-mix(in srgb, var(--bg) 82%, var(--muted));
-  background-blend-mode: normal, soft-light;
-  background-size: 100% 100%, var(--theme-size);
-  background-repeat: no-repeat, var(--theme-repeat);
+:root[data-paper-margins] :is(.research-content, .research-reader-open .document-scroll) {
+  background-color: var(--bg);
+  background-blend-mode: soft-light;
 }
 :root[data-paper-margins] .research-overview h1 {
   font-family: Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif;
@@ -513,7 +510,7 @@
   position: absolute;
   inset: 0;
   z-index: 19;
-  background: linear-gradient(90deg, light-dark(#26352d10, #0003), light-dark(#26352d42, #0009));
+  background: light-dark(rgb(27 34 31 / 15%), rgb(0 0 0 / 38%));
   animation: research-reader-scrim-in 180ms ease-out;
 }
 .research-reader-open > #document-surface {
@@ -525,7 +522,6 @@
   border: 1px solid var(--border);
   border-radius: 18px;
   background: var(--bg);
-  box-shadow: -8px 8px 35px light-dark(#27372d32, #0008);
   animation: research-reader-in 200ms cubic-bezier(.2, .65, .28, 1);
 }
 .research-reader-open .research-reader-header {
@@ -628,14 +624,9 @@
 .research-reader-open:not(.research-reader-editing) .research-reader-evidence { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; }
 .research-reader-open:not(.research-reader-editing) .research-related-link { border: 0; padding: 2px 4px; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent); text-underline-offset: 3px; }
 .research-reader-open:not(.research-reader-editing) .formatbar { flex: none; margin-inline-start: auto; padding: 3px 0; border: 0; background: transparent; }
-:root[data-paper-margins] .research-reader-open:not(.research-reader-editing) .document-scroll {
-  background-image: linear-gradient(to right, transparent, var(--bg) 14px calc(100% - 14px), transparent), var(--theme-image);
-  background-size: 100% 100%, var(--theme-size);
-  background-repeat: no-repeat, var(--theme-repeat);
-  background-blend-mode: normal, soft-light;
-}
+:root[data-paper-margins] .research-reader-open .document-scroll .milkdown { box-shadow: none; }
 :root[data-paper-margins] .research-reader-open:not(.research-reader-editing) .document-scroll .milkdown {
-  padding: 0; box-shadow: none; border-radius: 0; background-image: none;
+  padding: 0; border-radius: 0; background-image: none;
 }
 .research-reader-open:not(.research-reader-editing) .document-scroll .ProseMirror > p:has(+ .research-inline-comparisons) { text-wrap: balance; }
 
