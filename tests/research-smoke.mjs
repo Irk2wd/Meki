@@ -261,6 +261,27 @@ try {
   assert.equal(await page.locator('.research-entry').count(), 0);
   await page.locator('[data-research-phase=validation]').click();
   assert.equal(await page.locator('.research-entry').count(), 1);
+  await page.locator('.research-entry [data-research-record=forest-validation]').click();
+  const sampleLinks = page.locator('#research-reader-related');
+  await sampleLinks.locator('[data-research-related=forest-timings]').click();
+  const sampleTable = page.getByRole('table', { name: '逐视角 CPU 计时表 · CSV' });
+  await sampleTable.getByRole('cell', { name: '487.47', exact: true }).waitFor();
+  assert.equal(await sampleTable.locator('tbody tr').count(), 8);
+  await page.getByRole('button', { name: '关闭证据预览', exact: true }).click();
+  for (const [id, count] of [['forest-observations', 2], ['forest-slides', 3]]) {
+    const link = sampleLinks.locator(`[data-research-related="${id}"]`);
+    await link.click();
+    const preview = page.locator('#research-report-dialog');
+    for (let number = 1; number <= count; number++) {
+      if (number > 1) await preview.locator('[data-report-next]').click();
+      await preview.getByText(`第 ${number} 页，共 ${count} 页`, { exact: true }).waitFor();
+      await preview.locator('.research-report-stage[aria-busy="false"] #research-report-status[hidden]').waitFor({ state: 'attached' });
+    }
+    await preview.getByRole('button', { name: '关闭汇报预览' }).click();
+    await link.and(page.locator(':focus')).waitFor();
+  }
+  await closeReader();
+  pass('the built-in forest record opens its CSV, two-page PDF and three-slide PowerPoint and returns to the attachment');
   await page.locator('[data-research-phase=validation]').click();
   await page.locator('[data-research-reset-range]').click();
   pass('date presets use inclusive days and respect the project start and time zone');

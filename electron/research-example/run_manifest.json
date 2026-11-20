@@ -1,0 +1,83 @@
+{
+  "id": "forest-canopy-demo",
+  "synthetic": true,
+  "seed": 723,
+  "size": [
+    960,
+    540
+  ],
+  "supersampling": 2,
+  "cameras": {
+    "canopy": {
+      "label": "树冠近景",
+      "eye": [
+        -3,
+        -4,
+        7.3
+      ],
+      "target": [
+        1.8,
+        9,
+        5
+      ],
+      "fov": 44
+    },
+    "trail": {
+      "label": "林间步道",
+      "eye": [
+        1.7,
+        -7,
+        2.8
+      ],
+      "target": [
+        7,
+        18,
+        4.0
+      ],
+      "fov": 51
+    },
+    "valley": {
+      "label": "河谷远眺",
+      "eye": [
+        -14,
+        -7,
+        14
+      ],
+      "target": [
+        2,
+        25,
+        2.3
+      ],
+      "fov": 46
+    },
+    "rim": {
+      "label": "林缘侧望",
+      "eye": [
+        -52,
+        2,
+        8.6
+      ],
+      "target": [
+        -32,
+        20,
+        6.8
+      ],
+      "fov": 47
+    }
+  },
+  "methods": {
+    "coarse": "3 canopy layers, 6 sides",
+    "layered": "7 canopy layers, 18 sides"
+  },
+  "timing": "One CPU render and PNG encode per view. Illustrative only.",
+  "images": [
+    "canopy-coarse.png",
+    "trail-coarse.png",
+    "valley-coarse.png",
+    "rim-coarse.png",
+    "canopy-layered.png",
+    "trail-layered.png",
+    "valley-layered.png",
+    "rim-layered.png"
+  ]
+}

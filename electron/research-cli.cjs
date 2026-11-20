@@ -7,7 +7,7 @@ const { parseArgs } = require('node:util');
 const { ResearchStore } = require('./research-store.cjs');
 const { MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, DOCUMENT_SCHEME, RECORDS, FIELD_TYPES, TEMPLATE_KEYS, RELATION_KINDS, RUN_FILTER_FIELDS, assert, date, id, comparisonType } = require('./research-model.cjs');
 const { comparisonLimits } = require('./research-comparison.mjs');
-const { newExampleProject, exampleRecords } = require('./research-example.cjs');
+const { createExampleProject } = require('./research-example.cjs');
 const { PRODUCT_NAME } = require('./app-identity.cjs');
 
 const usage = `${PRODUCT_NAME} research projects
@@ -61,8 +61,9 @@ async function main(args) {
   for (const key of Object.keys(values)) assert(allowedOptions.includes(key), `--${key} is not used by ${command}.`);
   const root = path.resolve(folder);
   if (command === 'init' || command === 'init-demo') {
-    const config = command === 'init' ? await readInput(values.input) : newExampleProject();
-    const store = await ResearchStore.initialize(root, config, command === 'init-demo' ? exampleRecords : []);
+    const store = command === 'init-demo'
+      ? await createExampleProject(root)
+      : await ResearchStore.initialize(root, await readInput(values.input));
     const { project, revision } = await store.manifest();
     return { root: store.root, id: project.id, revision };
   }

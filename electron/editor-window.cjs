@@ -7,7 +7,7 @@ const { WorkspaceStore, documentStatus } = require('./workspace-store.cjs');
 const { ResearchStore } = require('./research-store.cjs');
 const { previewEvidence, sourceDirectory } = require('./research-evidence.cjs');
 const { DOCUMENT_SCHEME, researchLinkId } = require('./research-links.mjs');
-const { newExampleProject, exampleRecords } = require('./research-example.cjs');
+const { createExampleProject } = require('./research-example.cjs');
 const { PRODUCT_NAME } = require('./app-identity.cjs');
 const { validateSession } = require('./lifecycle-store.cjs');
 const { validateTarget } = require('./snapshot-store.cjs');
@@ -354,11 +354,10 @@ async function createResearchDemo() {
   })).filePaths[0];
   if (!selected) return null;
   const parent = await fs.promises.realpath(validateAbsolutePath(selected));
-  const definition = newExampleProject();
   for (let attempt = 0; attempt < 100; attempt++) {
     const root = path.join(parent, `research-example${attempt ? `-${attempt + 1}` : ''}`);
     try {
-      const project = await ResearchStore.initialize(root, definition, exampleRecords);
+      const project = await createExampleProject(root);
       return await setWorkspace(project.root, true);
     } catch (error) { if (error.code !== 'EEXIST' || error.path !== root) throw error; }
   }

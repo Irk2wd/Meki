@@ -59,6 +59,8 @@ node electron/research-cli.cjs resolve /path/to/project capture-notes
 
 CSV 和 TSV 以表格显示。对于没有表头的数据，取消「首行作为列名」即可把第一行作为数据查看。长表按行翻页，宽表可以切换列组。
 
+新建示例项目后，在「复测与验证」阶段打开「树林轨迹复测」。其中的计时 CSV、两页观察报告 PDF 和三页组会幻灯片 PPTX 来自同一组合成林地渲染。可从正文或关联证据打开，关闭预览后继续阅读记录。
+
 项目在 `.mekir/project.json` 保存来源 ID，在 `.mekir/index.json` 保存证据 ID、来源 ID 和相对路径。本机目录绑定存放在 `~/.mekir/sources/`。盘符或挂载点变化时，在「资料」对原来源执行「重新绑定目录」。目录内相对路径变化时，用原证据 ID 重新登记文件。
 
 ```sh

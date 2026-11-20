@@ -1,0 +1,9 @@
+camera,method,visible_triangles,cpu_render_and_png_ms,image
+canopy,coarse,18137,171.12,canopy-coarse.png
+trail,coarse,22208,135.19,trail-coarse.png
+valley,coarse,21658,148.49,valley-coarse.png
+rim,coarse,28927,156.77,rim-coarse.png
+canopy,layered,83363,363.25,canopy-layered.png
+trail,layered,102767,396.92,trail-layered.png
+valley,layered,99830,439.64,valley-layered.png
+rim,layered,134814,487.47,rim-layered.png

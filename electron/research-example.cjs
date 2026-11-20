@@ -1,6 +1,9 @@
 'use strict';
 
 const { randomUUID } = require('node:crypto');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const { ResearchStore } = require('./research-store.cjs');
 
 const exampleProject = {
   version: 1,
@@ -76,8 +79,34 @@ const exampleRecords = [
   },
 ];
 
+const exampleEvidence = [
+  { id: 'forest-timings', relativePath: 'timings.csv', title: '逐视角 CPU 计时表 · CSV' },
+  { id: 'forest-observations', relativePath: 'forest-observations.pdf', title: '森林四视角观察报告 · PDF' },
+  { id: 'forest-slides', relativePath: 'forest-briefing.pptx', title: '森林复测组会 · PPTX' },
+  { id: 'forest-manifest', relativePath: 'run_manifest.json', title: '相机与绘制配置 · JSON' },
+];
+
 function newExampleProject() {
   return { ...exampleProject, id: `${exampleProject.id}-${randomUUID()}` };
 }
 
-module.exports = { exampleProject, exampleRecords, newExampleProject };
+async function createExampleProject(root) {
+  const files = path.join(__dirname, 'research-example');
+  const contents = await Promise.all(exampleEvidence.map(file => fs.readFile(path.join(files, file.relativePath))));
+  const store = await ResearchStore.initialize(root, newExampleProject(), exampleRecords);
+  const directory = path.join(store.root, '示例证据');
+  await fs.mkdir(directory);
+  await Promise.all(exampleEvidence.map((file, i) => fs.writeFile(path.join(directory, file.relativePath), contents[i], { flag: 'wx' })));
+  const sourceId = 'forest-samples';
+  await store.bindEvidenceSource(sourceId, directory, '林地渲染样例');
+  for (const { id, relativePath, title } of exampleEvidence) await store.indexEvidence(id, { sourceId, relativePath, title });
+  const record = await store.read('forest-validation');
+  const links = exampleEvidence.map(file => `- [${file.title}](mekir:${file.id})`);
+  await store.writeBatch({ records: [{
+    id: record.record.id, ifRevision: record.revision, evidence: exampleEvidence.map(file => file.id),
+    body: [record.body.trimEnd(), '', '## 四视角合成场景', '', '11 月 20 日补充。固定四个机位比较树冠几何，下列计时包含单次 CPU 绘制与 PNG 编码。', '', ...links, ''].join('\n'),
+  }] });
+  return store;
+}
+
+module.exports = { exampleProject, exampleRecords, newExampleProject, createExampleProject };
