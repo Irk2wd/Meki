@@ -30,6 +30,7 @@ import { renderMath } from './math-engine';
 import { installMathCopyActions } from './math-copy';
 import { normalizeCustomCss, writingAppearance } from './appearance';
 import { ThemePicker } from './theme-picker';
+import { editorViewCtx } from '@milkdown/kit/core';
 import './style.css';
 import './print.css';
 import './formula.css';
@@ -74,14 +75,15 @@ document.querySelector('#app')!.innerHTML = `
         ${button('research-close-reader', ht("关闭正文侧栏"), 'close')}
       </div>
     </header>
-    <div id="research-reader-related" hidden></div>
     <header class="titlebar">
       <div class="document-location">${button('sidebar', t("显示或隐藏侧栏"), 'layout')}<span class="breadcrumb">${ht("文稿")}</span>${icon('chevron', 12)}<span id="document-name" tabindex="0">${ht("开始写作.md")}</span><span class="dirty-dot" id="dirty-dot" hidden></span></div>
       <div class="title-actions"><button id="toggle-autosave" class="lifecycle-button" data-action="toggle-autosave" aria-pressed="false">${ht("自动保存：关")}</button><button class="lifecycle-button" data-action="snapshots">${ht("版本历史")}</button><span class="save-state" id="save-state"><span class="saved-tick">✓</span> ${ht("就绪")}</span><button class="save-button" data-action="save">${icon('save', 15)}<span>${ht("保存")}</span></button></div>
     </header>
+    <div class="research-document-tools"><div id="research-reader-related" hidden></div>
     <div class="formatbar" aria-label="${ht("编辑工具栏")}">
       <div class="format-actions"><select id="heading-format" aria-label="${ht("段落样式")}"><option value="paragraph">${ht("正文")}</option><option value="h1">${ht("一级标题")}</option><option value="h2">${ht("二级标题")}</option><option value="h3">${ht("三级标题")}</option></select><span class="divider"></span><button class="icon-button text-icon" data-format="bold" title="${ht("粗体 Ctrl/⌘ B")}" aria-label="${ht("粗体")}"><b>B</b></button><button class="icon-button text-icon" data-format="italic" title="${ht("斜体 Ctrl/⌘ I")}" aria-label="${ht("斜体")}"><i>I</i></button><button class="icon-button" data-format="list" title="${ht("无序列表")}" aria-label="${ht("无序列表")}">${icon('list')}</button><span class="divider"></span>${button('math', t("插入数学公式"), 'formula')}${button('diagram', t("插入 Mermaid 图表"), 'diagram')}<button class="icon-button" data-format="code" title="${ht("插入代码块")}" aria-label="${ht("插入代码块")}">${icon('source')}</button>${button('image', t("插入图片"), 'image')}</div>
       <div class="view-actions"><div class="mode-switch" aria-label="${ht("编辑模式")}"><button data-mode="visual" class="active" aria-pressed="true">${ht("编辑")}</button><button data-mode="source" aria-pressed="false">${ht("源码")}</button></div><span class="divider"></span>${button('find', t("查找文稿 Ctrl/⌘ F"), 'search')}${button('focus', t("专注模式"), 'focus')}${button('style', t("外观与排版"), 'style')}${button('export', t("导出文稿"), 'export')}</div>
+    </div>
     </div>
     <div id="recovery-banner" class="recovery-banner" hidden><span>${ht("已恢复文稿内容，尚未写入文件。确认后请手动保存。")}</span><button data-action="dismiss-recovery" aria-label="${ht("关闭恢复提示")}">${icon('close', 14)}</button></div>
     <div id="find-panel" class="find-panel" hidden>${icon('search', 16)}<input id="find-query" placeholder="${ht("查找文稿中的文字")}" aria-label="${ht("查找文字")}"><span id="find-count"></span>${button('find-prev', t("上一个匹配"), 'back')}${button('find-next', t("下一个匹配"), 'chevron')}${button('find-close', t("关闭查找"), 'close')}</div>
@@ -228,7 +230,6 @@ function updateStatus() {
   if (researchUI.readerOpen) {
     const label = researchUI.readerLabel(current.path);
     researchUI.selectReaderItem(label?.id, label?.linkedProject);
-    if (!researchEditing) researchUI.showReaderFigures(current.path, el('#document-scroll'));
     el('#research-reader-title').textContent = label?.title || current.name;
     el('#research-reader-context').textContent = [label?.context || t("资料"), dirty() ? t("未保存") : ''].filter(Boolean).join(' · ');
     const back = el<HTMLButtonElement>('[data-action="research-reader-back"]');
@@ -236,6 +237,9 @@ function updateStatus() {
     back.setAttribute('aria-label', backLabel);
     back.title = backLabel;
   }
+  if (researchUI.readerOpen && !researchEditing) {
+    editor.crepe.editor.action(ctx => researchUI.showReaderFigures(current.path, ctx.get(editorViewCtx)));
+  } else researchUI.clearReaderFigures();
   const related = researchUI.readerOpen ? researchUI.readerRelated(current.path) : '';
   if (related !== researchRelatedMarkup) {
     researchRelatedMarkup = related;
@@ -516,11 +520,13 @@ function rememberResearchStep(step?: ResearchReaderStep) {
 function animateResearchDocument(direction: 1 | -1) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const content = el('#editor-workspace');
-  content.getAnimations().forEach(animation => animation.cancel());
+  const running = content.getAnimations().find(animation => animation.id === 'research-document-switch');
+  const opacity = running ? Number(getComputedStyle(content).opacity) : .72;
+  running?.cancel();
   content.animate([
-    { opacity: 0.45, transform: `translateX(${6 * direction}px)` },
+    { opacity, transform: `translateX(${3 * direction}px)` },
     { opacity: 1, transform: 'translateX(0)' },
-  ], { duration: 160, easing: 'ease-out' });
+  ], { id: 'research-document-switch', duration: 180, easing: 'cubic-bezier(.22,.72,.28,1)' });
 }
 
 async function backResearchReader() {

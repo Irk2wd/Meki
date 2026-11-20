@@ -4,7 +4,8 @@ import { researchReportFormat } from '../electron/research-report-format.mjs';
 import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSnapshot, ResearchType, ResearchValue, ResearchView } from '../shared/research';
 import { icon } from './icons';
 import { ComparisonGridEditor, ComparisonViewer } from './research-comparison';
-import { evidenceWipe, supportsWipe } from './research-wipe';
+import { evidenceWipe, placeReaderFigure, supportsWipe } from './research-wipe';
+import type { EditorView } from '@milkdown/kit/prose/view';
 import { TimelineEventLayout, timelineEventButton, type TimelineEventDay } from './research-timeline-events';
 import { adjustDays, brushDays, datesForDays, dayNumber, isoDay, shiftRange, timelineOverview, type RangeHandle, type TimelineWindow } from './research-timeline-range';
 import { reportReferences } from './research-report-links';
@@ -362,7 +363,7 @@ export class ResearchWorkspace {
   private readerItem = '';
   private openingListRecord = false;
   private pendingListRecord?: HTMLButtonElement;
-  private figureContext?: { path: string | null; snapshot: ResearchSnapshot | null; host: HTMLElement };
+  private figureContext?: { path: string | null; root?: string; snapshot?: ResearchSnapshot; view: EditorView; key?: string };
   private loading = false;
   private loadNumber = 0;
   private referenceRequest = 0;
@@ -600,7 +601,6 @@ export class ResearchWorkspace {
 
   rememberReaderContext(snapshot: ResearchSnapshot) {
     this.readerContexts.set(snapshot.root, snapshot);
-    this.figureContext = undefined;
   }
 
   readerLabel(path: string | null) {
@@ -660,11 +660,18 @@ export class ResearchWorkspace {
           ${run.missing.length ? `<dt>${ht("缺件")}</dt><dd>${escape(run.missing.join(', '))}</dd>` : ''}</dl></details>` : ''}`;
   }
 
-  showReaderFigures(path: string | null, host: HTMLElement) {
+  clearReaderFigures() {
+    const previous = this.figureContext;
+    this.figureContext = undefined;
+    if (previous?.key && !previous.view.isDestroyed) placeReaderFigure(previous.view);
+  }
+
+  showReaderFigures(path: string | null, view: EditorView) {
+    if (this.figureContext?.view !== view) this.clearReaderFigures();
     const cached = this.figureContext;
-    if (cached?.path === path && cached.snapshot === this.snapshot && cached.host === host) return;
-    this.figureContext = { path, snapshot: this.snapshot, host };
     const source = this.readerReference(path);
+    const snapshot = source?.state, root = this.root;
+    if (cached && cached.path === path && cached.snapshot === snapshot && cached.root === root) return;
     const entry = source?.state.records.find(item => item.record.id === source.reference.id);
     const references = new Map(source?.state.records.map(item => [item.record.id, item]));
     const ids = entry ? [entry.record.id, ...(entry.record.sources || [])] : [];
@@ -672,20 +679,17 @@ export class ResearchWorkspace {
       const item = references.get(id);
       return item && supportsWipe(item.record.comparison) ? [item] : [];
     });
-    const previous = host.querySelector<HTMLElement>(':scope > .research-inline-comparisons');
-    if (!reports.length || !source || !path || !this.root) { previous?.remove(); return; }
-    const key = JSON.stringify([path, reports.map(item => [item.record.id, item.revision]), source.state.evidenceSources]);
-    if (previous?.dataset.figures === key) return;
+    const key = reports.length ? JSON.stringify([root, path, reports.map(item => [item.record.id, item.revision]), snapshot?.evidenceSources]) : undefined;
+    this.figureContext = { path, root, snapshot, view, key };
+    if (cached?.key === key) return;
+    if (!key || !root || !path) { placeReaderFigure(view); return; }
     const holder = document.createElement('section');
     holder.className = 'research-inline-comparisons';
-    holder.dataset.figures = key;
-    const root = this.root;
     holder.append(evidenceWipe(reports.map(({ record }) => ({ title: record.title, comparison: record.comparison! })), {
       read: id => window.meki.openResearchEvidence(root, id, path),
       open: (id, origin) => this.tools.evidence(root, id, path, undefined, origin), error: error => this.hooks.notify(errorText(error), true),
     }));
-    if (previous) previous.replaceWith(holder);
-    else host.prepend(holder);
+    placeReaderFigure(view, holder);
   }
 
   async openEvidence(id: string, sourceDocument?: string, origin?: HTMLElement) {
@@ -1148,7 +1152,7 @@ export class ResearchWorkspace {
       ${entries.length ? `<ul>${entries.sort((a, b) => sortEntries(b, a)).map(({ record, excerpt }) => `<li class="research-summary-item"><button type="button" data-research-record="${record.id}">
         ${icon('report', 18)}<span><strong>${escape(record.title)}</strong>
           ${excerpt ? `<span class="research-summary-lede">${escape(excerpt)}</span>` : ''}
-          <small>${record.coverage ? ht("覆盖 {0}", escape(rangeText(record.coverage))) + ' · ' : ''}${ht("撰写于 {0}", escape(record.date))}</small></span>${icon('chevron', 14)}</button>
+          <small class="research-summary-dates">${record.coverage ? `<span>${ht("覆盖 {0}", escape(rangeText(record.coverage)))}</span>` : ''}<span>${ht("撰写于 {0}", escape(record.date))}</span></small></span>${icon('chevron', 14)}</button>
         <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button></li>`).join('')}</ul>`
         : `<p class="research-empty-list">${ht("这个阶段还没有总结。")}</p>`}
     </section>`;

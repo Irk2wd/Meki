@@ -1,4 +1,6 @@
 import { ht, t } from '../electron/i18n.mjs';
+import { Plugin, PluginKey } from '@milkdown/kit/prose/state';
+import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view';
 import type { ResearchComparison, ResearchEvidenceFile } from '../shared/research';
 import { icon } from './icons';
 import './research-wipe.css';
@@ -12,6 +14,27 @@ interface WipeActions {
 
 const hasPair = (row: ResearchComparison['rows'][number]) => new Set(row.images.filter(Boolean)).size >= 2;
 export const supportsWipe = (comparison?: ResearchComparison) => comparison?.rows.some(hasPair) ?? false;
+
+const readerFigureKey = new PluginKey('research-reader-figure');
+
+// A view decoration sits between Markdown blocks without becoming part of the document or its undo history.
+export function placeReaderFigure(view: EditorView, figure?: HTMLElement) {
+  const plugins = (view.props.plugins || []).filter(plugin => plugin.spec.key !== readerFigureKey);
+  if (figure) plugins.push(new Plugin({
+    key: readerFigureKey,
+    props: { decorations({ doc }) {
+      let position = 0;
+      for (let index = 0; index < doc.childCount; index++) {
+        const block = doc.child(index);
+        if (block.type.name === 'heading') { position += block.nodeSize; continue; }
+        if (block.type.name === 'paragraph') position += block.nodeSize;
+        break;
+      }
+      return DecorationSet.create(doc, [Decoration.widget(position, figure, { stopEvent: () => true, ignoreSelection: true })]);
+    } },
+  }));
+  view.setProps({ plugins });
+}
 
 export function evidenceWipe(reports: WipeReport[], actions: WipeActions) {
   const figure = document.createElement('figure');

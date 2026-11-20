@@ -398,7 +398,7 @@ try {
   await page.locator('[data-research-phase="exploration"]').click();
   assert.equal(await page.locator('.research-entry').count(), 2);
   const phaseSummary = page.locator('.research-phase-summaries [data-research-record=exploration-review]');
-  assert.match(await phaseSummary.innerText(), /覆盖 2026-11-05 – 2026-11-13 · 撰写于 2026-11-16/);
+  assert.deepEqual(await phaseSummary.locator('.research-summary-dates > span').allTextContents(), ['覆盖 2026-11-05 – 2026-11-13', '撰写于 2026-11-16']);
   await page.locator('#research-date').fill('2026-11-07');
   assert.equal(await page.locator('.research-entry').count(), 1);
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1120, 490));
@@ -1096,6 +1096,11 @@ try {
   await page.locator('.research-entry-title [data-research-record="exploration-review"]').click();
   const inline = page.locator('#document-scroll .research-wipe');
   await inline.getByRole('slider').waitFor();
+  assert.ok(await inline.evaluate(figure => {
+    const slot = figure.closest('.research-inline-comparisons');
+    return slot.parentElement.classList.contains('ProseMirror') && slot.previousElementSibling?.tagName === 'P'
+      && Boolean(slot.parentElement.querySelector('h1').compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING);
+  }));
   await inline.locator('[data-wipe-row]').selectOption('1');
   await inline.locator('[data-wipe-side="right"] img[alt="ours-trunk.png"]').waitFor();
   await inline.getByRole('slider').press('Home');
@@ -1103,6 +1108,14 @@ try {
   await tools.getByRole('button', { name: '返回正文' }).click();
   assert.equal(await inline.getByRole('slider').getAttribute('aria-valuenow'), '0');
   assert.ok(await inline.locator('[data-wipe-side="right"]').evaluate(node => node === document.activeElement));
+  await page.getByRole('button', { name: '编辑正文', exact: true }).click();
+  assert.equal(await inline.count(), 0);
+  await page.locator('[data-mode="source"]').click();
+  const markdown = await page.locator('#source-editor .cm-content').innerText();
+  assert.match(markdown, /# 方案探索阶段总结/);
+  assert.doesNotMatch(markdown, /research-inline-comparisons|图像对比分界线/);
+  await page.getByRole('button', { name: '完成编辑', exact: true }).click();
+  await inline.getByRole('slider').waitFor();
   await closeReader();
   await timelineView.click();
   pass('a cited comparison can be scrubbed in the record and opened at its original image');

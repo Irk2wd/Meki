@@ -19,5 +19,10 @@
 .research-wipe-divider:focus-visible span { outline: 3px solid var(--accent); outline-offset: 2px; }
 .research-wipe-labels { margin-top: 5px; color: var(--soft); font-size: 11px; }
 .research-wipe-status { max-width: 85%; text-align: center; color: var(--soft); }
-.research-inline-comparisons { display: none; padding: 17px clamp(16px, 3vw, 42px) 8px; background: var(--bg); }
-.research-reader-open:not(.research-reader-editing) .research-inline-comparisons { display: block; }
+.research-inline-comparisons { margin: 24px 0 28px; background: var(--bg); font: 13px/1.5 var(--ui); white-space: normal; letter-spacing: normal; }
+.research-inline-comparisons .research-wipe { margin: 0; }
+.research-inline-comparisons .research-wipe-labels { margin-top: 7px; }
+.research-inline-comparisons .research-wipe-labels button { color: var(--accent); font-size: 11px; }
+.research-inline-comparisons .research-wipe img { margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+.research-inline-comparisons select { background: var(--side); border-color: transparent; border-radius: 6px; }
+@media print { .research-inline-comparisons { display: none; } }
