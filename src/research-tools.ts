@@ -277,13 +277,13 @@ export class ResearchTools {
     if (await window.meki.bindResearchSource(root, sourceId)) await this.refresh();
   }
 
-  async evidence(root: string, id: string, sourceDocument?: string, returnLabel = t("返回正文")) {
+  async evidence(root: string, id: string, sourceDocument?: string, returnLabel = t("返回正文"), origin?: HTMLElement) {
     const file = await window.meki.openResearchEvidence(root, id, sourceDocument);
     if (file.kind === 'pdf' || file.kind === 'pptx') {
       this.report.show([file], {
         read: async () => file,
         reveal: () => window.meki.revealResearchEvidence(root, id, sourceDocument),
-        notify: this.notify,
+        notify: this.notify, origin,
       });
       return;
     }
@@ -293,6 +293,9 @@ export class ResearchTools {
     </div><div class="research-evidence-content"></div>
     <div class="research-actions research-evidence-footer"><span>${ht("只读来源")}</span>
       <button type="button" class="secondary-button" data-evidence-reveal>${ht("定位原文件")}</button></div>`, 'research-evidence-preview');
+    if (origin) this.dialog.addEventListener('close', () => {
+      if (!this.dialog.open && origin.isConnected) origin.focus({ preventScroll: true });
+    }, { once: true });
     const body = this.dialog.querySelector('.research-evidence-content')!;
     if (file.kind === 'image') {
       const image = document.createElement('img');

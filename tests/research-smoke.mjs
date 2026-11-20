@@ -416,13 +416,14 @@ try {
   await back.click();
   await readerTitle.getByText('测试分块遮挡剔除', { exact: true }).waitFor();
   assert.equal(await documentScroll.evaluate(element => element.scrollTop), tileScroll);
+  assert.ok(await baselineLink.evaluate(link => link === document.activeElement));
   await back.click();
   await readerTitle.getByText('方案探索阶段总结', { exact: true }).waitFor();
   await idle();
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   const closingReader = await page.getByRole('button', { name: '返回研究列表' }).evaluate(button => {
     button.click();
-    const surfaces = [document.querySelector('#document-surface'), document.querySelector('.research-reader-scrim')];
+    const surfaces = [document.querySelector('#document-surface'), document.querySelector('.research-reader-scrim')].filter(surface => surface.getClientRects().length);
     return { open: surfaces[0].parentElement.classList.contains('research-reader-open'),
       fading: surfaces.every(surface => surface.getAnimations().some(animation => Number(animation.effect.getKeyframes().at(-1).opacity) === 0)) };
   });
@@ -438,6 +439,31 @@ try {
   await selectTheme('paper');
   pass('the timeline and record reader share the selected theme');
   await page.locator('[data-research-reset-range]').click();
+
+  await page.locator('#research-date').fill('');
+  const peer = page.locator('.research-entry-title [data-research-record="tile-culling"]');
+  const other = page.locator('.research-entry-title [data-research-record="conservative-depth"]');
+  await peer.click();
+  await page.locator('.research-peek-split').waitFor();
+  assert.equal(await page.locator('#research-workspace').evaluate(panel => panel.inert), false);
+  await page.waitForFunction(() => {
+    const list = document.querySelector('#research-workspace').getBoundingClientRect();
+    const reader = document.querySelector('#document-surface').getBoundingClientRect();
+    return Math.abs(list.right - reader.left) < 2 && Math.abs(list.top - reader.top) < 2;
+  });
+  await other.click();
+  await readerTitle.getByText('验证保守深度阈值').waitFor();
+  assert.equal(await other.getAttribute('aria-current'), 'true');
+  await other.evaluate(last => {
+    document.querySelector('.research-entry-title [data-research-record="tile-culling"]').click();
+    last.click();
+  });
+  await page.waitForFunction(() => !document.body.classList.contains('is-busy') && document.querySelector('#research-reader-title').textContent === '验证保守深度阈值');
+  await page.locator('[data-peek-step="-1"]').click();
+  await readerTitle.getByText('测试分块遮挡剔除').waitFor();
+  await closeReader();
+  assert.ok(await peer.evaluate(button => button === document.activeElement));
+  pass('records switch inside one open desktop reader and return to the selected list item');
 
   await page.locator('#research-date').fill('2026-11-10');
   assert.equal(await page.locator('.research-entry').count(), 0);

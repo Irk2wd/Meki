@@ -68,6 +68,8 @@ document.querySelector('#app')!.innerHTML = `
         <div class="research-reader-heading"><span id="research-reader-context"></span><h2 id="research-reader-title" tabindex="-1"></h2></div>
       </div>
       <div class="research-reader-actions">
+        <button type="button" class="icon-button" data-peek-step="-1" hidden title="${ht("上一条记录")}" aria-label="${ht("上一条记录")}">${icon('back', 15)}</button>
+        <button type="button" class="icon-button" data-peek-step="1" hidden title="${ht("下一条记录")}" aria-label="${ht("下一条记录")}">${icon('chevron', 15)}</button>
         <button type="button" class="secondary-button" data-action="research-edit-body" aria-pressed="false">${icon('edit', 15)}<span>${ht("编辑正文")}</span></button>
         ${button('research-close-reader', ht("关闭正文侧栏"), 'close')}
       </div>
@@ -147,7 +149,7 @@ let syncingWorkspace = false;
 let composing = false;
 let savingAutomatically = false;
 let researchEditing = false;
-interface ResearchReaderStep { tabId: string; scroll: number; editing: boolean }
+interface ResearchReaderStep { tabId: string; scroll: number; editing: boolean; link?: { selector: string; index: number } }
 const researchReaderHistory: ResearchReaderStep[] = [];
 let researchRelatedMarkup = '';
 let lifecycleSettingsQueue: Promise<void> = Promise.resolve();
@@ -170,12 +172,14 @@ const researchUI = new ResearchWorkspace(el('.main-area'), el('#research-sidebar
     if (!doc) return;
     if (linked) researchUI.rememberReaderContext(linked.context);
     await loadResearchDocument(doc);
-    const followed = rememberResearchStep(previous);
+    const switched = Boolean(previous && previous.tabId !== documents.activeId);
+    if (origin && switched) researchReaderHistory.length = 0;
+    else rememberResearchStep(previous);
     researchUI.openReader(origin);
     setResearchEditing(Boolean(edit) || dirty());
     if (edit) editor.focus();
     else el('#research-reader-title').focus({ preventScroll: true });
-    if (followed) animateResearchDocument(1);
+    if (switched) animateResearchDocument(1);
   }, true),
   closeReader: closeResearchReader,
   openProject: path => openResearchProject(path),
@@ -223,6 +227,7 @@ function updateStatus() {
   el('#document-name').title = current.path || t("尚未保存到文件");
   if (researchUI.readerOpen) {
     const label = researchUI.readerLabel(current.path);
+    researchUI.selectReaderItem(label?.id, label?.linkedProject);
     el('#research-reader-title').textContent = label?.title || current.name;
     el('#research-reader-context').textContent = [label?.context || t("资料"), dirty() ? t("未保存") : ''].filter(Boolean).join(' · ');
     const back = el<HTMLButtonElement>('[data-action="research-reader-back"]');
@@ -314,11 +319,11 @@ function remapDocumentPath(filePath: string, from: string, to: string | null): s
   return to === null ? null : to + file.slice(source.length).replace(/\//g,to.includes('\\')?'\\':'/');
 }
 
-async function openLocation(location: OpenLocation, keepReader = false) {
+async function openLocation(location: OpenLocation, keepReader = false, origin?: HTMLElement) {
   const inProject = keepReader && researchUI.readerOpen;
   let changedDocument = false;
   if (location.path !== current.path) {
-    const previous = inProject ? captureResearchStep() : undefined;
+    const previous = inProject ? captureResearchStep(origin) : undefined;
     if (previous && dirty()) await persistDraft();
     const doc = await window.meki.openDocument(location.path); if (!doc) return;
     if (inProject) {
@@ -490,9 +495,14 @@ function previousResearchStep() {
   return researchReaderHistory.findLast(step => step.tabId !== documents.activeId && documents.tabs.some(tab => tab.id === step.tabId));
 }
 
-function captureResearchStep(): ResearchReaderStep | undefined {
+function captureResearchStep(origin?: HTMLElement): ResearchReaderStep | undefined {
   const tabId = documents.activeId;
-  if (researchUI.readerOpen && tabId) return { tabId, scroll: el('#document-scroll').scrollTop, editing: researchEditing };
+  if (!researchUI.readerOpen || !tabId) return;
+  const attribute = origin instanceof HTMLAnchorElement ? 'href' : 'data-research-related';
+  const value = origin?.getAttribute(attribute);
+  const selector = value ? `[${attribute}="${CSS.escape(value)}"]` : '';
+  const link = selector && origin ? { selector, index: [...el('#document-surface').querySelectorAll(selector)].indexOf(origin) } : undefined;
+  return { tabId, scroll: el('#document-scroll').scrollTop, editing: researchEditing, link };
 }
 
 function rememberResearchStep(step?: ResearchReaderStep) {
@@ -522,9 +532,13 @@ async function backResearchReader() {
     documents.activate(step.tabId);
     researchReaderHistory.splice(researchReaderHistory.lastIndexOf(step));
     setResearchEditing(step.editing || dirty());
-    el('#document-scroll').scrollTop = step.scroll;
     animateResearchDocument(-1);
   }, true);
+  if (documents.activeId === step.tabId) {
+    const link = step.link && el('#document-surface').querySelectorAll<HTMLElement>(step.link.selector)[step.link.index];
+    (link || el('#research-reader-title')).focus({ preventScroll: true });
+    el('#document-scroll').scrollTop = step.scroll;
+  }
 }
 
 async function closeResearchReader() {
@@ -554,7 +568,7 @@ function hideResearch() {
   document.body.classList.toggle('focus-mode', settings.focus);
 }
 
-async function dispatch(action: string, payload?: unknown) {
+async function dispatch(action: string, payload?: unknown, origin?: HTMLElement) {
   if (action === 'window-notice') { notify(String(payload)); return; }
   if (action === 'settings-changed' && ready) {
     settings = { ...settings, ...payload as Partial<Settings> }; applySettings(); updateStatus(); documents.refreshSettings(); return;
@@ -696,8 +710,8 @@ async function dispatch(action: string, payload?: unknown) {
       const source = current.path;
       if (!source) throw new Error(t("请先保存文稿，再打开相对文件链接。"));
       const location = await window.meki.resolveDocumentLink(String(payload), source);
-      if ('evidenceId' in location) await researchUI.openEvidence(location.evidenceId, source);
-      else await openLocation(location, true);
+      if ('evidenceId' in location) await researchUI.openEvidence(location.evidenceId, source, origin);
+      else await openLocation(location, true, origin);
     }
     if (action === 'reload-document' && current.path && await mayReplace()) { const doc = await window.meki.openDocument(current.path); if (doc) await documents.reload(doc); }
     if (action === 'import-document') {
@@ -759,9 +773,11 @@ document.addEventListener('click', event => {
   }
   const action = target.closest<HTMLElement>('[data-action]');
   if (action) { void dispatch(action.dataset.action!); return; }
+  const step = target.closest<HTMLButtonElement>('[data-peek-step]');
+  if (step && !busy) { researchUI.stepReader(Number(step.dataset.peekStep)); return; }
   const related = target.closest<HTMLButtonElement>('[data-research-related]');
   if (related && ready && !busy) {
-    void dispatch('document-link', `mekir:${related.dataset.researchRelated}`); return;
+    void dispatch('document-link', `mekir:${related.dataset.researchRelated}`, related); return;
   }
   const format = target.closest<HTMLElement>('[data-format]'); if (format && ready && !busy && mayEditDocument()) { editor.format(format.dataset.format!); return; }
   const mode = target.closest<HTMLElement>('[data-mode]'); if (mode && ready && !busy && mayEditDocument()) { switchMode(mode.dataset.mode as 'visual' | 'source'); return; }
@@ -777,7 +793,7 @@ document.addEventListener('click', event => {
       try { [...el('#visual-editor').querySelectorAll<HTMLElement>('[id]')].find(node => node.id === href.slice(1) || node.id === decodeURIComponent(href.slice(1)))?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* Ignore a malformed anchor. */ }
     } else if (event.ctrlKey || event.metaKey || (researchUI.readerOpen && !researchEditing)) {
       if (/^(https?:|mailto:)/i.test(href)) void window.meki.openExternal(href).catch(error => notify(String(error), true));
-      else void dispatch('document-link',href);
+      else void dispatch('document-link', href, link);
     }
     return;
   }
@@ -813,7 +829,7 @@ document.addEventListener('keydown', event => {
   if (!el('#find-panel').hidden) { writingTools?.close(); editor.focus(); }
   else if (!hadPopover && researchUI.readerOpen && !researchEditing && !busy) {
     event.preventDefault();
-    void closeResearchReader();
+    void backResearchReader();
   }
 }, true);
 

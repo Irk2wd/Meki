@@ -28,6 +28,7 @@ type TimelineRange = ResearchRange | RangePreset;
 const pageSizeKey = 'mekir.research.phasesPerPage';
 const widthsKey = 'mekir.research.widths';
 const defaultPageSize = 10;
+const peekItems = '.research-entry-title > [data-research-record], :is([aria-labelledby="research-phase-summaries-title"], [aria-labelledby="research-linked-summaries-title"]) li > [data-research-record]';
 const validPageSize = (size: number) => Number.isSafeInteger(size) && size > 0;
 
 function savedPageSize() {
@@ -347,10 +348,16 @@ export class ResearchWorkspace {
   private controlsIdle = Promise.resolve();
   private widths = savedWidths();
   private timelineEvents = new TimelineEventLayout(this.content);
-  private eventLayout = new ResizeObserver(() => { void this.controlsIdle.then(() => this.timelineEvents.layout()); });
+  private eventLayout = new ResizeObserver(() => {
+    this.layoutReader();
+    void this.controlsIdle.then(() => this.timelineEvents.layout());
+  });
   private positions = new Map<string, ViewPosition>();
   private readerContexts = new Map<string, ResearchSnapshot>();
   private readerReturn?: { scroll: number; origin?: HTMLButtonElement };
+  private readerItem = '';
+  private openingListRecord = false;
+  private pendingListRecord?: HTMLButtonElement;
   private loading = false;
   private loadNumber = 0;
   private referenceRequest = 0;
@@ -369,6 +376,7 @@ export class ResearchWorkspace {
     this.panel.append(this.toolbar, this.content);
     this.host.prepend(this.panel);
     this.eventLayout.observe(this.content);
+    this.eventLayout.observe(this.host);
     this.dialog.id = 'research-record-dialog';
     this.projectPicker.id = 'research-project-picker';
     this.rangePicker.id = 'research-range-picker';
@@ -494,8 +502,47 @@ export class ResearchWorkspace {
 
   openReader(origin?: HTMLButtonElement) {
     this.readerReturn ??= { scroll: this.content.scrollTop, origin };
+    if (origin) this.readerReturn.origin = origin;
     this.host.classList.add('research-reader-open');
-    this.panel.inert = true;
+    this.layoutReader();
+    if (!this.panel.inert) origin?.scrollIntoView({ block: 'nearest' });
+  }
+
+  private layoutReader() {
+    const split = this.readerOpen && this.host.clientWidth >= 730;
+    this.host.classList.toggle('research-peek-split', split);
+    this.panel.inert = this.readerOpen && !split;
+  }
+
+  selectReaderItem(id = '', linkedProject = '', force = false) {
+    const key = id ? `${linkedProject}/${id}` : '';
+    if (!force && key === this.readerItem) return;
+    this.readerItem = key;
+    const items = [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)];
+    const index = items.findIndex(button => key === `${button.dataset.researchLinkedProject || ''}/${button.dataset.researchRecord}`);
+    const previous = items.find(button => button.hasAttribute('aria-current'));
+    const active = items[index];
+    if (previous !== active) {
+      let dy = 0;
+      if (previous && active && !this.panel.inert && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        const transform = getComputedStyle(previous, '::before').transform;
+        dy = previous.getBoundingClientRect().top - active.getBoundingClientRect().top + (transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42);
+      }
+      previous?.removeAttribute('aria-current');
+      active?.setAttribute('aria-current', 'true');
+      if (dy && Math.abs(dy) < 260) active.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }],
+        { pseudoElement: '::before', duration: 160, easing: 'cubic-bezier(.2,.75,.25,1)' });
+    }
+    for (const button of this.host.querySelectorAll<HTMLButtonElement>('[data-peek-step]')) {
+      button.hidden = index < 0 || items.length < 2;
+      button.disabled = !items[index + Number(button.dataset.peekStep)];
+    }
+  }
+
+  stepReader(direction: number) {
+    const items = [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)];
+    const index = items.findIndex(button => button.hasAttribute('aria-current'));
+    if (index >= 0) items[index + direction]?.click();
   }
 
   async dismissReader() {
@@ -515,7 +562,7 @@ export class ResearchWorkspace {
     reader.inert = true;
     const animations = [
       reader.animate([readerStart, { opacity: 0, transform: 'translateX(12px)' }], timing),
-      scrim.animate([scrimStart, { opacity: 0 }], timing),
+      ...(scrim.getClientRects().length ? [scrim.animate([scrimStart, { opacity: 0 }], timing)] : []),
     ];
     try {
       await Promise.allSettled(animations.map(animation => animation.finished));
@@ -531,7 +578,8 @@ export class ResearchWorkspace {
     if (!returning) return;
     this.readerReturn = undefined;
     this.host.classList.remove('research-reader-open');
-    this.panel.inert = false;
+    this.layoutReader();
+    this.selectReaderItem();
     this.content.scrollTop = returning.scroll;
     if (focus) {
       const button = returning.origin;
@@ -557,7 +605,7 @@ export class ResearchWorkspace {
     const phase = state.project.phases.find(item => item.id === entry?.phaseId);
     const type = state.project.recordTypes.find(item => item.id === entry?.type);
     const sourceProject = this.snapshot?.root !== state.root ? state.project.title : '';
-    return { title: reference.title, context: [sourceProject, phase?.title, type?.label || t("资料"), entry?.date,
+    return { id: reference.id, linkedProject: sourceProject ? state.project.id : '', title: reference.title, context: [sourceProject, phase?.title, type?.label || t("资料"), entry?.date,
       entry?.run?.missing.includes('RUN.md') ? t("待补报告") : ''].filter(Boolean).join(' · ') };
   }
 
@@ -606,9 +654,9 @@ export class ResearchWorkspace {
           ${run.missing.length ? `<dt>${ht("缺件")}</dt><dd>${escape(run.missing.join(', '))}</dd>` : ''}</dl></details>` : ''}`;
   }
 
-  async openEvidence(id: string, sourceDocument?: string) {
+  async openEvidence(id: string, sourceDocument?: string, origin?: HTMLElement) {
     const root = this.hooks.root();
-    if (root) await this.tools.evidence(root, id, sourceDocument);
+    if (root) await this.tools.evidence(root, id, sourceDocument, undefined, origin);
   }
 
   async openReference(id: string, origin?: HTMLButtonElement, back?: () => void) {
@@ -1024,6 +1072,10 @@ export class ResearchWorkspace {
         </section>`}
     `;
     this.timelineEvents.show(timelineView?.eventDays, types, previousMarkers);
+    if (this.readerItem) {
+      const [linkedProject, id] = this.readerItem.split('/');
+      this.selectReaderItem(id, linkedProject, true);
+    }
     this.content.scrollTop = scroll;
     if (focusKey) {
       const selector = focused instanceof HTMLButtonElement ? 'button:enabled' : 'summary, [data-research-overview-handle]';
@@ -1049,7 +1101,7 @@ export class ResearchWorkspace {
   private renderPhaseEvents(entries: ResearchEntry[], types: Map<string, ResearchType>) {
     if (!entries.length) return '';
     return `<section class="research-phase-summaries"><h3>${ht("阶段事件")}</h3><ul>${entries.map(({ record }) =>
-      `<li><button type="button" data-research-record="${record.id}">${icon(timelineIcon(types.get(record.type)), 17)}
+      `<li class="research-summary-item"><button type="button" data-research-record="${record.id}">${icon(timelineIcon(types.get(record.type)), 17)}
       <span><strong>${escape(record.title)}</strong><small>${record.date} · ${escape(types.get(record.type)?.label || record.type)}</small></span>${icon('chevron', 14)}</button>
       <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button></li>`).join('')}</ul></section>`;
   }
@@ -1183,12 +1235,36 @@ export class ResearchWorkspace {
       }).join('')}</ul></div>`).join('');
   }
 
+  private async openListRecord(button: HTMLButtonElement, root: string) {
+    this.pendingListRecord = button;
+    if (this.openingListRecord) return;
+    this.openingListRecord = true;
+    try {
+      while (this.pendingListRecord && this.visible && this.root === root) {
+        const next: HTMLButtonElement = this.pendingListRecord;
+        this.pendingListRecord = undefined;
+        const { researchRecord: id, researchLinkedProject: linked } = next.dataset;
+        const origin = next.isConnected ? next : [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)]
+          .find(item => item.dataset.researchRecord === id && item.dataset.researchLinkedProject === linked);
+        if (!id || !origin) continue;
+        if (linked) await this.hooks.open(root, id, origin, false, linked);
+        else await this.openReference(id, origin);
+        if (document.querySelector('dialog[open]')) break;
+      }
+    } finally { this.openingListRecord = false; this.pendingListRecord = undefined; }
+  }
+
   private async click(event: MouseEvent) {
     const target = event.target as Element;
     const button = target.closest<HTMLButtonElement>('button') || (target.closest('[data-research-track]')
       ? target.closest('.research-timeline-row')?.querySelector<HTMLButtonElement>('[data-research-phase]') : null);
     const state = this.snapshot;
-    if (!button || !state || this.hooks.blocked()) return;
+    if (!button || !state) return;
+    if (button.matches(peekItems) && (this.openingListRecord || !this.hooks.blocked())) {
+      await this.openListRecord(button, state.root);
+      return;
+    }
+    if (this.hooks.blocked()) return;
     const data = button.dataset;
     if (data.researchTimelineEvents) {
       const ids = new Set(data.researchTimelineEvents.split(' '));
