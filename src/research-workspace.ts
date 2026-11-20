@@ -4,6 +4,7 @@ import { researchReportFormat } from '../electron/research-report-format.mjs';
 import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSnapshot, ResearchType, ResearchValue, ResearchView } from '../shared/research';
 import { icon } from './icons';
 import { ComparisonGridEditor, ComparisonViewer } from './research-comparison';
+import { ResearchColumns } from './research-columns';
 import { evidenceWipe, placeReaderFigure, supportsWipe } from './research-wipe';
 import type { EditorView } from '@milkdown/kit/prose/view';
 import { TimelineEventLayout, timelineEventButton, type TimelineEventDay } from './research-timeline-events';
@@ -353,8 +354,9 @@ export class ResearchWorkspace {
   private controlsIdle = Promise.resolve();
   private widths = savedWidths();
   private timelineEvents = new TimelineEventLayout(this.content);
+  private columns: ResearchColumns;
   private eventLayout = new ResizeObserver(() => {
-    this.layoutReader();
+    this.columns.update();
     void this.controlsIdle.then(() => this.timelineEvents.layout());
   });
   private positions = new Map<string, ViewPosition>();
@@ -381,6 +383,7 @@ export class ResearchWorkspace {
     this.content.className = 'research-content';
     this.panel.append(this.toolbar, this.content);
     this.host.prepend(this.panel);
+    this.columns = new ResearchColumns(this.sidebar.closest('aside')!, this.panel, this.host);
     this.eventLayout.observe(this.content);
     this.eventLayout.observe(this.host);
     this.dialog.id = 'research-record-dialog';
@@ -494,6 +497,7 @@ export class ResearchWorkspace {
     this.panel.hidden = this.sidebar.hidden = false;
     this.host.classList.add('research-mode');
     this.host.closest('.shell')?.classList.add('research-shell');
+    this.columns.update();
     await this.refresh();
     this.content.querySelector<HTMLElement>('h1')?.focus({ preventScroll: true });
   }
@@ -504,20 +508,15 @@ export class ResearchWorkspace {
     this.panel.hidden = this.sidebar.hidden = true;
     this.host.classList.remove('research-mode');
     this.host.closest('.shell')?.classList.remove('research-shell');
+    this.columns.update();
   }
 
   openReader(origin?: HTMLButtonElement) {
     this.readerReturn ??= { scroll: this.content.scrollTop, origin };
     if (origin) this.readerReturn.origin = origin;
     this.host.classList.add('research-reader-open');
-    this.layoutReader();
+    this.columns.update();
     if (!this.panel.inert) origin?.scrollIntoView({ block: 'nearest' });
-  }
-
-  private layoutReader() {
-    const split = this.readerOpen && this.host.clientWidth >= 730;
-    this.host.classList.toggle('research-peek-split', split);
-    this.panel.inert = this.readerOpen && !split;
   }
 
   selectReaderItem(id = '', linkedProject = '', force = false) {
@@ -584,7 +583,7 @@ export class ResearchWorkspace {
     if (!returning) return;
     this.readerReturn = undefined;
     this.host.classList.remove('research-reader-open');
-    this.layoutReader();
+    this.columns.update();
     this.selectReaderItem();
     this.content.scrollTop = returning.scroll;
     if (focus) {

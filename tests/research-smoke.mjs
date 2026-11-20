@@ -44,6 +44,7 @@ const results = [], errors = [];
 const pass = name => { results.push(name); console.log(`PASS ${name}`); };
 async function idle() { await page.waitForFunction(() => !document.body.classList.contains('is-busy')); }
 async function closeReader() {
+  await idle();
   await page.locator('[data-action="research-close-reader"]').click();
   await page.locator('#document-surface').waitFor({ state: 'hidden' });
   await idle();
@@ -422,11 +423,13 @@ try {
   await baselineLink.click();
   const readerTitle = page.locator('#research-reader-title');
   await readerTitle.getByText('城市街区基线', { exact: true }).waitFor();
+  await idle();
   const back = page.getByRole('button', { name: '返回上一份文档' });
   await back.click();
   await readerTitle.getByText('测试分块遮挡剔除', { exact: true }).waitFor();
   assert.equal(await documentScroll.evaluate(element => element.scrollTop), tileScroll);
   assert.ok(await baselineLink.evaluate(link => link === document.activeElement));
+  await idle();
   await back.click();
   await readerTitle.getByText('方案探索阶段总结', { exact: true }).waitFor();
   await idle();
@@ -1426,6 +1429,70 @@ try {
   await page.locator('#research-reader-title').getByText('复测汇报 PPTX', { exact: true }).waitFor();
   await closeReader();
   pass('same-day reports reveal and preview indexed PPTX/PDF pages in original order, preserving the timeline and event note');
+
+  const navDivider = () => page.getByRole('separator', { name: '调整项目导航宽度' });
+  const listDivider = () => page.getByRole('separator', { name: '调整记录列表与预览宽度' });
+  const widths = () => page.evaluate(() => ['.shell > .sidebar', '#research-workspace', '#document-surface']
+    .map(selector => Math.round(document.querySelector(selector).getBoundingClientRect().width)));
+  const sizeWindow = width => app.evaluate(({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0].setSize(width, 820), width);
+  async function openColumns() {
+    await page.locator('[data-research-destination="entries"]').click();
+    await page.locator('.research-entry-title [data-research-record]').first().click();
+    await listDivider().waitFor();
+    await idle();
+  }
+  async function dragWidth(handle, change, cancel = false) {
+    const { x, y, width, height } = await handle.boundingBox();
+    await page.mouse.move(x + width / 2, y + height / 2);
+    await page.mouse.down();
+    await page.mouse.move(x + width / 2 + change, y + height / 2, { steps: 4 });
+    if (cancel) await page.keyboard.press('Escape');
+    await page.mouse.up();
+  }
+  await sizeWindow(1280);
+  await navDivider().waitFor();
+  assert.equal(await listDivider().count(), 0);
+  await openColumns();
+  const [nav, list, preview] = await widths();
+  await dragWidth(navDivider(), 48);
+  assert.deepEqual(await widths(), [nav + 48, list - 48, preview]);
+  await dragWidth(listDivider(), 72);
+  const adjusted = [nav + 48, list + 24, preview - 72];
+  assert.deepEqual(await widths(), adjusted);
+  await dragWidth(listDivider(), -36, true);
+  assert.deepEqual(await widths(), adjusted);
+  await listDivider().press('ArrowLeft');
+  assert.deepEqual(await widths(), [adjusted[0], adjusted[1] - 12, adjusted[2] + 12]);
+  await listDivider().press('ArrowRight');
+  const toggleSidebar = () => page.locator('.research-toolbar [data-action="sidebar"]');
+  await toggleSidebar().click();
+  await navDivider().waitFor({ state: 'hidden' });
+  assert.equal((await widths())[2], adjusted[2]);
+  await toggleSidebar().click();
+  await navDivider().waitFor();
+  assert.deepEqual(await widths(), adjusted);
+  await sizeWindow(740);
+  await page.waitForFunction(() => document.querySelector('#research-workspace').inert);
+  assert.equal(await listDivider().count(), 0);
+  await sizeWindow(1280);
+  await listDivider().waitFor();
+  assert.deepEqual(await widths(), adjusted);
+  await closeReader();
+  assert.equal(await navDivider().getAttribute('aria-valuenow'), String(adjusted[0]));
+  await app.close();
+  app = undefined;
+  await launch();
+  await sizeWindow(1280);
+  await openColumns();
+  assert.deepEqual(await widths(), adjusted);
+  await listDivider().press('Home');
+  assert.equal(await listDivider().getAttribute('aria-valuenow'), await listDivider().getAttribute('aria-valuemin'));
+  await listDivider().press('End');
+  assert.equal(await listDivider().getAttribute('aria-valuenow'), await listDivider().getAttribute('aria-valuemax'));
+  await navDivider().press('Enter');
+  await listDivider().dblclick();
+  assert.deepEqual(await widths(), [nav, list, preview]);
+  pass('both research dividers resize adjacent columns, support keyboard and cancel, and restore widths after resize and restart');
   assert.deepEqual(errors, []);
 
   await fs.writeFile(path.join(folder, 'results.json'), JSON.stringify({ results, errors }, null, 2) + '\n');
