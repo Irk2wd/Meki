@@ -51,14 +51,15 @@ export function timelineOverview(range: ResearchRange, bounds: ResearchRange, ph
     <div class="research-range-overview-label"><strong id="research-range-overview-label">${ht("项目全程")}</strong>
       ${days > 1 ? `<small>${ht("框选日期，拖动选区或调整两端")}</small>` : ''}</div>
     <div class="research-range-overview-scale">
-      <div class="research-range-overview-rail" data-research-overview${full ? ' data-full-range' : ''}${days === 1 ? ' data-single-day' : ''}
+      <div class="research-range-overview-rail" data-research-overview style="--range-left:${percent(start)};--range-width:${percent(end - start + 1)}"${full ? ' data-full-range' : ''}${days === 1 ? ' data-single-day' : ''}
           title="${days > 1 ? ht("拖动以框选日期") : bounds.start}">
         <div class="research-range-overview-bands" aria-hidden="true">${bars}</div>
-        <div class="research-range-overview-window" style="--range-left:${percent(start)};--range-width:${percent(end - start + 1)}">
+        <div class="research-range-overview-window">
           ${control('start', ht("调整区间开始日期"), 0, end, start, range.start)}
           ${control('move', ht("平移选中区间"), 0, days - (end - start + 1), start, `${range.start} – ${range.end}`)}
           ${control('end', ht("调整区间结束日期"), start, days - 1, end, range.end)}
         </div>
+        <div class="research-range-readout" aria-hidden="true"><span data-tip="start">${range.start}</span><span data-tip="move">${range.start} – ${range.end}</span><span data-tip="end">${range.end}</span></div>
       </div>
       <div class="research-range-overview-dates"><time datetime="${bounds.start}">${bounds.start}</time>
         ${days > 1 ? `<time datetime="${bounds.end}">${bounds.end}</time>` : ''}</div>

@@ -333,7 +333,9 @@ try {
   await page.mouse.move(moveX, moveY);
   await page.mouse.down();
   await page.mouse.move(moveX + dayWidth / 4, moveY);
-  await page.waitForFunction(() => document.querySelector('.research-range-overview-window').style.getPropertyValue('--drag-left'));
+  await page.waitForFunction(() => document.querySelector('[data-research-overview]').style.getPropertyValue('--drag-left'));
+  assert.equal(await overviewRail.getAttribute('data-drag-part'), 'move');
+  assert.equal(await overviewRail.locator('[data-tip="move"]').textContent(), '2026-11-08 – 2026-11-11');
   assert.ok((await overviewHandle('move').boundingBox()).x > move.x);
   await assertRange('2026-11-08', '2026-11-11');
   await page.mouse.up();

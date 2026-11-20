@@ -842,9 +842,10 @@ export class ResearchWorkspace {
     if (!live) return;
     // Follow the pointer between days while the detailed timeline stays on whole dates.
     const visual = part === 'draw' ? brushDays(anchor, point - 0.5, first, last) : adjustDays(drag, part, delta);
-    const thumb = this.content.querySelector<HTMLElement>('.research-range-overview-window');
-    thumb?.style.setProperty('--drag-left', `${(visual.start - first) * 100 / total}%`);
-    thumb?.style.setProperty('--drag-width', `${(visual.end - visual.start + 1) * 100 / total}%`);
+    const rail = this.content.querySelector<HTMLElement>('[data-research-overview]')!;
+    rail.dataset.dragPart = part === 'draw' ? 'move' : part;
+    rail.style.setProperty('--drag-left', `${(visual.start - first) * 100 / total}%`);
+    rail.style.setProperty('--drag-width', `${(visual.end - visual.start + 1) * 100 / total}%`);
   }
 
   private clearAxisDrag() {
@@ -854,9 +855,12 @@ export class ResearchWorkspace {
     this.axisFrame = 0;
     this.content.classList.remove('research-axis-panning');
     if (drag && drag.part !== 'axis') {
-      const thumb = this.content.querySelector<HTMLElement>('.research-range-overview-window');
-      thumb?.style.removeProperty('--drag-left');
-      thumb?.style.removeProperty('--drag-width');
+      const rail = this.content.querySelector<HTMLElement>('[data-research-overview]');
+      if (rail) {
+        delete rail.dataset.dragPart;
+        rail.style.removeProperty('--drag-left');
+        rail.style.removeProperty('--drag-width');
+      }
     }
     if (drag && this.content.hasPointerCapture(drag.pointerId)) this.content.releasePointerCapture(drag.pointerId);
   }

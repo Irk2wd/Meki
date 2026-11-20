@@ -150,6 +150,8 @@
 .research-range-overview-label strong { display: block; color: var(--text); font-size: 12px; font-weight: 600; }
 .research-range-overview-label small { display: block; margin-top: 3px; color: var(--soft); font-size: 11px; line-height: 1.35; }
 .research-range-overview-rail {
+  --selection-left: var(--drag-left, var(--range-left));
+  --selection-width: var(--drag-width, var(--range-width));
   position: relative;
   height: 34px;
   border-radius: 7px;
@@ -160,6 +162,27 @@
   user-select: none;
 }
 .research-range-overview-bands { position: absolute; inset: 0; pointer-events: none; }
+.research-range-overview-bands::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  --shade: color-mix(in srgb, var(--text) 15%, transparent);
+  background: linear-gradient(to right, var(--shade) var(--selection-left), transparent var(--selection-left) calc(var(--selection-left) + var(--selection-width)), var(--shade) 0);
+}
+.research-range-overview-bands { overflow: hidden; border-radius: inherit; }
+.research-range-readout { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.research-range-readout span {
+  --tip-position: var(--selection-left); --tip-inset: 6ch;
+  position: absolute; left: clamp(min(50%, var(--tip-inset)), var(--tip-position), max(50%, calc(100% - var(--tip-inset))));
+  bottom: calc(100% + 3px); transform: translateX(-50%); opacity: 0; white-space: nowrap;
+  padding: 4px 7px; border-radius: 5px; color: var(--bg); background: var(--text); font: 11px/1.3 var(--mono);
+}
+.research-range-readout [data-tip="end"] { --tip-position: calc(var(--selection-left) + var(--selection-width)); }
+.research-range-readout [data-tip="move"] { --tip-position: calc(var(--selection-left) + var(--selection-width) / 2); --tip-inset: 12.5ch; }
+.research-range-overview-rail:not([data-drag-part], [data-single-day]):has([data-research-overview-handle="start"]:is(:hover,:focus-visible)) [data-tip="start"],
+.research-range-overview-rail:not([data-drag-part], [data-single-day]):has([data-research-overview-handle="end"]:is(:hover,:focus-visible)) [data-tip="end"],
+.research-range-overview-rail:not([data-drag-part], [data-single-day]):has([data-research-overview-handle="move"]:is(:hover,:focus-visible)) [data-tip="move"],
+.research-range-overview-rail[data-drag-part="start"] [data-tip="start"],
+.research-range-overview-rail[data-drag-part="end"] [data-tip="end"],
+.research-range-overview-rail[data-drag-part="move"] [data-tip="move"] { opacity: 1; }
 .research-range-overview-bands i {
   position: absolute;
   top: calc(8px + var(--lane) * 7px);
@@ -171,21 +194,23 @@
 }
 .research-range-overview-window {
   --handle-width: 14px;
-  --selection-width: var(--drag-width, var(--range-width));
   --visible-width: min(100%, max(42px, var(--selection-width)));
   position: absolute;
   inset-block: 0;
-  left: clamp(0px, calc(var(--drag-left, var(--range-left)) + (var(--selection-width) - var(--visible-width)) / 2), calc(100% - var(--visible-width)));
+  left: clamp(0px, calc(var(--selection-left) + (var(--selection-width) - var(--visible-width)) / 2), calc(100% - var(--visible-width)));
   width: var(--visible-width);
   display: grid;
   grid-template-columns: min(var(--handle-width), 30%) minmax(0, 1fr) min(var(--handle-width), 30%);
   border-radius: 7px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 .research-range-overview-window [data-research-overview-handle] { position: relative; border-radius: 6px; }
 .research-range-overview-window [data-research-overview-handle]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; z-index: 1; }
 .research-range-overview-window :is([data-research-overview-handle="start"], [data-research-overview-handle="end"]) { cursor: ew-resize; background: var(--accent); }
+.research-range-overview-window :is([data-research-overview-handle="start"], [data-research-overview-handle="end"]):is(:hover,:focus-visible),
+.research-range-overview-rail[data-drag-part="start"] [data-research-overview-handle="start"],
+.research-range-overview-rail[data-drag-part="end"] [data-research-overview-handle="end"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--accent); }
 .research-range-overview-window :is([data-research-overview-handle="start"], [data-research-overview-handle="end"])::after {
   content: '';
   position: absolute;
@@ -535,6 +560,7 @@
 @keyframes research-reader-scrim-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes research-dialog-in { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: no-preference) {
+  .research-range-readout span { transition: opacity 100ms ease-out; }
   .research-timeline-row { transition: background-color 150ms cubic-bezier(.22,.75,.25,1); }
   dialog:is(#research-tools-dialog, #research-project-picker, #research-range-picker, #research-record-dialog, #research-comparison-dialog)[open] {
     animation: research-dialog-in 165ms cubic-bezier(.22,.75,.25,1);
