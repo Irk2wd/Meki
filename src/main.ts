@@ -100,7 +100,7 @@ document.querySelector('#app')!.innerHTML = `
   <div id="theme-choices" class="theme-choices" role="group" aria-label="${ht("主题")}"></div>
   <div class="theme-tools"><button type="button" data-action="install-theme-package">${icon('plus', 14)} ${ht("导入主题")}</button><button type="button" data-action="remove-theme-package" hidden>${ht("移除当前主题")}</button></div>
   <div id="font-picker"></div>
-  <div class="setting-row"><label for="font-size">${ht("字号")}</label><input id="font-size" type="range" min="14" max="24" step="1"><output id="font-size-value">18</output></div>
+  <div class="setting-row"><label for="font-size">${ht("正文字号")}</label><input id="font-size" type="range" min="14" max="24" step="1"><output id="font-size-value">18</output></div>
   <label class="setting-row">${ht("正文宽度")}<select id="line-width"><option value="640">${ht("紧凑 · 640")}</option><option value="760">${ht("适中 · 760")}</option><option value="900">${ht("舒展 · 900")}</option><option value="1040">${ht("宽版 · 1040")}</option><option value="1200">${ht("超宽 · 1200")}</option></select></label>
   <label class="setting-row">${ht("公式编号")}<select id="math-numbering"><option value="none">${ht("仅手动编号")}</option><option value="ams">${ht("AMS 环境自动编号")}</option><option value="all">${ht("所有独立公式自动编号")}</option></select></label>
   <label class="setting-row">${ht("物理公式宏")}<input id="math-physics" type="checkbox" aria-label="${ht("启用物理公式宏")}"></label>

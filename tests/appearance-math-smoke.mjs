@@ -40,7 +40,7 @@ $$
 
 保留 TeX 原文。
 `;
-const customCss = '.meki-document h1 { color: #743d8f; } p { line-height: 2.1; } @media print { .meki-document h1 { font-style: italic; } } body + .titlebar { color:red!important; } @import "https://meki-test.invalid/theme.css"; @font-face { font-family:bad;src:url(https://meki-test.invalid/a.woff) }';
+const customCss = '.meki-document { --body-font:var(--ui); } .meki-document h1 { color: #743d8f; } p { line-height: 2.1; } @media print { .meki-document h1 { font-style: italic; } } body + .titlebar { color:red!important; } @import "https://meki-test.invalid/theme.css"; @font-face { font-family:bad;src:url(https://meki-test.invalid/a.woff) }';
 await fs.writeFile(documentPath, fixture);
 await fs.writeFile(cssPath, customCss);
 const env = { ...process.env, MEKI_TEST:'1', MEKI_USER_DATA:path.join(run,'profile'), MEKI_TEST_OPEN_PATH:documentPath, MEKI_TEST_THEME_PATH:cssPath, MEKI_TEST_EXPORT_HTML_PATH:htmlPath, MEKI_TEST_EXPORT_PDF_PATH:path.join(run,'export.pdf'), MEKI_TEST_DISCARD:'discard' };
@@ -94,9 +94,17 @@ try {
   await page.waitForFunction(() => document.querySelector('.font-results output').textContent.includes('款字体'));
   const monoFonts = await page.locator('#installed-fonts option').count();
   assert.ok(monoFonts > 0 && monoFonts < totalFonts);
+  const familyOf = selector => page.locator(selector).evaluate(node => getComputedStyle(node).fontFamily);
+  async function checkInterfaceFont() {
+    const expected = await familyOf('.ProseMirror');
+    for (const selector of ['#sidebar-settings-button', '[data-sidebar-setting="style"]', '#font-family', '[data-mode="visual"]']) {
+      assert.equal(await familyOf(selector), expected, selector);
+    }
+  }
   const local = await page.locator('#installed-fonts option').first().getAttribute('value');
   await page.locator('#installed-fonts').selectOption(local);
   assert.equal(await page.locator('#font-family option:checked').innerText(), local);
+  await checkInterfaceFont();
   await page.locator('#custom-font').fill(local);
   assert.equal(await page.locator('#installed-fonts').inputValue(), local);
   await page.locator('#custom-font').fill('Meki Unmatched Family');
@@ -105,7 +113,7 @@ try {
   await page.locator('#custom-font').fill('');
   await page.locator('#font-family').selectOption('kai');
   assert.equal(await page.locator('#installed-fonts').inputValue(), '');
-  const familyOf = selector => page.locator(selector).evaluate(node => getComputedStyle(node).fontFamily);
+  await checkInterfaceFont();
   assert.match(await familyOf('.font-specimen'), /Kaiti SC/);
   assert.equal(await familyOf('.font-specimen'), await familyOf('.ProseMirror'));
   await page.locator('.font-filters select').selectOption('');
@@ -171,6 +179,7 @@ try {
   assert.equal(await page.locator('#math-numbering').inputValue(),'all');
   assert.equal(await page.locator('#math-physics').isChecked(),true);
   assert.equal(await page.locator('#font-family option:checked').innerText(),'Consolas');
+  await checkInterfaceFont();
   assert.equal(await page.locator('.ProseMirror h1').evaluate(node=>getComputedStyle(node).color),'rgb(116, 61, 143)');
   await action('custom-theme');
   await page.locator('#custom-css').fill('h1 { color: blue'); await action('apply-theme');

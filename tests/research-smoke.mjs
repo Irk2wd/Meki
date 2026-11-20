@@ -386,9 +386,12 @@ try {
   pass('the overview brushes new ranges, resizes either edge, and moves a fixed interval within the project dates');
   pass('custom ranges and bounded pan and zoom clip coverage without opening an experiment list');
 
-  async function selectTheme(id) {
+  async function openAppearance() {
     await page.locator('#sidebar-settings-button').click();
     await page.locator('#sidebar-settings-menu').getByRole('menuitem', { name: '外观与排版' }).click();
+  }
+  async function selectTheme(id) {
+    await openAppearance();
     await page.locator(`#theme-choices button[data-theme="${id}"]`).click();
     await page.locator('.research-toolbar').evaluate(toolbar => toolbar.click());
   }
@@ -1515,7 +1518,16 @@ try {
   await sizeWindow(1280);
   await navDivider().waitFor();
   assert.equal(await listDivider().count(), 0);
-  await selectTheme('kraft');
+  await openAppearance();
+  await page.locator('#theme-choices button[data-theme="kraft"]').click();
+  const font = page.locator('#font-family');
+  const previousFont = await font.inputValue();
+  await font.selectOption('kai');
+  for (const selector of ['.research-overview h1', '[data-research-destination] span', '.research-timeline-label']) {
+    assert.match(await page.locator(selector).first().evaluate(node => getComputedStyle(node).fontFamily), /Kaiti SC/, selector);
+  }
+  await font.selectOption(previousFont);
+  await page.locator('.research-toolbar').evaluate(toolbar => toolbar.click());
   await openColumns();
   for (const selector of ['.research-content', '#document-scroll']) {
     const texture = await page.locator(selector).evaluate(el => getComputedStyle(el).backgroundImage);

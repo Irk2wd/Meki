@@ -340,9 +340,6 @@
   background-color: var(--bg);
   background-blend-mode: soft-light;
 }
-:root[data-paper-margins] .research-overview h1 {
-  font-family: Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif;
-}
 :root[data-paper-margins] .research-summary-item { padding-block: 6px; }
 .research-phase-range { margin: 3px 0 0; color: var(--soft); font: 11px var(--mono); }
 .research-overview .research-timeline-shortcuts { margin-inline-start: auto; gap: 3px; }

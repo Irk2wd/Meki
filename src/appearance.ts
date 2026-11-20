@@ -77,13 +77,14 @@ type Appearance = Pick<Settings, 'theme' | 'installedThemes' | 'font' | 'fontSiz
 /** Shared document appearance used by the editor, standalone HTML and printed PDF. */
 export function writingAppearance(input: Partial<Appearance> = {}, options: { scope?: string; exporting?: boolean } = {}): string {
   const settings = { ...appearanceDefaults, ...input };
+  const font = writingFont(settings);
   const writingSize = Math.min(options.exporting ? 32 : 24, Math.max(options.exporting ? 12 : 14, settings.fontSize));
   const rootScope = options.scope || '.meki-document';
   const scope = `${rootScope}${rootScope}`;
   const theme = resolveTheme(settings.theme, settings.installedThemes);
   let custom = '';
   try { custom = normalizeCustomCss(settings.customCss, rootScope); } catch { /* Invalid saved CSS must not prevent opening a document. */ }
-  return `${scope}{${cssDeclarations(themePalette(theme))}--body-font:${writingFont(settings)};--writing-size:${writingSize}px;--mono:'SFMono-Regular',Consolas,'Liberation Mono',monospace;--ui:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif;background:${theme.background ? 'transparent' : 'var(--bg)'};color:var(--text);font-family:var(--body-font);font-size:var(--writing-size);line-height:1.95;letter-spacing:.015em;overflow-wrap:anywhere;}
+  return `${scope}{${cssDeclarations(themePalette(theme))}--body-font:${font};--writing-size:${writingSize}px;--mono:'SFMono-Regular',Consolas,'Liberation Mono',monospace;--ui:${font};background:${theme.background ? 'transparent' : 'var(--bg)'};color:var(--text);font-family:var(--body-font);font-size:var(--writing-size);line-height:1.95;letter-spacing:.015em;overflow-wrap:anywhere;}
 ${scope} :is(h1,h2,h3,h4,h5,h6){color:var(--text);font-family:inherit;line-height:1.5;font-weight:600;scroll-margin-top:30px;}
 ${scope} :is(h1,h2,h3,h4,h5,h6)[data-heading-number]::before{content:attr(data-heading-number) " ";font-variant-numeric:tabular-nums;}
 ${scope} h1{font-size:2.03em;margin:1.3em 0 .75em;letter-spacing:-.025em;}

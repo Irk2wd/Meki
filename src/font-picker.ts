@@ -22,7 +22,7 @@ export class FontPicker {
   private selected = '';
 
   constructor(root: HTMLElement, private change: (patch: Partial<FontSettings>) => void) {
-    root.innerHTML = `<label class="setting-row">${ht("正文字体")}<select id="font-family"></select></label>
+    root.innerHTML = `<label class="setting-row">${ht("界面与正文字体")}<select id="font-family"></select></label>
       <p class="font-specimen" aria-label="${ht("字体预览")}"><span>天地山川</span><span lang="en">Aa 0123</span></p>
       <details class="font-library"><summary>${ht("浏览本机字体")}</summary>
         <input id="custom-font" type="search" maxlength="128" autocomplete="off" spellcheck="false"
