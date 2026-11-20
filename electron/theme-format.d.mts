@@ -7,7 +7,7 @@ export interface ThemeManifest {
   name: string;
   base: ThemeBase;
   palette?: Partial<Record<PaletteToken, string>>;
-  background?: { image: string; size?: string; repeat?: string; position?: string };
+  background?: { image: string; size?: string; repeat?: string; position?: string; placement?: 'canvas' | 'margins' };
   styles?: Partial<Record<ThemeRole, Record<string, string>>>;
 }
 export type ResolvedTheme = Omit<ThemeManifest, 'palette'> & { palette: Record<PaletteToken, string> };

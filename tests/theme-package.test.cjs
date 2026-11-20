@@ -31,6 +31,7 @@ test('theme packages reject resource loads, invalid schema, reserved ids and con
     { id: '../mist' },
     { script: 'true' },
     { palette: { bg: 'white; color: red' } },
+    { background: { placement: 'unsupported', image: 'linear-gradient(#fff, #000)' } },
     { background: { image: 'url(https://example.test/texture.png)' } },
     { background: { image: 'linear-gradient(#fff, #000), url(file:///texture.png)' } },
     { background: { image: 'data:image/svg+xml;base64,PHN2Zz4=' } },

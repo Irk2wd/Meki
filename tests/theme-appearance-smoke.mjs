@@ -99,6 +99,9 @@ try {
     assert.equal(await computed('#visual-editor .milkdown', 'background-color'), pageColor);
     assert.equal(await tile.locator('.theme-sample > span').evaluate(sample => getComputedStyle(sample).backgroundColor), pageColor);
     if (id === 'kraft') {
+      assert.equal(await page.locator('html[data-paper-margins]').count(), 1);
+      assert.equal(await computed('#visual-editor .ProseMirror > p', 'background-color'), pageColor);
+      assert.match(await computed('#visual-editor .milkdown', 'background-image'), /linear-gradient/);
       assert.match(background, /^url\("data:image\/png;base64,/);
       const dimensions = await page.evaluate(async source => {
         const image = new Image();

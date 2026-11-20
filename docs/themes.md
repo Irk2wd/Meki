@@ -19,7 +19,7 @@
 | `name` | 必填，主题列表显示名，最多 64 字符。 |
 | `base` | 必填，从 `paper`、`linen`、`night` 继承未填写的颜色、代码高亮和图表明暗。 |
 | `palette` | 可选。按下表覆盖颜色，每个值为 `#RRGGBB`。 |
-| `background` | 可选，提供 `image`，并可填写 `size`、`position`、`repeat`，用法同 CSS 背景属性。 |
+| `background` | 可选，提供 `image`，并可填写 `size`、`position`、`repeat`。默认的 `placement: "canvas"` 将背景铺在文稿周围。`"margins"` 额外在页边、段落间隙淡印纹理，每个正文块使用实色纸面。 |
 | `styles` | 可选。以正文角色为键，每个角色写一组 CSS 属性和值。 |
 
 ### 配色与纹理

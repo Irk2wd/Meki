@@ -1,0 +1,17 @@
+:root[data-paper-margins] :is(.document-scroll .milkdown, .meki-page) {
+  padding: clamp(13px, 2.2vw, 32px);
+  border-radius: 4px;
+  background-color: var(--bg);
+  background-image: linear-gradient(color-mix(in srgb, var(--bg) 91%, transparent) 0 100%), var(--theme-image);
+  background-size: auto, var(--theme-size);
+  background-repeat: no-repeat, var(--theme-repeat);
+  background-position: center, var(--theme-position);
+  box-shadow: 0 1px 3px #38261020, 0 8px 30px #38261010;
+}
+:where(:root[data-paper-margins]) :is(.ProseMirror, .meki-document) > :not(.ProseMirror-widget, .prosemirror-virtual-cursor) {
+  background-color: var(--bg);
+}
+:root[data-paper-margins] .meki-page { box-sizing: border-box; }
+@media print {
+  :root[data-paper-margins] :is(.document-scroll .milkdown, .meki-page) { box-shadow: none; }
+}
