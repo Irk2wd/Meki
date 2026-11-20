@@ -164,6 +164,7 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
   const dot = (date: string, ended: boolean) => `<i class="research-timeline-dot${ended ? ' is-ended' : ''}" style="--point:${position(date, 0.5)}%"></i>`;
   const todayLine = containsDay(range, today) ? `<i class="research-today-line" style="--point:${position(today, 0.5)}%"></i>` : '';
   const ticks = [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(start + (end - start) * i / 4)))];
+  const tickPosition = (day: number) => (day - start + .5) * 100 / span;
   const experimentsByPhase = groupByPhase(entries);
   const ordered = phases.map(phase => {
     const span = phaseSpan(phase, today);
@@ -213,7 +214,7 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
         ${progress ? `<span class="research-phase-progress" title="${escape(progress)}">${escape(progress)}</span>` : ''}
         <small class="research-phase-facts"><span>${escape(phaseDates(phase, today, true))} · ${ht("{0} 条实验", assigned.length)}</span>${latest ? `<span>${ht("最近进展 {0}", escape(formatDay(dayNumber(latest), latest.slice(0, 4) !== today.slice(0, 4))))}</span>` : ''}</small></button>
       <div class="research-timeline-track" data-research-track${fullRange ? '' : ' data-research-pan'}${phaseEvents.length ? ' data-research-has-events' : ''}><span aria-hidden="true">${overlaps(span, range) ? `<i class="research-timeline-bar" style="--left:${left}%;--right:${right}%"></i>` : ''}${[...activity].map(([date, ended]) => dot(date, ended)).join('')}
-        ${todayLine}</span>${groups.size ? `<div class="research-timeline-events" data-phase="${phase.id}"></div>` : ''}</div>
+        </span>${groups.size ? `<div class="research-timeline-events" data-phase="${phase.id}"></div>` : ''}</div>
     </div>`;
   }).join('');
   const presetButtons = rangePresets.map(({ id, amount, unit }) => {
@@ -222,17 +223,15 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
       amount === 1 ? ht("最近 1 个月") : ht("最近 {0} 个月", amount);
     return `<button type="button" data-research-range-preset="${id}" aria-pressed="${presetId === id}" aria-label="${accessibleLabel}" title="${accessibleLabel}">${label}</button>`;
   }).join('');
-  const pager = `<div class="research-timeline-pagination">
-    <div class="research-page-options"><label for="research-phase-page-size">${ht("每页阶段数")}</label>
+  const pageOptions = `<div class="research-page-options"><label for="research-phase-page-size">${ht("每页阶段数")}</label>
       <input id="research-phase-page-size" type="number" min="1" step="1" value="${pageSize ?? ''}" placeholder="${ht("全部")}">
       ${pageSize !== null ? `<button type="button" class="text-button" data-research-all-phases>${ht("全部阶段")}</button>` : ''}
-    </div>
-    ${pageCount > 1 ? `<nav class="research-phase-pages" aria-label="${ht("研究阶段分页")}">
+    </div>`;
+  const pager = pageCount > 1 ? `<nav class="research-phase-pages" aria-label="${ht("研究阶段分页")}">
       <button type="button" class="icon-button" data-research-phase-page="-1" aria-label="${ht("上一页")}" title="${ht("上一页")}" aria-describedby="research-phase-page-number"${page === 1 ? ' disabled' : ''}>${icon('back', 16)}</button>
       <span id="research-phase-page-number" role="status">${ht("第 {0} 页，共 {1} 页", page, pageCount)}</span>
       <button type="button" class="icon-button" data-research-phase-page="1" aria-label="${ht("下一页")}" title="${ht("下一页")}" aria-describedby="research-phase-page-number"${page === pageCount ? ' disabled' : ''}>${icon('chevron', 16)}</button>
-    </nav>` : ''}
-  </div>`;
+    </nav>` : '';
   const html = `<section class="research-timeline" aria-labelledby="research-range-title">
     <div class="research-section-heading"><h2 id="research-range-title">${ht("研究阶段")}</h2>
       <div class="research-actions"><div class="research-range-presets" role="group" aria-label="${ht("快捷时间范围")}">${presetButtons}</div>
@@ -254,14 +253,18 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
           `<button type="button" class="icon-button" data-research-axis-action="${id}" aria-label="${escape(String(label))}" title="${escape(String(label))}"${disabled ? ' disabled' : ''}>${glyph}</button>`).join('')}
       </div></div>
     ${timelineOverview(range, bounds, ordered.map(({ span }) => span))}
-    <div class="research-timeline-axis" aria-hidden="true"><span></span><div class="research-timeline-ruler" data-research-axis${fullRange ? '' : ` data-research-pan title="${ht("拖动时间轴")}"`}>
-      ${ticks.map((day, i) => `<span class="${ticks.length === 1 ? '' : i === 0 ? 'first' : i === ticks.length - 1 ? 'last' : 'middle'}" style="--tick:${(day - start + 0.5) * 100 / span}%">${escape(formatDay(day, crossesYear))}</span>`).join('')}
-    </div></div>${phaseRows || `<p class="research-empty-list">${ht("此视图没有研究阶段。")}</p>`}
-    <footer class="research-timeline-footer"><div class="research-actions">
+    <div class="research-phase-chart">
+      <div class="research-chart-guides" aria-hidden="true"><div>${ticks.map(day => `<i style="--point:${tickPosition(day)}%"></i>`).join('')}${todayLine}</div></div>
+      <div class="research-timeline-axis" aria-hidden="true"><span></span><div class="research-timeline-ruler" data-research-axis${fullRange ? '' : ` data-research-pan title="${ht("拖动时间轴")}"`}>
+      ${ticks.map((day, i) => `<span class="${ticks.length === 1 ? '' : i === 0 ? 'first' : i === ticks.length - 1 ? 'last' : 'middle'}" style="--tick:${tickPosition(day)}%">${escape(formatDay(day, crossesYear))}</span>`).join('')}
+      </div></div>${phaseRows || `<p class="research-empty-list">${ht("此视图没有研究阶段。")}</p>`}
+    </div>
+    <footer class="research-timeline-footer"><details class="research-timeline-options"><summary data-research-timeline-options>${icon('settings', 14)}${ht("时间线选项")}${icon('down', 12)}</summary><div class="research-actions">
       ${canCreatePhase ? `<button type="button" class="text-button" data-research-new-phase>${icon('plus', 14)}${ht("新建阶段")}</button>` : ''}
       ${canCreateEvent ? `<button type="button" class="text-button" data-research-new="event">${icon('plus', 14)}${ht("添加事件")}</button>` : ''}
       <button type="button" class="text-button" data-research-event-types>${icon('calendar', 14)}${ht("事件类型")}</button>
-    </div>${phaseRows ? pager : ''}</footer>
+      ${phaseRows ? pageOptions : ''}
+    </div></details>${pager}</footer>
   </section>`;
   return { html, page, eventDays };
 }
@@ -1001,7 +1004,7 @@ export class ResearchWorkspace {
     const focused = document.activeElement;
     const focusRoot = this.panel.contains(focused) ? this.panel : this.sidebar.contains(focused) ? this.sidebar : undefined;
     const focusKey = focusRoot && focused instanceof HTMLElement &&
-      (focused instanceof HTMLButtonElement || focused.matches('summary[data-research-settings-section], [data-research-overview-handle]')) && [...focused.attributes]
+      (focused instanceof HTMLButtonElement || focused.matches('summary[data-research-settings-section], summary[data-research-timeline-options], [data-research-overview-handle]')) && [...focused.attributes]
       .find(({ name }) => name.startsWith('data-research-') || name === 'data-action');
     const scroll = this.content.scrollTop;
     const today = state ? projectToday(state.project.timezone) : '';
@@ -1068,17 +1071,18 @@ export class ResearchWorkspace {
     const newEntry = project.recordTypes.some(type => type.kind === 'entry') ? `<button type="button" class="secondary-button" data-research-new="entry">${icon('plus', 14)}${ht("新建研究记录")}</button>` : '';
     const newSummary = summaryTypes.size ? `<button type="button" class="secondary-button" data-research-new="summary">${icon('plus', 14)}${ht("插入阶段总结")}</button>` : '';
     const previousMarkers = timelineView && !this.axisDrag?.moving ? this.timelineEvents.capture() : undefined;
+    const optionsOpen = this.content.querySelector<HTMLDetailsElement>('.research-timeline-options')?.open;
     this.content.innerHTML = `
       <header class="research-overview"><div><h1 tabindex="-1">${escape(projectPage ? project.title : active.label)}</h1>
         ${projectPage && project.description ? `<p>${escape(project.description)}</p>` : ''}
         ${projectPage ? `<div class="research-overview-stats"><span>${ht("{0} 条实验", experiments.length)}</span><span>${ht("{0} 份阶段总结", summaries.length)}</span>
           ${lastExperiment ? `<span>${ht("最近实验 {0}", escape(lastExperiment))}</span>` : ''}</div>` : ''}
-      </div></header>
+      </div>${projectPage && !phase ? `<div class="research-actions research-timeline-shortcuts">${newEntry}${newSummary}
+        <button type="button" class="secondary-button" data-research-filter aria-haspopup="dialog" aria-pressed="${Boolean(this.recordFilter)}">${icon('search', 14)} ${ht("研究筛选")}</button></div>` : ''}</header>
       ${problems.length ? `<details class="research-problems"><summary>${ht("{0} 份文档无法读取", problems.length)}</summary><ul>${problems.map(item => `<li><code>${escape(item.file)}</code> · ${escape(item.message)}</li>`).join('')}</ul></details>` : ''}
       ${timelineView?.html || ''}
       ${active.page === 'rules' ? this.renderSettings(state) : active.page === 'sources' ? this.renderSources(state) :
-      projectPage && !phase ? `<div class="research-actions research-timeline-shortcuts">${newEntry}${newSummary}
-        <button type="button" class="secondary-button" data-research-filter aria-haspopup="dialog" aria-pressed="${Boolean(this.recordFilter)}">${icon('search', 14)} ${ht("研究筛选")}</button></div>` : `
+      projectPage && !phase ? '' : `
         <section class="research-journal" aria-labelledby="research-journal-title">
           <div class="research-section-heading"><div>${phaseTitle}</div>
             <div class="research-actions">${active.page === 'summaries' ? newSummary : newEntry}
@@ -1102,6 +1106,7 @@ export class ResearchWorkspace {
           ${entries.length || linkedSummaries.length ? '' : `<p class="research-empty-list">${ht("这个视图中没有符合条件的记录。")}</p>`}
         </section>`}
     `;
+    if (optionsOpen) this.content.querySelector('.research-timeline-options')?.setAttribute('open', '');
     this.timelineEvents.show(timelineView?.eventDays, types, previousMarkers);
     if (this.readerItem) {
       const [linkedProject, id] = this.readerItem.split('/');

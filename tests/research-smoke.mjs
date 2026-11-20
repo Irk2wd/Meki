@@ -166,6 +166,10 @@ try {
   assert.equal(command('read', ['tile-culling']).relativePath, 'records/r-tile-culling.md');
   assert.ok((await page.evaluate(() => window.meki.refreshWorkspace())).tree.every(entry => !entry.relativePath.startsWith('.mekir')));
   const phases = page.locator('.research-timeline-row');
+  const optionsToggle = page.locator('[data-research-timeline-options]');
+  async function openTimelineOptions() {
+    if (!await page.locator('.research-timeline-options').evaluate(details => details.open)) await optionsToggle.click();
+  }
   const phaseOrder = () => phases.locator('[data-research-phase]').evaluateAll(rows => rows.map(row => row.dataset.researchPhase));
   const legend = page.locator('.research-legend');
   const markerLegend = legend.getByRole('group', { name: '时间线标记', exact: true });
@@ -184,7 +188,13 @@ try {
   assert.deepEqual(await phaseOrder(), ['validation', 'exploration', 'baseline']);
   assert.match(await phases.filter({ hasText: '方案探索' }).innerText(), /最近进展 11\/16/);
   assert.equal(await phases.filter({ hasText: '方案探索' }).locator('.research-phase-progress').textContent(), '保守阈值稳定了遮挡边缘，适合进入复测。');
-  assert.ok(await page.locator('.research-timeline-footer [data-research-event-types]').isVisible());
+  const eventTypes = page.locator('.research-timeline-footer [data-research-event-types]');
+  assert.ok(await eventTypes.isHidden());
+  await optionsToggle.focus();
+  await optionsToggle.press('Enter');
+  assert.ok(await eventTypes.isVisible());
+  await optionsToggle.press('Enter');
+  assert.equal(await page.locator('.research-chart-guides .research-today-line').count(), 1);
   const retrospective = command('read', ['exploration-review']);
   command('batch', [], { records: [{ id: retrospective.record.id, ifRevision: retrospective.revision, date: '2026-11-19' }] });
   await refresh.click();
@@ -729,6 +739,7 @@ try {
   await legend.getByText('组会汇报', { exact: true }).waitFor();
   const pagedLegend = await legend.innerHTML();
   const pageSize = page.getByRole('spinbutton', { name: '每页阶段数' });
+  await openTimelineOptions();
   const pageNumber = page.locator('#research-phase-page-number');
   const nextPage = page.getByRole('button', { name: '下一页', exact: true });
   const previousPage = page.getByRole('button', { name: '上一页', exact: true });
@@ -773,6 +784,7 @@ try {
   assert.equal(await legend.innerHTML(), pagedLegend);
   await page.locator('[data-research-reset-range]').click();
   assert.deepEqual(await phaseOrder(), lastPage);
+  await openTimelineOptions();
   await page.getByRole('button', { name: '全部阶段', exact: true }).click();
   assert.equal(await phases.count(), 15);
   assert.equal(await pageNumber.count(), 0);
@@ -922,6 +934,7 @@ try {
   const phaseDialog = page.locator('#research-tools-dialog');
   async function addPhase(title, start, useRestoredFocus = false) {
     await idle();
+    await openTimelineOptions();
     const open = page.getByRole('button', { name: '新建阶段', exact: true });
     if (useRestoredFocus) {
       assert.ok(await open.evaluate(button => button === document.activeElement));
@@ -1122,6 +1135,7 @@ try {
   }
   pass('same-day backfilled comparisons appear once, align with the finished experiment dot and open individually');
 
+  await openTimelineOptions();
   await page.locator('[data-research-event-types]').click();
   const eventTypeRow = tools.locator('[data-event-type=group-meeting]');
   await eventTypeRow.getByRole('button', { name: '选择图标' }).click();
@@ -1141,6 +1155,7 @@ try {
   const review = eventConfig.project.recordTypes.find(type => type.label === '论文审阅');
   assert.deepEqual([review.kind, review.icon], ['event', 'page']);
 
+  await openTimelineOptions();
   await page.getByRole('button', { name: '添加事件', exact: true }).click();
   await dialog.locator('[name=type]').selectOption(review.id);
   await dialog.locator('[name=phaseId]').selectOption('baseline');
