@@ -139,6 +139,7 @@ try {
   record('rich edit immediately saved, metadata retained');
   await click(page, 'math');
   if (process.platform === 'darwin') {
+    assert.equal(await page.locator('#math-dialog').evaluate(dialog => getComputedStyle(dialog).webkitAppRegion), 'no-drag');
     const nativeWindow = await app.browserWindow(page);
     const previousSize = await nativeWindow.evaluate(win => win.getContentSize());
     await nativeWindow.evaluate(win => win.setContentSize(640, 420));

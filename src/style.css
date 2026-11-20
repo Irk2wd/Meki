@@ -15,6 +15,9 @@
 .brand-wordmark { display:block; width:66px; height:25px; flex-shrink:0; color:var(--text) }
 .brand-wordmark svg { display:block; width:100%; height:100% }
 
+/* A modal can cover a draggable title bar. Its surface must receive native mouse clicks. */
+dialog:modal { -webkit-app-region: no-drag; }
+
 /* Native window controls keep their size when the page zoom changes. */
 .platform-darwin dialog:modal {
   --dialog-top: calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 0px));
