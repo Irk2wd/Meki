@@ -228,6 +228,7 @@ function updateStatus() {
   if (researchUI.readerOpen) {
     const label = researchUI.readerLabel(current.path);
     researchUI.selectReaderItem(label?.id, label?.linkedProject);
+    if (!researchEditing) researchUI.showReaderFigures(current.path, el('#document-scroll'));
     el('#research-reader-title').textContent = label?.title || current.name;
     el('#research-reader-context').textContent = [label?.context || t("资料"), dirty() ? t("未保存") : ''].filter(Boolean).join(' · ');
     const back = el<HTMLButtonElement>('[data-action="research-reader-back"]');

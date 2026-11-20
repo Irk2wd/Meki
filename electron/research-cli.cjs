@@ -100,6 +100,7 @@ async function main(args) {
         comparison: {
           type: comparisonType(project).id, phaseId: 'required phase ID', body: 'Markdown caption', limits: comparisonLimits,
           comparison: { columns: ['column label'], rows: [{ label: 'row label', images: ['indexed image evidence ID or null for an empty cell'] }] },
+          swipe: 'Group images of the same view and aspect ratio in one row. Cite this comparison record ID in another record’s sources to show the swipe figure in its reader.',
           note: 'Provide one image slot per column in every row. The first comparison registers the default type when needed. Use the returned projectRevision for another write.',
         },
         summary: { date: 'date written', coverage: { start: 'inclusive date', end: 'inclusive date' }, sources: 'document IDs from list or resolve',

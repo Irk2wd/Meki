@@ -646,6 +646,8 @@ const projectGuide = `# mekiR 研究项目的 Agent 指引
 
 ## 引用依据和撰写总结
 
+图像对比的每一行对应同一机位，各列标明对应方法或轮次。登记相同宽高比的原图，将两份不同的证据 ID 写入同一行。实验记录或总结的 \`sources\` 引用这份对比的记录 ID 后，阅读侧栏可以直接拖动分界线查看。
+
 用 \`list\` 的 \`documents\` 或 \`resolve <目录> <ID>\` 查找文档。用 \`index <目录> <ID> --path <相对路径>\` 登记普通文档，正文用 \`[标题](mekir:<ID>)\` 引用。外部目录用 \`bind-source\` 绑定，外部证据用 \`index --source <来源 ID>\` 登记。记录可用 \`evidence\` 保存证据 ID，并用 \`relations\` 保存 \`kind\`、\`target\` 和可选的 \`note\`。
 
 总结的 \`type\` 取自本项目 \`kind\` 为 \`summary\` 的记录类型 ID。用 \`date\` 记撰写日期，用 \`coverage.start\` 和 \`coverage.end\` 记覆盖区间，首尾日期均计入。用 \`sources\` 引用依据，同一批次先写入新来源，再写总结。用 \`relatedProjects\` 保存其他项目的 ID，在总结的原项目更新同一条记录。

@@ -26,6 +26,7 @@
 .research-comparison-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .research-comparison-toolbar small { flex: 1; color: var(--soft); font-size: 11px; }
 .research-comparison-toolbar [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+#research-comparison-dialog > .research-wipe { margin: 18px 0 8px; }
 .research-comparison-scroll { overflow: auto; max-height: 65vh; margin-top: 10px; }
 .research-comparison-scroll table { width: 100%; min-width: calc(98px + 191px * var(--comparison-columns)); table-layout: fixed; border-collapse: separate; border-spacing: 7px; }
 .research-comparison-scroll thead td { width: 96px; }

@@ -4,6 +4,7 @@ import { researchReportFormat } from '../electron/research-report-format.mjs';
 import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSnapshot, ResearchType, ResearchValue, ResearchView } from '../shared/research';
 import { icon } from './icons';
 import { ComparisonGridEditor, ComparisonViewer } from './research-comparison';
+import { evidenceWipe, supportsWipe } from './research-wipe';
 import { TimelineEventLayout, timelineEventButton, type TimelineEventDay } from './research-timeline-events';
 import { adjustDays, brushDays, datesForDays, dayNumber, isoDay, shiftRange, timelineOverview, type RangeHandle, type TimelineWindow } from './research-timeline-range';
 import { reportReferences } from './research-report-links';
@@ -358,6 +359,7 @@ export class ResearchWorkspace {
   private readerItem = '';
   private openingListRecord = false;
   private pendingListRecord?: HTMLButtonElement;
+  private figureContext?: { path: string | null; snapshot: ResearchSnapshot | null; host: HTMLElement };
   private loading = false;
   private loadNumber = 0;
   private referenceRequest = 0;
@@ -595,6 +597,7 @@ export class ResearchWorkspace {
 
   rememberReaderContext(snapshot: ResearchSnapshot) {
     this.readerContexts.set(snapshot.root, snapshot);
+    this.figureContext = undefined;
   }
 
   readerLabel(path: string | null) {
@@ -654,6 +657,34 @@ export class ResearchWorkspace {
           ${run.missing.length ? `<dt>${ht("缺件")}</dt><dd>${escape(run.missing.join(', '))}</dd>` : ''}</dl></details>` : ''}`;
   }
 
+  showReaderFigures(path: string | null, host: HTMLElement) {
+    const cached = this.figureContext;
+    if (cached?.path === path && cached.snapshot === this.snapshot && cached.host === host) return;
+    this.figureContext = { path, snapshot: this.snapshot, host };
+    const source = this.readerReference(path);
+    const entry = source?.state.records.find(item => item.record.id === source.reference.id);
+    const references = new Map(source?.state.records.map(item => [item.record.id, item]));
+    const ids = entry ? [entry.record.id, ...(entry.record.sources || [])] : [];
+    const reports = [...new Set(ids)].flatMap(id => {
+      const item = references.get(id);
+      return item && supportsWipe(item.record.comparison) ? [item] : [];
+    });
+    const previous = host.querySelector<HTMLElement>(':scope > .research-inline-comparisons');
+    if (!reports.length || !source || !path || !this.root) { previous?.remove(); return; }
+    const key = JSON.stringify([path, reports.map(item => [item.record.id, item.revision]), source.state.evidenceSources]);
+    if (previous?.dataset.figures === key) return;
+    const holder = document.createElement('section');
+    holder.className = 'research-inline-comparisons';
+    holder.dataset.figures = key;
+    const root = this.root;
+    holder.append(evidenceWipe(reports.map(({ record }) => ({ title: record.title, comparison: record.comparison! })), {
+      read: id => window.meki.openResearchEvidence(root, id, path),
+      open: (id, origin) => this.tools.evidence(root, id, path, undefined, origin), error: error => this.hooks.notify(errorText(error), true),
+    }));
+    if (previous) previous.replaceWith(holder);
+    else host.prepend(holder);
+  }
+
   async openEvidence(id: string, sourceDocument?: string, origin?: HTMLElement) {
     const root = this.hooks.root();
     if (root) await this.tools.evidence(root, id, sourceDocument, undefined, origin);
@@ -669,7 +700,7 @@ export class ResearchWorkspace {
       if (request !== this.referenceRequest || this.hooks.root() !== state.root) return;
       this.comparisonViewer.show(state.root, document, {
         width: this.widths.comparison, back,
-        evidence: file => this.tools.evidence(state.root, file, undefined, t("返回对比")),
+        evidence: (file, trigger) => this.tools.evidence(state.root, file, undefined, t("返回对比"), trigger),
         edit: () => this.hooks.open(state.root, id, origin, true),
         error: error => this.hooks.notify(errorText(error), true),
       });

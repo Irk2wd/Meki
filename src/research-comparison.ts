@@ -4,6 +4,7 @@ import { comparisonLimits, evidenceImageMime } from '../electron/research-compar
 import type { ResearchComparison, ResearchDocument, ResearchEvidenceFile, ResearchReference, ResearchWidth } from '../shared/research';
 import { icon } from './icons';
 import { renderMarkdown } from './markdown-render';
+import { evidenceWipe, supportsWipe } from './research-wipe';
 import { escapeResearch as escape, researchOption as option } from './research-tools';
 import './research-comparison.css';
 
@@ -126,7 +127,7 @@ export class ComparisonViewer {
   show(root: string, { record, body }: ResearchDocument, actions: {
     width: ResearchWidth;
     back?(): void;
-    evidence(id: string): Promise<void>;
+    evidence(id: string, origin: HTMLElement): Promise<void>;
     edit(): Promise<void>;
     error(error: unknown): void;
   }) {
@@ -138,10 +139,13 @@ export class ComparisonViewer {
       ${actions.back ? `<button type="button" class="icon-button" data-comparison-back aria-label="${ht("返回事件列表")}" title="${ht("返回事件列表")}">${icon('back', 17)}</button>` : ''}
       <div><h2 id="research-comparison-title">${escape(record.title)}</h2><time>${escape(record.date)}</time></div></div>
       <button type="button" class="icon-button" data-comparison-close aria-label="${ht("关闭可视化展示")}">${icon('close', 16)}</button></div>
-      <div class="research-comparison-toolbar"><div class="research-actions" role="group" aria-label="${ht("缩放")}">
+      <div class="research-comparison-toolbar">${supportsWipe(record.comparison) ? `<div class="research-actions" role="group" aria-label="${ht("对比方式")}">
+        <button type="button" class="secondary-button" data-comparison-layout="grid" aria-pressed="true">${ht("并排查看")}</button>
+        <button type="button" class="secondary-button" data-comparison-layout="wipe" aria-pressed="false">${ht("滑动对比")}</button></div>` : ''}
+        <div class="research-actions" data-grid-controls role="group" aria-label="${ht("缩放")}">
         <button type="button" class="secondary-button" data-comparison-mode="fit">${ht("适应视口")}</button>
         <button type="button" class="secondary-button" data-comparison-mode="pixels">${ht("1:1 原像素")}</button></div>
-        <small>${ht("滚轮缩放，拖动平移。同一行同步。")}</small>
+        <small data-grid-controls>${ht("滚轮缩放，拖动平移。同一行同步。")}</small>
         <button type="button" class="secondary-button" data-comparison-edit>${ht("编辑图注")}</button></div>
       <div class="research-comparison-scroll"><table style="--comparison-columns:${columns.length}"><thead><tr><td></td>${columns.map(label => `<th scope="col">${escape(label)}</th>`).join('')}</tr></thead>
         <tbody>${rows.map(({ label, images }) => `<tr><th scope="row">${escape(label)}</th>${images.map((image, column) =>
@@ -160,8 +164,24 @@ export class ComparisonViewer {
       button.addEventListener('click', () => this.reset(button.dataset.comparisonMode as ZoomMode));
     }
     for (const button of this.dialog.querySelectorAll<HTMLButtonElement>('[data-comparison-source]')) {
-      button.addEventListener('click', () => { void actions.evidence(button.dataset.comparisonSource!).catch(actions.error); });
+      button.addEventListener('click', () => { void actions.evidence(button.dataset.comparisonSource!, button).catch(actions.error); });
     }
+    const grid = this.dialog.querySelector<HTMLElement>('.research-comparison-scroll')!;
+    let wipe: HTMLElement | undefined;
+    const layouts = this.dialog.querySelectorAll<HTMLButtonElement>('[data-comparison-layout]');
+    for (const button of layouts) button.addEventListener('click', () => {
+      const sliding = button.dataset.comparisonLayout === 'wipe';
+      if (sliding && !wipe) {
+        wipe = evidenceWipe([{ title: record.title, comparison: record.comparison! }], {
+          read: id => window.meki.openResearchEvidence(root, id), open: actions.evidence, error: actions.error,
+        });
+        grid.after(wipe);
+      }
+      if (wipe) wipe.hidden = !sliding;
+      grid.hidden = sliding;
+      this.dialog.querySelectorAll<HTMLElement>('[data-grid-controls]').forEach(control => { control.hidden = sliding; });
+      layouts.forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+    });
     this.dialog.showModal();
     const loads = new Map<string, Promise<ResearchEvidenceFile>>();
     this.visibility = new IntersectionObserver(entries => {
