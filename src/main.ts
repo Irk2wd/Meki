@@ -26,7 +26,8 @@ import { prepareExportAssets, installDiagramActions } from './export-assets';
 import type { ExportOptions } from '../shared/export';
 import { renderMath } from './math-engine';
 import { installMathCopyActions } from './math-copy';
-import { normalizeCustomCss, writingAppearance } from './appearance';
+import { normalizeCustomCss, writingAppearance, writingFont } from './appearance';
+import { FontPicker } from './font-picker';
 import { ThemePicker } from './theme-picker';
 import './style.css';
 import './print.css';
@@ -71,8 +72,7 @@ document.querySelector('#app')!.innerHTML = `
   <div class="popover-title">${ht("外观与排版")}</div>
   <div id="theme-choices" class="theme-choices" role="group" aria-label="${ht("主题")}"></div>
   <div class="theme-tools"><button type="button" data-action="install-theme-package">${icon('plus', 14)} ${ht("导入主题")}</button><button type="button" data-action="remove-theme-package" hidden>${ht("移除当前主题")}</button></div>
-  <label class="setting-row">${ht("字体")}<select id="font-family"><option value="serif">${ht("人文衬线")}</option><option value="sans">${ht("清晰无衬线")}</option></select></label>
-  <label class="setting-row">${ht("本机字体")}<input id="custom-font" placeholder="${ht("使用默认字体")}" maxlength="128" aria-label="${ht("本机字体名称")}"></label>
+  <div id="font-picker"></div>
   <div class="setting-row"><label for="font-size">${ht("字号")}</label><input id="font-size" type="range" min="14" max="24" step="1"><output id="font-size-value">18</output></div>
   <label class="setting-row">${ht("正文宽度")}<select id="line-width"><option value="640">${ht("紧凑 · 640")}</option><option value="760">${ht("适中 · 760")}</option><option value="900">${ht("舒展 · 900")}</option><option value="1040">${ht("宽版 · 1040")}</option><option value="1200">${ht("超宽 · 1200")}</option></select></label>
   <label class="setting-row">${ht("公式编号")}<select id="math-numbering"><option value="none">${ht("仅手动编号")}</option><option value="ams">${ht("AMS 环境自动编号")}</option><option value="all">${ht("所有独立公式自动编号")}</option></select></label>
@@ -153,6 +153,7 @@ const documentStyle = document.createElement('style');
 documentStyle.id = 'document-appearance';
 document.head.appendChild(documentStyle);
 const themePicker = new ThemePicker(el('#theme-choices'), el('[data-action="remove-theme-package"]'));
+const fontPicker = new FontPicker(el('#font-picker'), changeSettings);
 const mathPreviewStyle = document.createElement('style');
 document.head.appendChild(mathPreviewStyle);
 const dirty = () => documents.dirty();
@@ -283,13 +284,13 @@ function applySettings() {
   el('#language-restart-note').hidden = settings.locale === getLocale();
   themePicker.apply(settings);
   document.documentElement.dataset.font = settings.font;
+  document.documentElement.style.setProperty('--body-font', writingFont(settings));
   document.documentElement.style.setProperty('--writing-size', `${settings.fontSize}px`);
   document.documentElement.style.setProperty('--line-width', `${settings.lineWidth}px`);
   document.body.classList.toggle('unlimited-width', settings.unlimitedWidth);
   document.body.classList.toggle('focus-mode', settings.focus);
   document.body.classList.toggle('sidebar-hidden', !settings.sidebar);
-  el<HTMLSelectElement>('#font-family').value = settings.font;
-  el<HTMLInputElement>('#custom-font').value = settings.fontFamily;
+  fontPicker.apply(settings);
   el<HTMLSelectElement>('#math-numbering').value = settings.mathNumbering;
   el<HTMLInputElement>('#math-physics').checked = settings.mathPhysics;
   el<HTMLInputElement>('#font-size').value = String(settings.fontSize);
@@ -561,12 +562,6 @@ el<HTMLSelectElement>('#ui-language').addEventListener('change', async event => 
   finally { select.disabled = false; applySettings(); }
 });
 el<HTMLInputElement>('#font-size').addEventListener('input', event => changeSettings({ fontSize: Number((event.target as HTMLInputElement).value) }));
-el<HTMLSelectElement>('#font-family').addEventListener('change', event => changeSettings({ font: (event.target as HTMLSelectElement).value as Settings['font'] }));
-el<HTMLInputElement>('#custom-font').addEventListener('change', event => {
-  const fontFamily = (event.target as HTMLInputElement).value.trim();
-  if (fontFamily && !/^[\p{L}\p{N} _.-]{1,128}$/u.test(fontFamily)) { notify(t("请输入一个本机字体名称。"), true); el<HTMLInputElement>('#custom-font').value = settings.fontFamily; return; }
-  changeSettings({ fontFamily });
-});
 el<HTMLSelectElement>('#math-numbering').addEventListener('change', event => changeSettings({ mathNumbering: (event.target as HTMLSelectElement).value as Settings['mathNumbering'] }));
 el<HTMLInputElement>('#math-physics').addEventListener('change', event => changeSettings({ mathPhysics: (event.target as HTMLInputElement).checked }));
 el<HTMLSelectElement>('#line-width').addEventListener('change', event => changeSettings({ lineWidth: Number((event.target as HTMLSelectElement).value) }));

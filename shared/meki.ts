@@ -1,6 +1,7 @@
 import type { ExportRequest, ExportTools, ImportedDocument, DiagramSaveRequest } from './export';
 import type { UpdateState } from './updates';
 import type { ThemeManifest } from '../electron/theme-format.mjs';
+import type writingFonts from '../electron/writing-fonts.json';
 export interface DocumentFile {
   path: string | null;
   name: string;
@@ -15,7 +16,7 @@ export interface Settings {
   shortcuts?: Record<string, string | null>;
   theme: string;
   installedThemes?: ThemeManifest[];
-  font: 'serif' | 'sans';
+  font: keyof typeof writingFonts;
   fontSize: number;
   lineWidth: number;
   unlimitedWidth: boolean;

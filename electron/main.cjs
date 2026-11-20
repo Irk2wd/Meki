@@ -67,10 +67,10 @@ else {
       });
     }
     manager = new WindowManager({ store, sessions, snapshots, updates, reopen });
-    const canClipboard = (sender, permission, details) => permission === 'clipboard-sanitized-write' && details.isMainFrame === true &&
+    const editorPermission = (sender, permission, details) => (permission === 'clipboard-sanitized-write' || permission === 'local-fonts') && details.isMainFrame === true &&
       [...manager.controllers.values()].some(controller => controller.isTrustedRenderer({ sender, senderFrame: sender?.mainFrame }));
-    session.defaultSession.setPermissionRequestHandler((sender, permission, callback, details) => callback(canClipboard(sender, permission, details)));
-    session.defaultSession.setPermissionCheckHandler((sender, permission, _origin, details) => canClipboard(sender, permission, details));
+    session.defaultSession.setPermissionRequestHandler((sender, permission, callback, details) => callback(editorPermission(sender, permission, details)));
+    session.defaultSession.setPermissionCheckHandler((sender, permission, _origin, details) => editorPermission(sender, permission, details));
     const rendererDirectory = path.resolve(__dirname, '..', 'dist');
     session.defaultSession.webRequest.onBeforeRequest({ urls: ['file://*/*'] }, (details, callback) => {
       try { callback({ cancel: !isWithin(fileURLToPath(details.url), rendererDirectory) }); } catch { callback({ cancel: true }); }

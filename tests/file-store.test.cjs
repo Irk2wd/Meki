@@ -257,6 +257,7 @@ test('theme and font bounds reject oversize UTF-8, CSS injection and invalid mat
   const exactCss = 'x'.repeat(MAX_THEME_BYTES);
   assert.equal(validateSettings({ customCss: exactCss }).customCss.length, MAX_THEME_BYTES);
   assert.equal(validateSettings({ fontFamily: '  华文宋体  ' }).fontFamily, '华文宋体');
+  assert.equal(validateSettings({ fontFamily: 'M+ 1m' }).fontFamily, 'M+ 1m');
   for (const invalid of [
     { customCss: 'x'.repeat(MAX_THEME_BYTES + 1) }, { customCss: '中'.repeat(Math.floor(MAX_THEME_BYTES / 3) + 1) },
     { customCss: 'a\0b' }, { customCss: null }, { fontFamily: 'A'.repeat(129) },

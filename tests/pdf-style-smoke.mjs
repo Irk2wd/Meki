@@ -73,7 +73,14 @@ try {
   }, appearance.toString());
 
   for (const theme of ['paper', 'linen', 'night']) {
-    await action('style'); await page.locator(`button[data-theme="${theme}"]`).click(); await page.locator('#custom-font').fill('Georgia'); await page.locator('#custom-font').press('Tab');
+    await action('style'); await page.locator(`button[data-theme="${theme}"]`).click();
+    if (theme === 'paper') {
+      await page.locator('.font-library summary').click();
+      await page.waitForFunction(() => document.querySelector('.font-results output').textContent.includes('款字体'));
+      await page.locator('#custom-font').fill('Georgia'); await page.locator('#custom-font').press('Enter');
+      assert.equal(await page.locator('#font-family option:checked').innerText(), 'Georgia');
+      await page.locator('.font-library summary').click();
+    }
     await page.locator('#font-size').fill('20'); await page.locator('#line-width').selectOption('640');
     await action('style');
     await page.locator('.milkdown-code-block,.milkdown-code-block-placeholder').first().scrollIntoViewIfNeeded();
