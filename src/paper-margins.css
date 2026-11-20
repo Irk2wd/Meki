@@ -1,3 +1,7 @@
+:root[data-paper-margins] :is(.document-scroll, body:has(> .meki-page)) {
+  background-color: color-mix(in srgb, var(--bg) 80%, var(--muted));
+  background-blend-mode: soft-light;
+}
 :root[data-paper-margins] :is(.document-scroll .milkdown, .meki-page) {
   padding: clamp(13px, 2.2vw, 32px);
   border-radius: 4px;
