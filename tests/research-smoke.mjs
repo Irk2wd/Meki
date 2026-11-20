@@ -719,9 +719,16 @@ try {
   await related.getByRole('button', { name: 'timings.csv', exact: true }).click();
   await tools.locator('pre').getByText(/10\.9/).waitFor();
   await tools.getByRole('button', { name: '返回正文' }).click();
-  await related.getByRole('button', { name: 'run_manifest.json', exact: true }).click();
+  const manifestLink = related.getByRole('button', { name: 'run_manifest.json', exact: true });
+  const reportScroll = await documentScroll.evaluate(element => element.scrollTop);
+  await manifestLink.click();
   await tools.locator('pre').getByText(/Electric Dreams/).waitFor();
-  await tools.getByRole('button', { name: '返回正文' }).click();
+  assert.equal(await tools.evaluate(dialog => getComputedStyle(dialog).webkitAppRegion), 'no-drag');
+  await tools.getByRole('button', { name: '关闭证据预览', exact: true }).click();
+  await tools.waitFor({ state: 'hidden' });
+  assert.ok(await manifestLink.evaluate(link => link === document.activeElement));
+  assert.equal(await documentScroll.evaluate(element => element.scrollTop), reportScroll);
+  await page.locator('#research-reader-title').getByText('森林四视角报告', { exact: true }).waitFor();
   await page.getByRole('button', { name: '返回上一份文档' }).click();
   await page.locator('#research-reader-title').getByText('森林结果采用决定').waitFor();
   await page.screenshot({ path: path.join(folder, 'research-evidence.png'), animations: 'disabled' });
