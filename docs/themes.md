@@ -44,6 +44,6 @@
 | 代码和表格 | `code`（行内）、`codeBlock`、`table`、`tableHead`、`tableCell` |
 | 其他 | `image`、`rule`（分隔线） |
 
-属性用 CSS 的连字符写法，值用字符串。例如 `"h2": { "border-bottom": "1px dashed var(--border)", "padding-bottom": ".25em" }`。支持字体、行高、字距、颜色、边框、圆角、阴影、间距和列表样式，完整属性表见 [格式校验](../electron/theme-format.mjs)。`document` 可设置颜色、背景色、行高、字距、词距和对齐。正文的字体、字号和宽度可在应用里调整。
+属性用 CSS 的连字符写法，值用字符串。例如 `"h2": { "border-bottom": "1px dashed var(--border)", "padding-bottom": ".25em" }`。支持字体、行高、字距、颜色、边框、圆角、阴影、间距和列表样式，完整属性表见 [格式校验](../electron/theme-format.mjs)。`document` 可设置颜色、背景色、行高、字距、词距和对齐。打开「设置 → 外观与排版」可以调整正文字体、字号和宽度。展开「浏览本机字体」可直接从列表选择字体，按字形分类或「含汉字」筛选，也可叠加名称搜索。
 
 导入时会校验字段和声明。主题是自包含的数据文件，外部网址、本机文件路径、脚本和任意 CSS 选择器不属于此格式。

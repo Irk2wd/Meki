@@ -3,7 +3,8 @@ import postcss, { type Container } from 'postcss';
 import selectorParser from 'postcss-selector-parser';
 import type { Settings } from '../shared/meki';
 import { codeAppearance, type CodeOptions } from './code-options.ts';
-import { resolveTheme } from '../electron/theme-format.mjs';
+import { isLocalFontName, resolveTheme } from '../electron/theme-format.mjs';
+import writingFonts from '../electron/writing-fonts.json' with { type: 'json' };
 import { cssDeclarations, themeDocumentCss, themePalette } from './theme-styles.ts';
 
 const properties = new Set((
@@ -65,9 +66,9 @@ export function normalizeCustomCss(css: string, scope = '.meki-document'): strin
 }
 
 export function writingFont(settings: Pick<Settings, 'font' | 'fontFamily'>): string {
-  const fallback = settings.font === 'sans' ? "-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" : "Georgia,'Songti SC','Noto Serif CJK SC',SimSun,serif";
+  const fallback = writingFonts[settings.font]?.family ?? writingFonts.serif.family;
   const family = (settings.fontFamily || '').trim();
-  return family && /^[\p{L}\p{N} _.-]{1,128}$/u.test(family) ? `${JSON.stringify(family)},${fallback}` : fallback;
+  return family && isLocalFontName(family) ? `${JSON.stringify(family)},${fallback}` : fallback;
 }
 
 export const appearanceDefaults = { theme: 'paper', font: 'serif', fontSize: 18, lineWidth: 1040, customCss: '', fontFamily: '' } as const;

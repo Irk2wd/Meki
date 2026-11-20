@@ -5,6 +5,11 @@ export const MAX_THEME_PACKAGE_BYTES = 256 * 1024;
 export const MAX_THEME_LIBRARY_BYTES = 1536 * 1024;
 const maxInstalledThemes = 24;
 
+// Custom typefaces are single local family names, never CSS declarations or fallback lists.
+export function isLocalFontName(value) {
+  return typeof value === 'string' && value.length <= 128 && /^[\p{L}\p{M}\p{N} ._'’&()+-]*$/u.test(value);
+}
+
 const bases = {
   paper: { bg: '#ffffff', side: '#f5f6f3', surface: '#ffffff', text: '#303a35', muted: '#91998f', soft: '#657267', border: '#e8ebe5', accent: '#416b5b', 'accent-soft': '#e7eee6', hover: '#edf1e9', selection: '#cfdfd3', 'logo-ink': '#fffdf4' },
   linen: { bg: '#faf6ee', side: '#f1ecdf', surface: '#fffaf0', text: '#433f34', muted: '#a29a88', soft: '#827760', border: '#e7e0d2', accent: '#816a40', 'accent-soft': '#ece2cc', hover: '#eee7d9', selection: '#e4d5b6', 'logo-ink': '#faf5e9' },

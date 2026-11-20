@@ -9,7 +9,8 @@ const { fileURLToPath } = require('node:url');
 const { MAX_IMAGE_COUNT, MAX_BATCH_BYTES } = require('./image-input.cjs');
 const { normalizeDestinationSettings, resolveImageDestination, ensureImageDestination, rollbackImageDirectories } = require('./image-destination.cjs');
 const { validateBindings } = require('./shortcuts.mjs');
-const { MAX_THEME_PACKAGE_BYTES, MAX_THEME_LIBRARY_BYTES, hasTheme, validateThemePackage, validateThemeLibrary } = require('./theme-format.mjs');
+const { MAX_THEME_PACKAGE_BYTES, MAX_THEME_LIBRARY_BYTES, hasTheme, isLocalFontName, validateThemePackage, validateThemeLibrary } = require('./theme-format.mjs');
+const writingFonts = require('./writing-fonts.json');
 
 const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -105,11 +106,11 @@ function validateSettings(patch, base = DEFAULT_SETTINGS) {
     if (key === 'shortcuts') { next.shortcuts = validateBindings(value, process.platform); continue; }
     const valid = key === 'locale' ? isLocale(value)
       : key === 'theme' ? hasTheme(value, next.installedThemes)
-      : key === 'font' ? ['serif', 'sans'].includes(value)
+      : key === 'font' ? typeof value === 'string' && Object.hasOwn(writingFonts, value)
       : key === 'fontSize' ? Number.isFinite(value) && value >= 12 && value <= 32
       : key === 'lineWidth' ? Number.isFinite(value) && value >= 480 && value <= 1200
       : key === 'customCss' ? typeof value === 'string' && Buffer.byteLength(value, 'utf8') <= MAX_THEME_BYTES && !value.includes('\0')
-      : key === 'fontFamily' ? typeof value === 'string' && value.length <= 128 && /^[\p{L}\p{M}\p{N} ._-]*$/u.test(value)
+      : key === 'fontFamily' ? isLocalFontName(value)
       : key === 'mathNumbering' ? ['none', 'ams', 'all'].includes(value)
       : key === 'typingAutoPair' ? ['default', 'on', 'off'].includes(value)
       : ['typingMarkdownPairs', 'typingSmartQuotes', 'typingSmartDashes'].includes(key) ? typeof value === 'boolean'
@@ -125,7 +126,6 @@ function validateSettings(patch, base = DEFAULT_SETTINGS) {
       : ['codeIndentSize', 'codeTabSize'].includes(key) ? Number.isInteger(value) && value >= 1 && value <= 8
       : ['focus', 'sidebar', 'mathPhysics', 'typewriter', 'paragraphFocus', 'spellcheck', 'autoSave', 'reopenSession', 'codeLineNumbers', 'headingNumbering', 'codeWrap', 'codeUseTabs', 'codeAutoIndent'].includes(key) ? typeof value === 'boolean' : false;
     if (!valid) throw new TypeError(`Invalid setting: ${key}`);
-    // fontFamily is a single local font name, never CSS syntax or a fallback list.
     next[key] = key === 'fontFamily' ? value.trim() : value;
   }
   return next;

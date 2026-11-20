@@ -1,6 +1,7 @@
 import type { ExportRequest, ExportTools, ImportedDocument, DiagramSaveRequest } from './export';
 import type { UpdateState } from './updates';
 import type { ThemeManifest } from '../electron/theme-format.mjs';
+import type writingFonts from '../electron/writing-fonts.json';
 import type { BoundResearchSource, RecentResearchProject, ResearchBatch, ResearchDocument, ResearchEvidenceFile, ResearchFilter, ResearchImportPreview, ResearchProject, ResearchReference, ResearchSnapshot, ResearchWriteResult, SavedResearchFilter } from './research';
 export interface DocumentFile {
   path: string | null;
@@ -16,7 +17,7 @@ export interface Settings {
   shortcuts?: Record<string, string | null>;
   theme: string;
   installedThemes?: ThemeManifest[];
-  font: 'serif' | 'sans';
+  font: keyof typeof writingFonts;
   fontSize: number;
   lineWidth: number;
   unlimitedWidth: boolean;

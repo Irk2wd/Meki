@@ -17,6 +17,7 @@ export const builtinThemes: readonly ThemeManifest[];
 export const themeRoles: Record<ThemeRole, string>;
 export const pngDataPrefix: string;
 export function hasTheme(id: unknown, library?: readonly ThemeManifest[]): boolean;
+export function isLocalFontName(value: unknown): value is string;
 export function resolveTheme(id?: string, library?: readonly ThemeManifest[]): ResolvedTheme;
 export function validateThemePackage(input: unknown): ThemeManifest;
 export function validateThemeLibrary(input: unknown, restoring?: boolean): ThemeManifest[];
