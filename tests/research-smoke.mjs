@@ -1030,6 +1030,23 @@ try {
   await comparison.locator('.research-comparison-caption strong').getByText('同一机位').waitFor();
   const imagesInView = comparison.locator('.research-comparison-image img');
   await imagesInView.nth(3).waitFor();
+  const comparisonWindow = await app.browserWindow(page);
+  const previousSize = await comparisonWindow.evaluate(win => win.getContentSize());
+  await comparisonWindow.evaluate(win => win.setContentSize(780, 480));
+  await page.waitForFunction(() => innerWidth === 780 && innerHeight === 480);
+  const compactGrid = await comparison.evaluate(dialog => {
+    const grid = dialog.querySelector('.research-comparison-scroll');
+    grid.scrollTop = grid.scrollHeight;
+    const source = grid.querySelector('tr:last-child td:last-child [data-comparison-source]').getBoundingClientRect();
+    const box = dialog.getBoundingClientRect();
+    return { top: box.top, bottomGap: innerHeight - box.bottom, titlebar: navigator.windowControlsOverlay?.getTitlebarAreaRect().bottom || 0,
+      outerOverflow: dialog.scrollHeight - dialog.clientHeight, scrolled: grid.scrollTop, lastImageReachable: source.bottom <= grid.getBoundingClientRect().bottom + 1 };
+  });
+  assert.ok(compactGrid.top >= compactGrid.titlebar - 1 && compactGrid.bottomGap > 0, JSON.stringify(compactGrid));
+  assert.ok(compactGrid.outerOverflow <= 1 && compactGrid.scrolled > 0 && compactGrid.lastImageReachable, JSON.stringify(compactGrid));
+  await comparison.locator('.research-comparison-scroll').evaluate(grid => { grid.scrollTop = 0; });
+  await comparisonWindow.evaluate((win, size) => win.setContentSize(...size), previousSize);
+  await page.waitForFunction(([w, h]) => innerWidth === w && innerHeight === h, previousSize);
   for (const text of ['普通 Mesh', 'Ours', '树冠机位', '树干机位']) await comparison.getByRole(text.includes('机位') ? 'rowheader' : 'columnheader', { name: text }).waitFor();
   const imageState = () => imagesInView.evaluateAll(elements => elements.map(image => {
     const matrix = new DOMMatrix(image.style.transform);

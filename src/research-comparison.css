@@ -18,6 +18,8 @@
 
 #research-comparison-dialog { width: min(1140px, calc(100vw - clamp(32px, 10vw, 140px))); max-height: calc(100vh - 36px); overflow: auto; border-radius: 16px; }
 #research-comparison-dialog[data-width="edge"] { width: calc(100vw - 16px); max-width: none; max-height: calc(100vh - 18px); }
+#research-comparison-dialog[open] { display: flex; flex-direction: column; }
+#research-comparison-dialog > :not(.research-comparison-scroll) { flex: none; }
 .research-comparison-heading { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 .research-comparison-heading button { flex: none; }
 #research-comparison-dialog .dialog-heading { margin-bottom: 12px; }
@@ -27,7 +29,7 @@
 .research-comparison-toolbar small { flex: 1; color: var(--soft); font-size: 11px; }
 .research-comparison-toolbar [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 #research-comparison-dialog > .research-wipe { margin: 18px 0 8px; }
-.research-comparison-scroll { overflow: auto; max-height: 65vh; margin-top: 10px; }
+.research-comparison-scroll { overflow: auto; min-height: min(112px, 24vh); max-height: 65vh; margin-top: 10px; }
 .research-comparison-scroll table { width: 100%; min-width: calc(98px + 191px * var(--comparison-columns)); table-layout: fixed; border-collapse: separate; border-spacing: 7px; }
 .research-comparison-scroll thead td { width: 96px; }
 .research-comparison-scroll th { color: var(--soft); font-size: 12px; text-align: start; overflow-wrap: anywhere; }

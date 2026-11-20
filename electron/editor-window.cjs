@@ -1024,7 +1024,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     ...restoredBounds(), minWidth: 480, minHeight: 420, show: false,
     title: PRODUCT_NAME, backgroundColor: '#faf9f6', icon: path.join(appDirectory, 'assets', 'icon.png'),
-    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 17 } } : {}),
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', titleBarOverlay: true, trafficLightPosition: { x: 18, y: 17 } } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false,
       sandbox: true, webSecurity: true, spellcheck: true, devTools: Boolean(developerUrl) || TEST_MODE,
