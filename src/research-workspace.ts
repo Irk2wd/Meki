@@ -309,6 +309,7 @@ function summaryCoversPhase(record: ResearchEntry['record'], phase: ResearchPhas
 interface Hooks {
   root(): string | undefined;
   blocked(): boolean;
+  whenIdle(): Promise<void>;
   open(root: string, id: string, origin?: HTMLButtonElement, edit?: boolean, sourceProjectId?: string): Promise<void>;
   closeReader(): Promise<void>;
   openProject(root: string): Promise<void>;
@@ -762,7 +763,7 @@ export class ResearchWorkspace {
     try {
       const includeLinked = !this.snapshot || this.destination(this.snapshot).page === 'summaries';
       const snapshot = root ? await window.meki.researchSnapshot(this.recordFilter, includeLinked) : null;
-      if (!this.hooks.blocked()) await this.controlsIdle;
+      await this.controlsIdle;
       if (number !== this.loadNumber || root !== this.hooks.root() || this.axisDrag?.moving) return;
       const shown = snapshot && this.destination(snapshot).page !== 'summaries'
         ? { ...snapshot, linkedSummaries: undefined } : snapshot;
@@ -782,7 +783,7 @@ export class ResearchWorkspace {
       if (!snapshot?.project.phases.some(phase => phase.id === this.phaseId)) this.phaseId = '';
       this.render();
     } catch (error) {
-      if (!this.hooks.blocked()) await this.controlsIdle;
+      await this.controlsIdle;
       if (number !== this.loadNumber || root !== this.hooks.root() || this.axisDrag?.moving) return;
       this.loading = false;
       this.snapshot = null;
@@ -1281,6 +1282,10 @@ export class ResearchWorkspace {
     this.openingListRecord = true;
     try {
       while (this.pendingListRecord && this.visible && this.root === root) {
+        if (this.hooks.blocked()) {
+          await this.hooks.whenIdle();
+          if (this.hooks.blocked() || !this.visible || this.root !== root) break;
+        }
         const next: HTMLButtonElement = this.pendingListRecord;
         this.pendingListRecord = undefined;
         const { researchRecord: id, researchLinkedProject: linked } = next.dataset;
@@ -1300,7 +1305,7 @@ export class ResearchWorkspace {
       ? target.closest('.research-timeline-row')?.querySelector<HTMLButtonElement>('[data-research-phase]') : null);
     const state = this.snapshot;
     if (!button || !state) return;
-    if (button.matches(peekItems) && (this.openingListRecord || !this.hooks.blocked())) {
+    if (button.matches(peekItems)) {
       await this.openListRecord(button, state.root);
       return;
     }

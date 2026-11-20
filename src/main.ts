@@ -140,6 +140,7 @@ let shortcuts: Shortcuts | undefined;
 let updateDialog: UpdateDialog | undefined;
 let aboutDialog: AboutDialog | undefined;
 let busy = false;
+let operationFinished = Promise.resolve();
 let closeRequested = false;
 let ready = false;
 let draftTimer: ReturnType<typeof setTimeout>;
@@ -165,7 +166,7 @@ const documents = new DocumentTabs({ editor: () => editor, settings: () => setti
   active: doc => { documentId++; outline?.reset(); current = doc; }, updated: () => { renderOutline(); renderFiles(); updateStatus(); renderExternalStatus(); },
   dispatch: (command, payload) => { void dispatch(command, payload); }, notify });
 const researchUI = new ResearchWorkspace(el('.main-area'), el('#research-sidebar'), {
-  root: () => workspace?.root, blocked: () => !ready || busy,
+  root: () => workspace?.root, blocked: () => !ready || busy, whenIdle,
   open: (root, id, origin, edit, sourceProjectId) => perform(async () => {
     const previous = captureResearchStep();
     if (previous && dirty()) await persistDraft();
@@ -215,12 +216,24 @@ function notify(message: string, error = false) {
   clearTimeout(toastTimer); const toast = el('#toast'); toast.textContent = message.replace(/^Error: (Error invoking remote method '[^']+': Error: )?/, '');
   toast.classList.toggle('error', error); toast.hidden = false; toastTimer = setTimeout(() => { toast.hidden = true; }, error ? 6500 : 3500);
 }
+async function whenIdle() {
+  while (busy) await operationFinished;
+}
 async function perform(fn: () => Promise<void>, freezeDocument = false, propagateError = false) {
-  if (busy || !ready) { if (propagateError) throw new Error(t("正在处理上一个操作，请稍后再试。")); return; } busy = true; document.body.classList.add('is-busy');
-  if (freezeDocument) { editor.flush(); el('#editor-workspace').inert = true; el('.formatbar').inert = true; }
-  try { await fn(); } catch (error) { if (propagateError) throw error; notify(String(error), true); }
+  if (busy || !ready) { if (propagateError) throw new Error(t("正在处理上一个操作，请稍后再试。")); return; }
+  busy = true;
+  document.body.classList.add('is-busy');
+  let finish!: () => void;
+  operationFinished = new Promise(resolve => { finish = resolve; });
+  try {
+    if (freezeDocument) { editor.flush(); el('#editor-workspace').inert = true; el('.formatbar').inert = true; }
+    await fn();
+  } catch (error) { if (propagateError) throw error; notify(String(error), true); }
   finally {
-    el('#editor-workspace').inert = false; el('.formatbar').inert = false; busy = false; document.body.classList.remove('is-busy'); updateStatus();
+    el('#editor-workspace').inert = false; el('.formatbar').inert = false;
+    busy = false;
+    finish();
+    document.body.classList.remove('is-busy'); updateStatus();
     if (closeRequested) { closeRequested = false; queueMicrotask(() => { void dispatch('close-request'); }); }
   }
 }
@@ -594,6 +607,15 @@ async function dispatch(action: string, payload?: unknown, origin?: HTMLElement)
     }).catch(error => { documents.refreshSettings(); notify(String(error), true); }).finally(() => { lifecycleSettingsPending--; });
     await lifecycleSettingsQueue; return;
   }
+  if (action === 'research-edit-body' && researchUI.readerOpen) {
+    const tab = documents.activeId, editing = !researchEditing;
+    if (busy) await whenIdle();
+    if (researchUI.readerOpen && documents.activeId === tab && researchEditing !== editing) {
+      setResearchEditing(editing);
+      if (editing) editor.focus();
+    }
+    return;
+  }
   if (busy) return;
   if (action === 'install-theme-package' || action === 'remove-theme-package') {
     await perform(async () => {
@@ -616,11 +638,6 @@ async function dispatch(action: string, payload?: unknown, origin?: HTMLElement)
   }
   if (action === 'research-close-reader') { await closeResearchReader(); return; }
   if (action === 'research-reader-back') { await backResearchReader(); return; }
-  if (action === 'research-edit-body' && researchUI.readerOpen) {
-    setResearchEditing(!researchEditing);
-    if (researchEditing) editor.focus();
-    return;
-  }
   if (action === 'research-close' || action === 'research-files') {
     await closeResearchReader();
     if (researchUI.readerOpen) return;

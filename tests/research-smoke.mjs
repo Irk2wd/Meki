@@ -1153,8 +1153,15 @@ try {
   const citedSummary = command('read', ['exploration-review']);
   command('batch', [], { records: [{ id: citedSummary.record.id, ifRevision: citedSummary.revision, sources: [...citedSummary.record.sources, saved.id] }] });
   await page.locator('[data-research-destination="summaries"]').click();
-  await refresh.click();
-  await page.locator('.research-entry-title [data-research-record="exploration-review"]').click();
+  const summaryEntry = page.locator('.research-entry-title [data-research-record="exploration-review"]');
+  await idle();
+  const clickedDuringRefresh = await summaryEntry.evaluate(button => {
+    document.querySelector('#research-workspace [data-action="refresh"]').click();
+    const refreshing = document.body.classList.contains('is-busy');
+    button.click();
+    return refreshing;
+  });
+  assert.ok(clickedDuringRefresh, 'The record click must overlap the pending refresh');
   const inline = page.locator('#document-scroll .research-wipe');
   await inline.getByRole('slider').waitFor();
   assert.ok(await inline.evaluate(figure => {
@@ -1170,7 +1177,8 @@ try {
   assert.equal(await inline.getByRole('slider').getAttribute('aria-valuenow'), '0');
   assert.ok(await inline.locator('[data-wipe-side="right"]').evaluate(node => node === document.activeElement));
   await page.getByRole('button', { name: '编辑正文', exact: true }).click();
-  assert.equal(await inline.count(), 0);
+  await page.getByRole('button', { name: '完成编辑', exact: true }).waitFor();
+  await inline.waitFor({ state: 'detached' });
   await page.locator('[data-mode="source"]').click();
   const markdown = await page.locator('#source-editor .cm-content').innerText();
   assert.match(markdown, /# 方案探索阶段总结/);
