@@ -14,3 +14,11 @@
 .brand-mark svg { width:28px; height:28px }
 .brand-wordmark { display:block; width:66px; height:25px; flex-shrink:0; color:var(--text) }
 .brand-wordmark svg { display:block; width:100%; height:100% }
+
+/* Native window controls keep their size when the page zoom changes. */
+.platform-darwin dialog:modal {
+  --dialog-top: calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 0px));
+  --dialog-bottom: 12px;
+  inset-block: var(--dialog-top) var(--dialog-bottom);
+  block-size: calc-size(fit-content, min(size, 100dvh - var(--dialog-top) - var(--dialog-bottom)));
+}
