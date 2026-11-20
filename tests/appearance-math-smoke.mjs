@@ -91,7 +91,11 @@ try {
   assert.equal(await page.locator('#custom-font').inputValue(), '');
   const totalFonts = await page.locator('#installed-fonts option').count();
   await page.locator('.font-filters select').selectOption('mono');
-  await page.waitForFunction(() => document.querySelector('.font-results output').textContent.includes('款字体'));
+  // The first category selection examines the fonts installed on this machine.
+  await page.waitForFunction(() => {
+    const status = document.querySelector('.font-results output').textContent;
+    return status.includes('款字体') || status === '没有匹配的字体';
+  }, undefined, { timeout: 90000 });
   const monoFonts = await page.locator('#installed-fonts option').count();
   assert.ok(monoFonts > 0 && monoFonts < totalFonts);
   const familyOf = selector => page.locator(selector).evaluate(node => getComputedStyle(node).fontFamily);
