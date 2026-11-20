@@ -1441,13 +1441,21 @@ try {
     await listDivider().waitFor();
     await idle();
   }
+  const dividerStyle = handle => handle.evaluate(async el => {
+    await Promise.allSettled(el.getAnimations({ subtree: true }).map(animation => animation.finished));
+    const grip = getComputedStyle(el, '::after');
+    return { height: grip.height, color: grip.backgroundColor, outline: grip.outlineStyle, line: getComputedStyle(el, '::before').backgroundColor };
+  });
   async function dragWidth(handle, change, cancel = false) {
     const { x, y, width, height } = await handle.boundingBox();
     await page.mouse.move(x + width / 2, y + height / 2);
     await page.mouse.down();
     await page.mouse.move(x + width / 2 + change, y + height / 2, { steps: 4 });
+    assert.notEqual((await dividerStyle(handle)).color, restingStyle.color);
     if (cancel) await page.keyboard.press('Escape');
     await page.mouse.up();
+    await page.mouse.move(80, 200);
+    assert.deepEqual(await dividerStyle(handle), restingStyle, 'moving away returns the divider to rest without a click');
   }
   await sizeWindow(1280);
   await navDivider().waitFor();
@@ -1462,15 +1470,25 @@ try {
   assert.equal(await listDivider().evaluate(el => getComputedStyle(el, '::before').width), '1px');
   assert.equal(await page.locator('#document-scroll .milkdown').evaluate(el => getComputedStyle(el).boxShadow), 'none');
   const [nav, list, preview] = await widths();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.mouse.move(80, 200);
+  const restingStyle = await dividerStyle(listDivider());
+  await navDivider().press('Enter');
+  assert.notEqual((await dividerStyle(navDivider())).outline, 'none');
   await dragWidth(navDivider(), 48);
   assert.deepEqual(await widths(), [nav + 48, list - 48, preview]);
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Shift+Tab');
+  assert.notEqual((await dividerStyle(navDivider())).outline, 'none');
+  await listDivider().press('Enter');
   await dragWidth(listDivider(), 72);
   const adjusted = [nav + 48, list + 24, preview - 72];
   assert.deepEqual(await widths(), adjusted);
   await dragWidth(listDivider(), -36, true);
   assert.deepEqual(await widths(), adjusted);
-  await listDivider().press('ArrowLeft');
+  await page.keyboard.press('ArrowLeft');
   assert.deepEqual(await widths(), [adjusted[0], adjusted[1] - 12, adjusted[2] + 12]);
+  assert.notEqual((await dividerStyle(listDivider())).outline, 'none');
   await listDivider().press('ArrowRight');
   const toggleSidebar = () => page.locator('.research-toolbar [data-action="sidebar"]');
   await toggleSidebar().click();

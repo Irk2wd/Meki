@@ -64,9 +64,12 @@ export class ResearchColumns {
     handle.setAttribute('aria-orientation', 'vertical');
     handle.title = t("拖动调整宽度，双击或按 Enter 恢复默认");
     pane.after(handle);
+    handle.addEventListener('blur', () => handle.removeAttribute('data-pointer-focus'));
     handle.addEventListener('pointerdown', event => {
       if (!this.layout || this.drag || event.button !== 0 || !event.isPrimary) return;
       event.preventDefault();
+      // Chromium can retain :focus-visible when the pointer takes over a focused divider.
+      handle.setAttribute('data-pointer-focus', '');
       handle.focus({ preventScroll: true });
       handle.setPointerCapture(event.pointerId);
       this.drag = { part, pointer: event.pointerId, x: event.clientX, start: this.layout[part].value, before: { ...this.preferred } };
@@ -87,6 +90,7 @@ export class ResearchColumns {
     handle.addEventListener('dblclick', () => this.reset(part));
     handle.addEventListener('keydown', event => {
       if (!this.layout || this.drag) return;
+      handle.removeAttribute('data-pointer-focus');
       if (event.key === 'Enter') { event.preventDefault(); this.reset(part); return; }
       const { value, min, max } = this.layout[part];
       const step = event.shiftKey ? 48 : 12;
