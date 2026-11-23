@@ -6,6 +6,7 @@ import { icon } from './icons';
 import './research-wipe.css';
 
 interface WipeReport { title: string; comparison: ResearchComparison }
+export interface WipePosition { report?: string; row?: string; split?: number; columns?: number[] }
 interface WipeActions {
   read(id: string): Promise<ResearchEvidenceFile>;
   open(id: string, origin: HTMLElement): Promise<void>;
@@ -36,7 +37,7 @@ export function placeReaderFigure(view: EditorView, figure?: HTMLElement) {
   view.setProps({ plugins });
 }
 
-export function evidenceWipe(reports: WipeReport[], actions: WipeActions) {
+export function evidenceWipe(reports: WipeReport[], actions: WipeActions, position: WipePosition = {}) {
   const figure = document.createElement('figure');
   figure.className = 'research-wipe';
   figure.innerHTML = `<figcaption><strong></strong><select data-wipe-report aria-label="${ht("选择图像对比")}"></select>
@@ -59,6 +60,7 @@ export function evidenceWipe(reports: WipeReport[], actions: WipeActions) {
 
   function setSplit(value: number) {
     split = Math.max(0, Math.min(100, value));
+    position.split = split;
     stage.style.setProperty('--wipe-split', `${split}%`);
     divider.setAttribute('aria-valuenow', String(Math.round(split)));
     divider.setAttribute('aria-valuetext', `${Math.round(split)}%`);
@@ -164,28 +166,34 @@ export function evidenceWipe(reports: WipeReport[], actions: WipeActions) {
       labels.append(group);
     });
   }
-  function selectRow() {
+  function selectRow(savedColumns?: number[]) {
     const images = row().images;
     const left = images.findIndex(Boolean);
-    columns = [left, images.findIndex(id => Boolean(id && id !== images[left]))];
+    columns = savedColumns?.length === 2 && savedColumns.every(i => images[i]) && images[savedColumns[0]] !== images[savedColumns[1]]
+      ? [...savedColumns] : [left, images.findIndex(id => Boolean(id && id !== images[left]))];
+    position.row = rowSelect.value;
+    position.columns = columns;
     renderLabels();
     void loadPair();
   }
-  function selectReport() {
+  function selectReport(savedRow?: string, savedColumns?: number[]) {
+    position.report = reportSelect.value;
     rowSelect.replaceChildren();
     grid().rows.forEach((item, index) => {
       if (hasPair(item)) rowSelect.add(new Option(item.label, String(index)));
     });
-    selectRow();
+    if ([...rowSelect.options].some(option => option.value === savedRow)) rowSelect.value = savedRow!;
+    selectRow(savedColumns);
   }
   reports.forEach((report, index) => reportSelect.add(new Option(report.title, String(index))));
   const title = figure.querySelector('strong')!;
   title.textContent = reports[0].title;
   title.hidden = reports.length > 1;
   reportSelect.hidden = reports.length === 1;
-  reportSelect.onchange = selectReport;
-  rowSelect.onchange = selectRow;
-  setSplit(50);
-  selectReport();
+  reportSelect.onchange = () => selectReport();
+  rowSelect.onchange = () => selectRow();
+  if (position.report && reports[Number(position.report)]) reportSelect.value = position.report;
+  setSplit(position.split ?? 50);
+  selectReport(position.row, position.columns);
   return figure;
 }

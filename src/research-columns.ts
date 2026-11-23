@@ -14,19 +14,21 @@ function savedWidth(column: keyof Widths) {
   } catch { /* The layout also works without local storage. */ }
 }
 
-function columnLayout(width: number, navigationVisible: boolean, reading: boolean, preferred: Widths) {
+function columnLayout(width: number, navigationVisible: boolean, reading: boolean, preferred: Widths, stageNavigation: boolean) {
   const defaultNav = width <= 820 ? 180 : width <= 1020 ? 205 : 236;
   // The shell hides its sidebar at 760px. Stay in the overlay as the window gets smaller.
-  const split = reading && width > 760 && width - (navigationVisible ? minNavigation : 0) >= 730;
-  const maxNav = Math.max(minNavigation, width - (split ? minList + minPreview : 300));
+  const fromStage = stageNavigation && navigationVisible;
+  const split = reading && width > 760 && width - (navigationVisible ? minNavigation : 0) >= (fromStage ? minPreview : 730);
+  const stageIndex = split && fromStage;
+  const maxNav = Math.max(minNavigation, width - (stageIndex ? minPreview : split ? minList + minPreview : 300));
   const nav = navigationVisible ? clamp(preferred.navigation ?? defaultNav, minNavigation, maxNav) : 0;
   const main = width - nav;
   const defaultMain = width - (navigationVisible ? defaultNav : 0);
   const desiredPreview = preferred.preview ?? defaultMain - clamp(Math.round(defaultMain * .31), 242, 370);
-  const preview = split ? clamp(desiredPreview, minPreview, main - minList) : 0;
+  const preview = stageIndex ? main : split ? clamp(desiredPreview, minPreview, main - minList) : 0;
   return {
-    split, preview, desiredPreview,
-    navigation: { value: nav, min: minNavigation, max: split ? width - preview - minList : maxNav },
+    split, stageIndex, preview, desiredPreview,
+    navigation: { value: nav, min: minNavigation, max: split && !stageIndex ? width - preview - minList : maxNav },
     list: { value: main - preview, min: minList, max: main - minPreview },
   };
 }
@@ -108,12 +110,13 @@ export class ResearchColumns {
     const active = this.shell.classList.contains('research-shell') && !this.panel.hidden;
     const reading = active && this.host.classList.contains('research-reader-open');
     const hasNav = this.navigation.getClientRects().length > 0;
-    const layout = columnLayout(this.shell.clientWidth, hasNav, reading, this.preferred);
+    const layout = columnLayout(this.shell.clientWidth, hasNav, reading, this.preferred, this.host.classList.contains('research-stage-reading'));
     this.layout = layout;
     this.host.classList.toggle('research-peek-split', layout.split);
-    this.panel.inert = reading && !layout.split;
-    this.handles.navigation.hidden = !active || !hasNav || this.panel.inert;
-    this.handles.list.hidden = !layout.split;
+    this.host.classList.toggle('research-stage-index', layout.stageIndex);
+    this.panel.inert = reading && (!layout.split || layout.stageIndex);
+    this.handles.navigation.hidden = !active || !hasNav || (reading && !layout.split);
+    this.handles.list.hidden = !layout.split || layout.stageIndex;
     if (this.drag && this.handles[this.drag.part].hidden) { this.finish(false); return; }
     if (!active) return;
     if (hasNav) this.shell.style.setProperty('--research-navigation-width', `${layout.navigation.value}px`);
@@ -137,7 +140,7 @@ export class ResearchColumns {
     if (next === value) return;
     if (part === 'navigation') {
       // Keep the far boundary still, including after the window previously squeezed the preview.
-      if (layout.split && layout.desiredPreview > layout.preview) this.preferred.preview = layout.preview;
+      if (layout.split && !layout.stageIndex && layout.desiredPreview > layout.preview) this.preferred.preview = layout.preview;
       this.preferred.navigation = next;
     } else this.preferred.preview = layout.preview + value - next;
     this.update();

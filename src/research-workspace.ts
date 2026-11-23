@@ -5,7 +5,7 @@ import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField
 import { icon } from './icons';
 import { ComparisonGridEditor, ComparisonViewer } from './research-comparison';
 import { ResearchColumns } from './research-columns';
-import { evidenceWipe, placeReaderFigure, supportsWipe } from './research-wipe';
+import { evidenceWipe, placeReaderFigure, supportsWipe, type WipePosition } from './research-wipe';
 import type { EditorView } from '@milkdown/kit/prose/view';
 import { TimelineEventLayout, timelineEventButton, type TimelineEventDay } from './research-timeline-events';
 import { adjustDays, brushDays, datesForDays, dayNumber, isoDay, shiftRange, timelineOverview, type RangeHandle, type TimelineWindow } from './research-timeline-range';
@@ -130,6 +130,7 @@ function fieldRuleDetails(rule: ResearchField) {
     rule.description].filter(Boolean).join(' · ');
 }
 interface TimelineOptions {
+  revealPhase?: string;
   activePhase: string;
   today: string;
   range: ResearchRange;
@@ -157,21 +158,12 @@ function experimentEnded({ fields, run }: ResearchEntry['record'], phaseEnded: b
   return phaseEnded;
 }
 
-function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByPhase: Map<string, ResearchEntry[]>, eventsByPhase: Map<string, ResearchEntry[]>,
-  { activePhase, today, range, bounds, selectedRange, presetId, page: requestedPage, pageSize, canCreatePhase, canCreateEvent, types }: TimelineOptions) {
-  const start = dayNumber(range.start), end = dayNumber(range.end), span = end - start + 1;
-  const fullRange = range.start === bounds.start && range.end === bounds.end;
-  const crossesYear = new Date(start * 86400000).getUTCFullYear() !== new Date(end * 86400000).getUTCFullYear();
-  const position = (date: string, offset = 0) => (dayNumber(date) - start + offset) * 100 / span;
-  const dot = (date: string, ended: boolean) => `<i class="research-timeline-dot${ended ? ' is-ended' : ''}" style="--point:${position(date, 0.5)}%"></i>`;
-  const todayLine = containsDay(range, today) ? `<i class="research-today-line" style="--point:${position(today, 0.5)}%"></i>` : '';
-  const ticks = [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(start + (end - start) * i / 4)))];
-  const tickPosition = (day: number) => (day - start + .5) * 100 / span;
-  const experimentsByPhase = groupByPhase(entries);
-  const ordered = phases.map(phase => {
+function rankPhases(phases: ResearchPhase[], entries: ResearchEntry[], today: string, progressByPhase?: Map<string, ResearchEntry[]>) {
+  const byPhase = groupByPhase(entries);
+  return phases.map(phase => {
     const span = phaseSpan(phase, today);
-    const assigned = experimentsByPhase.get(phase.id) || [];
-    const update = [...assigned, ...(progressByPhase.get(phase.id) || [])].reduce<ResearchEntry | undefined>(
+    const assigned = byPhase.get(phase.id) || [];
+    const update = [...assigned, ...(progressByPhase?.get(phase.id) || [])].reduce<ResearchEntry | undefined>(
       (last, item) => item.record.date <= today && (!last || sortEntries(last, item) < 0) ? item : last, undefined);
     const latest = update?.record.date || '';
     const group: keyof typeof phaseGroupOrder = today < span.start ? 'upcoming' : today > span.end ? 'ended' : 'ongoing';
@@ -182,9 +174,23 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
     if (a.group === 'upcoming') return a.span.start.localeCompare(b.span.start);
     return b.latest.localeCompare(a.latest);
   });
+}
+
+function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByPhase: Map<string, ResearchEntry[]>, eventsByPhase: Map<string, ResearchEntry[]>,
+  { activePhase, today, range, bounds, selectedRange, presetId, page: requestedPage, pageSize, revealPhase, canCreatePhase, canCreateEvent, types }: TimelineOptions) {
+  const start = dayNumber(range.start), end = dayNumber(range.end), span = end - start + 1;
+  const fullRange = range.start === bounds.start && range.end === bounds.end;
+  const crossesYear = new Date(start * 86400000).getUTCFullYear() !== new Date(end * 86400000).getUTCFullYear();
+  const position = (date: string, offset = 0) => (dayNumber(date) - start + offset) * 100 / span;
+  const dot = (date: string, ended: boolean) => `<i class="research-timeline-dot${ended ? ' is-ended' : ''}" style="--point:${position(date, 0.5)}%"></i>`;
+  const todayLine = containsDay(range, today) ? `<i class="research-today-line" style="--point:${position(today, 0.5)}%"></i>` : '';
+  const ticks = [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(start + (end - start) * i / 4)))];
+  const tickPosition = (day: number) => (day - start + .5) * 100 / span;
+  const ordered = rankPhases(phases, entries, today, progressByPhase);
+  const selectedIndex = revealPhase ? ordered.findIndex(({ phase }) => phase.id === revealPhase) : -1;
   const limit = pageSize ?? Math.max(1, ordered.length);
   const pageCount = Math.max(1, Math.ceil(ordered.length / limit));
-  const page = Math.max(1, Math.min(requestedPage, pageCount));
+  const page = selectedIndex >= 0 ? Math.floor(selectedIndex / limit) + 1 : Math.max(1, Math.min(requestedPage, pageCount));
   const usedTypes = new Set(phases.flatMap(phase => (eventsByPhase.get(phase.id) || []).map(({ record }) => record.type)));
   const legendKey = (glyph: string, label: string) => `<span class="research-key-event">${icon(glyph, 13)}${escape(label)}</span>`;
   const eventKeys = new Set([...types.values()].filter(type => usedTypes.has(type.id))
@@ -361,12 +367,17 @@ export class ResearchWorkspace {
     void this.controlsIdle.then(() => this.timelineEvents.layout());
   });
   private positions = new Map<string, ViewPosition>();
+  private phaseReading = new Map<string, string>();
+  private stageNavigation = false;
+  private expandedPhaseGroups = new Set<string>(['ongoing']);
+  private sidebarState?: { snapshot: ResearchSnapshot | null; page?: string; phase: string; day: string; reading: boolean };
   private readerContexts = new Map<string, ResearchSnapshot>();
   private readerReturn?: { scroll: number; origin?: HTMLButtonElement };
   private readerItem = '';
   private openingListRecord = false;
   private pendingListRecord?: HTMLButtonElement;
   private figureContext?: { path: string | null; root?: string; snapshot?: ResearchSnapshot; view: EditorView; key?: string };
+  private readerWipes = new Map<string, { key: string; position: WipePosition }>();
   private loading = false;
   private loadNumber = 0;
   private referenceRequest = 0;
@@ -377,7 +388,7 @@ export class ResearchWorkspace {
   private savingGoals = false;
 
   constructor(private host: HTMLElement, private sidebar: HTMLElement, private hooks: Hooks) {
-    this.tools = new ResearchTools(() => this.refresh(), hooks.notify);
+    this.tools = new ResearchTools(this.host.querySelector<HTMLElement>('#document-surface')!, () => this.refresh(), hooks.notify);
     this.panel.id = 'research-workspace';
     this.panel.hidden = true;
     this.toolbar.className = 'research-toolbar';
@@ -399,6 +410,12 @@ export class ResearchWorkspace {
         this.controlsIdle = new Promise(release => { this.controlPress = { pointerId: event.pointerId, release }; });
       });
     }
+    this.sidebar.addEventListener('toggle', event => {
+      const shelf = event.target;
+      if (!(shelf instanceof HTMLDetailsElement) || !shelf.isConnected || !shelf.dataset.researchPhaseGroup) return;
+      if (shelf.open) this.expandedPhaseGroups.add(shelf.dataset.researchPhaseGroup);
+      else this.expandedPhaseGroups.delete(shelf.dataset.researchPhaseGroup);
+    }, true);
     for (const name of ['pointerup', 'pointercancel'] as const) {
       window.addEventListener(name, event => this.releaseControl(event.pointerId));
     }
@@ -516,14 +533,26 @@ export class ResearchWorkspace {
     this.readerReturn ??= { scroll: this.content.scrollTop, origin };
     if (origin) this.readerReturn.origin = origin;
     this.host.classList.add('research-reader-open');
+    this.host.classList.toggle('research-stage-reading', this.stageNavigation && Boolean(this.phaseId));
     this.columns.update();
+    if (this.snapshot) this.renderSidebar(this.snapshot, this.destination(this.snapshot));
     if (!this.panel.inert) origin?.scrollIntoView({ block: 'nearest' });
   }
 
   selectReaderItem(id = '', linkedProject = '', force = false) {
     const key = id ? `${linkedProject}/${id}` : '';
     if (!force && key === this.readerItem) return;
+    if (key !== this.readerItem) this.tools.closeEvidence(false);
     this.readerItem = key;
+    for (const shortcut of this.sidebar.querySelectorAll<HTMLButtonElement>('[data-research-stage-record]')) {
+      if (!linkedProject && shortcut.dataset.researchStageRecord === id) shortcut.setAttribute('aria-current', 'page');
+      else shortcut.removeAttribute('aria-current');
+    }
+    if (!force && id && !linkedProject && this.snapshot) {
+      const phase = this.snapshot.records.find(item => item.record.id === id)?.record.phaseId;
+      if (phase) this.phaseReading.set(phase, id);
+      if (this.phaseId && this.content.querySelector(`.research-journal [data-research-record="${CSS.escape(id)}"]`)) this.phaseReading.set(this.phaseId, id);
+    }
     const items = [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)];
     const index = items.findIndex(button => key === `${button.dataset.researchLinkedProject || ''}/${button.dataset.researchRecord}`);
     const previous = items.find(button => button.hasAttribute('aria-current'));
@@ -582,9 +611,11 @@ export class ResearchWorkspace {
   closeReader(focus = true) {
     const returning = this.readerReturn;
     if (!returning) return;
+    this.tools.closeEvidence(false);
     this.readerReturn = undefined;
-    this.host.classList.remove('research-reader-open');
+    this.host.classList.remove('research-reader-open', 'research-stage-reading');
     this.columns.update();
+    if (this.snapshot) this.renderSidebar(this.snapshot, this.destination(this.snapshot));
     this.selectReaderItem();
     this.content.scrollTop = returning.scroll;
     if (focus) {
@@ -593,7 +624,9 @@ export class ResearchWorkspace {
       const events = button?.dataset.researchTimelineEvents;
       const linked = button?.dataset.researchLinkedProject;
       const origin = linked ? `[data-research-linked-project="${CSS.escape(linked)}"]` : ':not([data-research-linked-project])';
-      const replacement = events ? timelineEventButton(this.content, events) :
+      const shortcut = button?.dataset.researchStageLink;
+      const replacement = shortcut ? this.sidebar.querySelector<HTMLButtonElement>(`[data-research-stage-link="${CSS.escape(shortcut)}"]`) :
+        events ? timelineEventButton(this.content, events) :
         id ? this.content.querySelector<HTMLButtonElement>(`[data-research-record="${CSS.escape(id)}"]${origin}`) : null;
       (button?.isConnected ? button : replacement || this.content.querySelector('h1'))?.focus({ preventScroll: true });
     }
@@ -667,6 +700,7 @@ export class ResearchWorkspace {
   }
 
   showReaderFigures(path: string | null, view: EditorView) {
+    if (this.figureContext && this.figureContext.path !== path) this.tools.closeEvidence(false);
     if (this.figureContext?.view !== view) this.clearReaderFigures();
     const cached = this.figureContext;
     const source = this.readerReference(path);
@@ -685,17 +719,22 @@ export class ResearchWorkspace {
     if (!key || !root || !path) { placeReaderFigure(view); return; }
     const holder = document.createElement('section');
     holder.className = 'research-inline-comparisons';
+    const previous = this.readerWipes.get(path);
+    const position = previous?.key === key ? previous.position : {};
+    this.readerWipes.set(path, { key, position });
     holder.append(evidenceWipe(reports.map(({ record }) => ({ title: record.title, comparison: record.comparison! })), {
       read: id => window.meki.openResearchEvidence(root, id, path),
-      open: (id, origin) => this.tools.evidence(root, id, path, undefined, origin), error: error => this.hooks.notify(errorText(error), true),
-    }));
+      open: (id, origin) => this.openEvidence(id, path, origin), error: error => this.hooks.notify(errorText(error), true),
+    }, position));
     placeReaderFigure(view, holder);
   }
 
   async openEvidence(id: string, sourceDocument?: string, origin?: HTMLElement) {
     const root = this.hooks.root();
-    if (root) await this.tools.evidence(root, id, sourceDocument, undefined, origin);
+    if (root) await this.tools.evidence(root, id, sourceDocument, undefined, origin, Boolean(this.readerOpen && sourceDocument));
   }
+
+  closeEvidence(focus = true) { return this.tools.closeEvidence(focus); }
 
   async openReference(id: string, origin?: HTMLButtonElement, back?: () => void) {
     const state = this.snapshot;
@@ -753,6 +792,11 @@ export class ResearchWorkspace {
       this.recordFilter = undefined;
       this.clearAxisDrag();
       this.positions.clear();
+      this.phaseReading.clear();
+      this.stageNavigation = false;
+      this.tools.closeEvidence(false);
+      this.readerWipes.clear();
+      this.expandedPhaseGroups = new Set(['ongoing']);
       this.readerContexts.clear();
       this.content.scrollTop = 0;
     }
@@ -989,21 +1033,48 @@ export class ResearchWorkspace {
   }
 
   private renderSidebar(state: ResearchSnapshot | null, active?: Destination) {
+    const last = this.sidebarState;
+    const reading = this.host.classList.contains('research-stage-reading');
+    if (last && last.snapshot === state && last.page === active?.key && last.phase === this.phaseId && last.day === this.renderedDay && last.reading === reading) return;
+    this.sidebarState = { snapshot: state, page: active?.key, phase: this.phaseId, day: this.renderedDay, reading };
     const navigation = state ? destinations(state.project) : [];
     const button = (item: Destination) => `<button type="button" data-research-destination="${escape(item.key)}"
-      ${item.view ? `data-research-view="${item.view.id}"` : ''} aria-current="${item.key === active?.key ? 'page' : 'false'}"
+      ${item.view ? `data-research-view="${item.view.id}"` : ''} aria-current="${item.key === active?.key && !reading ? 'page' : 'false'}"
       aria-pressed="${item.key === active?.key}">${icon(item.glyph, 17)}<span>${escape(item.label)}</span></button>`;
-    this.sidebar.innerHTML = `<button type="button" class="research-project-switch" data-action="research-projects" aria-haspopup="dialog" aria-label="${ht("切换科研项目")}">
+    const group = (title: string, items: string) => items ? `<section class="research-nav-group" aria-label="${title}">
+      <h2 class="research-nav-label">${title}</h2><div class="research-nav-list">${items}</div></section>` : '';
+    const phases = state ? rankPhases(state.project.phases, state.records, this.renderedDay) : [];
+    const listed = new Set(reading ? [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)].map(item => item.dataset.researchRecord) : []);
+    const stageRecords = listed.size && state ? `<div class="research-nav-records">${state.records.filter(item => listed.has(item.record.id))
+      .sort((a, b) => sortEntries(b, a)).map(({ record }) => `<button type="button" data-research-stage-record="${escape(record.id)}"
+      title="${escape(record.title)}"${this.readerItem === '/' + record.id ? ' aria-current="page"' : ''}>${escape(record.title)}</button>`).join('')}</div>` : '';
+    const shelves = (['ongoing', 'ended', 'upcoming'] as const).map(status => {
+      const items = phases.filter(item => item.group === status);
+      if (!items.length) return '';
+      const title = status === 'ongoing' ? ht("进行中") : status === 'ended' ? ht("已结束") : ht("未开始");
+      return `<details class="research-phase-shelf" data-research-phase-group="${status}"${this.expandedPhaseGroups.has(status) ? ' open' : ''}>
+        <summary>${icon('chevron', 12)}<span>${title}</span><small>${items.length}</small></summary>
+        <div>${items.map(({ phase }) => `<button type="button" data-research-stage-link="${escape(phase.id)}"
+          ${active?.page === 'timeline' && this.phaseId === phase.id ? 'aria-current="location"' : ''}>${escape(phase.title)}</button>${this.phaseId === phase.id ? stageRecords : ''}`).join('')}</div>
+      </details>`;
+    }).join('');
+    const markup = `<button type="button" class="research-project-switch" data-action="research-projects" aria-haspopup="dialog" aria-label="${ht("切换科研项目")}">
         ${icon('folder', 17)}<span><small>${ht("科研项目")}</small><strong>${escape(state?.project.title || t("选择项目"))}</strong></span>${icon('down', 14)}
       </button>
-      <div class="research-nav-list">${navigation.slice(0, 4).map(button).join('')}</div>
-      ${navigation.length > 5 ? `<div class="research-nav-label">${ht("项目视图")}</div><div class="research-nav-list">${navigation.slice(4, -1).map(button).join('')}</div>` : ''}
+      <div class="research-nav-scroll">
+        ${group(ht("项目页面"), navigation.filter(item => !item.key.startsWith('view:') && item.page !== 'rules').map(button).join(''))}
+        ${group(ht("研究阶段"), shelves)}
+        ${group(ht("项目视图"), navigation.filter(item => item.key.startsWith('view:')).map(button).join(''))}
+      </div>
       <div class="research-nav-bottom">${navigation.length ? button(navigation[navigation.length - 1]) : ''}
         <button type="button" data-action="research-close">${icon('page', 17)}<span>${ht("文稿编辑器")}</span></button>
       </div>`;
+    const scroll = this.sidebar.querySelector('.research-nav-scroll')?.scrollTop || 0;
+    this.sidebar.innerHTML = markup;
+    this.sidebar.querySelector('.research-nav-scroll')!.scrollTop = scroll;
   }
 
-  private render(error?: string) {
+  private render(error?: string, revealPhase?: string) {
     const state = this.snapshot, active = state && this.destination(state);
     const focused = document.activeElement;
     const focusRoot = this.panel.contains(focused) ? this.panel : this.sidebar.contains(focused) ? this.sidebar : undefined;
@@ -1015,10 +1086,12 @@ export class ResearchWorkspace {
     this.renderedDay = today;
     this.panel.dataset.width = this.widths.workspace;
     const toggle = `<button type="button" class="icon-button" data-action="sidebar" aria-label="${ht("显示或隐藏侧栏")}" title="${ht("显示或隐藏侧栏")}">${icon('layout', 17)}</button>`;
-    this.renderSidebar(state, active || undefined);
-    this.toolbar.innerHTML = `<div>${toggle}<span>${escape(active?.label || t("科研项目"))}</span></div>
+    const phaseCrumb = active?.page === 'timeline' && state?.project.phases.find(phase => phase.id === this.phaseId)?.title;
+    this.toolbar.innerHTML = `<div class="research-breadcrumb">${toggle}${state ? `<span title="${escape(state.project.title)}">${escape(state.project.title)}</span><i aria-hidden="true">/</i>` : ''}
+      <span>${escape(active?.label || t("科研项目"))}</span>${phaseCrumb ? `<i aria-hidden="true">/</i><span>${escape(phaseCrumb)}</span>` : ''}</div>
       ${state ? `<button type="button" class="icon-button" data-action="refresh" aria-label="${ht("刷新项目")}" title="${ht("刷新项目")}">${icon('refresh', 17)}</button>` : ''}`;
     if (!state || !active || !today) {
+      this.renderSidebar(state, active || undefined);
       this.timelineEvents.show();
       const message = error || (this.loading ? t("正在读取研究项目…") : t("打开项目后即可查看研究阶段、实验记录和阶段总结。"));
       this.content.innerHTML = `<div class="research-empty"><div><h1 tabindex="-1">${ht("科研项目")}</h1>
@@ -1065,7 +1138,7 @@ export class ResearchWorkspace {
     const timelineView = dateRange ? timeline(phases, sequence, progressByPhase, eventsByPhase, {
       activePhase: phase?.id || '', today, range: dateRange, bounds, selectedRange: Boolean(selection),
       presetId: selection && 'id' in selection ? selection.id : undefined, types,
-      page: this.phasePage, pageSize: this.phasePageSize, canCreatePhase: !view?.phaseIds,
+      page: this.phasePage, pageSize: this.phasePageSize, revealPhase, canCreatePhase: !view?.phaseIds,
       canCreateEvent: project.recordTypes.some(type => type.kind === 'event'),
     }) : undefined;
     if (timelineView) this.phasePage = timelineView.page;
@@ -1110,6 +1183,7 @@ export class ResearchWorkspace {
           ${entries.length || linkedSummaries.length ? '' : `<p class="research-empty-list">${ht("这个视图中没有符合条件的记录。")}</p>`}
         </section>`}
     `;
+    this.renderSidebar(state, active);
     if (optionsOpen) this.content.querySelector('.research-timeline-options')?.setAttribute('open', '');
     this.timelineEvents.show(timelineView?.eventDays, types, previousMarkers);
     if (this.readerItem) {
@@ -1305,6 +1379,11 @@ export class ResearchWorkspace {
       ? target.closest('.research-timeline-row')?.querySelector<HTMLButtonElement>('[data-research-phase]') : null);
     const state = this.snapshot;
     if (!button || !state) return;
+    if (button.dataset.researchStageRecord) {
+      const item = [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)].find(el => el.dataset.researchRecord === button.dataset.researchStageRecord);
+      if (item) await this.openListRecord(item, state.root);
+      return;
+    }
     if (button.matches(peekItems)) {
       await this.openListRecord(button, state.root);
       return;
@@ -1388,30 +1467,56 @@ export class ResearchWorkspace {
       } catch (error) { button.textContent = errorText(error); }
       return;
     }
-    if (data.researchDestination) {
+    if (data.researchDestination || data.researchStageLink) {
+      const stage = data.researchStageLink;
+      const from = this.destination(state).key;
+      const to = stage ? 'timeline' : data.researchDestination!;
+      const returnToList = this.readerOpen && from === to && stage === this.phaseId;
       if (this.readerOpen) {
         await this.hooks.closeReader();
-        if (this.readerOpen) return;
+        if (this.readerOpen || this.root !== state.root) return;
       }
-      const from = this.destination(state).key;
-      const to = data.researchDestination;
-      if (from === to) return;
-      this.positions.set(from, { phaseId: this.phaseId, date: this.date, scroll: this.content.scrollTop, page: this.phasePage, range: this.timelineRange });
-      const position = this.positions.get(to);
-      this.viewKey = to;
-      this.phaseId = position?.phaseId || '';
-      this.date = position?.date || '';
-      this.phasePage = position?.page || 1;
-      this.timelineRange = position?.range;
-      this.render();
-      this.content.scrollTop = position?.scroll || 0;
+      if (from === to && !stage) return;
+      this.stageNavigation = Boolean(stage);
+      if (from !== to) {
+        this.positions.set(from, { phaseId: this.phaseId, date: this.date, scroll: this.content.scrollTop, page: this.phasePage, range: this.timelineRange });
+        const position = this.positions.get(to);
+        this.viewKey = to;
+        this.phaseId = position?.phaseId || '';
+        this.date = position?.date || '';
+        this.phasePage = position?.page || 1;
+        this.timelineRange = position?.range;
+      }
+      if (stage) {
+        this.phaseId = stage;
+        this.date = '';
+      }
+      this.render(undefined, stage);
+      if (stage) {
+        const shortcut = this.sidebar.querySelector<HTMLButtonElement>(`[data-research-stage-link="${CSS.escape(stage)}"]`);
+        const last = this.phaseReading.get(stage);
+        if (!returnToList && last && this.content.querySelector(`.research-journal [data-research-record="${CSS.escape(last)}"]`)) {
+          await this.hooks.open(state.root, last, shortcut || undefined);
+        } else {
+          this.content.querySelector('.research-journal')?.scrollIntoView({ block: 'nearest' });
+          shortcut?.focus({ preventScroll: true });
+        }
+        return;
+      }
+      this.content.scrollTop = this.positions.get(to)?.scroll || 0;
       if (this.destination(state).page === 'summaries') await this.refresh();
       this.sidebar.querySelector<HTMLButtonElement>(`[data-research-destination="${CSS.escape(to)}"]`)?.focus({ preventScroll: true });
     } else if (data.researchPhase) {
+      this.stageNavigation = false;
       this.phaseId = this.phaseId === data.researchPhase ? '' : data.researchPhase;
+      if (this.phaseId) {
+        const shelf = this.sidebar.querySelector(`[data-research-stage-link="${CSS.escape(this.phaseId)}"]`)?.closest('details');
+        if (shelf?.dataset.researchPhaseGroup) this.expandedPhaseGroups.add(shelf.dataset.researchPhaseGroup);
+      }
       this.render();
       this.content.querySelector<HTMLButtonElement>(`[data-research-phase="${CSS.escape(data.researchPhase)}"]`)?.focus({ preventScroll: true });
     } else if ('researchClear' in data) {
+      this.stageNavigation = false;
       this.date = this.phaseId = '';
       if (this.recordFilter) await this.setRecordFilter();
       else this.render();

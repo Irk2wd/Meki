@@ -494,6 +494,7 @@ const editorActions = new Set([...editActions, 'saveAs', 'find', 'find-next', 'f
 function mayEditDocument() { return !researchUI.visible || (researchUI.readerOpen && researchEditing); }
 
 function setResearchEditing(value: boolean) {
+  if (value) researchUI.closeEvidence(false);
   researchEditing = value;
   el('.main-area').classList.toggle('research-reader-editing', researchUI.readerOpen && value);
   const toggle = el<HTMLButtonElement>('[data-action="research-edit-body"]');
@@ -845,7 +846,8 @@ document.addEventListener('keydown', event => {
   if (event.key !== 'Escape' || event.isComposing || document.querySelector('dialog[open]')) return;
   const hadPopover = Boolean(document.querySelector('.popover:not([hidden])'));
   closePopovers();
-  if (!el('#find-panel').hidden) { writingTools?.close(); editor.focus(); }
+  if (!hadPopover && researchUI.closeEvidence()) { event.preventDefault(); }
+  else if (!el('#find-panel').hidden) { writingTools?.close(); editor.focus(); }
   else if (!hadPopover && researchUI.readerOpen && !researchEditing && !busy) {
     event.preventDefault();
     void backResearchReader();

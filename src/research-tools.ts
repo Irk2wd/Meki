@@ -1,6 +1,6 @@
 import { ht, t } from '../electron/i18n.mjs';
 import eventIcons from '../electron/research-event-icons.json';
-import type { ResearchEntry, ResearchFilter, ResearchGoalMode, ResearchImportPreview, ResearchPhase, ResearchReference, ResearchRelationKind, ResearchSnapshot, ResearchType, ResearchWidth } from '../shared/research';
+import type { ResearchEntry, ResearchEvidenceFile, ResearchFilter, ResearchGoalMode, ResearchImportPreview, ResearchPhase, ResearchReference, ResearchRelationKind, ResearchSnapshot, ResearchType, ResearchWidth } from '../shared/research';
 import { icon } from './icons';
 import { ResearchReportPreview } from './research-report-preview';
 import { showEvidenceTable } from './research-evidence-table';
@@ -31,13 +31,70 @@ const option = researchOption;
 const closeButton = (label = ht("取消")) => `<button type="button" class="icon-button" data-tools-close aria-label="${label}" title="${label}">${icon('close', 16)}</button>`;
 const heading = (title: string) => `<div class="dialog-heading"><h2 id="research-tools-title">${escape(title)}</h2>${closeButton()}</div>`;
 const feedback = '<p class="research-form-error" role="alert"></p>';
+interface EvidenceTab {
+  id: string; title: string; body: HTMLElement; markup: string; reveal: () => void; origin?: HTMLElement;
+}
+
+function evidenceContent(file: ResearchEvidenceFile) {
+  const body = document.createElement('div');
+  body.className = 'research-evidence-content';
+  if (file.kind === 'image') {
+    const image = document.createElement('img');
+    image.src = `data:${file.mime};base64,${file.content}`;
+    image.alt = file.title;
+    body.append(image);
+  } else if (file.kind === 'csv' || file.kind === 'tsv') {
+    showEvidenceTable(body, file.content ?? '', file.kind === 'tsv' ? '\t' : ',', file.title);
+  } else {
+    const text = document.createElement(file.kind === 'text' ? 'pre' : 'p');
+    text.textContent = file.content ?? t("可在原目录中查看此文件。");
+    body.append(text);
+  }
+  return body;
+}
 
 export class ResearchTools {
   private dialog = document.createElement('dialog');
+  private inspector = document.createElement('aside');
+  private evidenceTabs = new Map<string, EvidenceTab>();
+  private evidenceRequest = 0;
+  private evidenceReturn?: { origin?: HTMLElement; scroll: HTMLElement; before: number; opened: number };
   private report = new ResearchReportPreview();
   private submitting = false;
 
-  constructor(private refresh: () => Promise<void>, private notify: (message: string, error?: boolean) => void) {
+  constructor(reader: HTMLElement, private refresh: () => Promise<void>, private notify: (message: string, error?: boolean) => void) {
+    this.inspector.id = 'research-evidence-inspector';
+    this.inspector.hidden = true;
+    this.inspector.setAttribute('aria-labelledby', 'research-inspector-title');
+    reader.append(this.inspector);
+    this.inspector.addEventListener('click', event => {
+      const target = (event.target as Element).closest<HTMLButtonElement>('button');
+      if (!target) return;
+      if (target.hasAttribute('data-tools-close')) this.closeEvidence();
+      if (target.hasAttribute('data-evidence-expand')) {
+        this.inspector.toggleAttribute('data-expanded');
+        this.labelEvidenceSize();
+      }
+      if (target.dataset.evidenceTab) this.selectEvidenceTab(this.evidenceTabs.get(target.dataset.evidenceTab)!, true);
+      if (target.dataset.dismissEvidence) {
+        const ids = [...this.evidenceTabs.keys()], id = target.dataset.dismissEvidence;
+        const active = this.inspector.querySelector<HTMLElement>('[aria-selected="true"]')?.dataset.evidenceTab;
+        this.evidenceTabs.delete(id);
+        const nextId = active === id ? ids[ids.indexOf(id) + 1] || ids[ids.indexOf(id) - 1] : active;
+        const next = nextId && this.evidenceTabs.get(nextId);
+        if (next) this.selectEvidenceTab(next, true);
+        else this.closeEvidence();
+      }
+    });
+    this.inspector.addEventListener('keydown', event => {
+      const tab = (event.target as Element).closest<HTMLButtonElement>('[data-evidence-tab]');
+      if (!tab || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const tabs = [...this.evidenceTabs.values()], index = tabs.findIndex(item => item.id === tab.dataset.evidenceTab);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 :
+        (index + (event.key === 'ArrowLeft' ? -1 : 1) + tabs.length) % tabs.length;
+      this.selectEvidenceTab(tabs[next], true);
+    });
     this.dialog.id = 'research-tools-dialog';
     this.dialog.setAttribute('aria-labelledby', 'research-tools-title');
     document.body.append(this.dialog);
@@ -278,8 +335,53 @@ export class ResearchTools {
     if (await window.meki.bindResearchSource(root, sourceId)) await this.refresh();
   }
 
-  async evidence(root: string, id: string, sourceDocument?: string, returnLabel = t("返回正文"), origin?: HTMLElement) {
+  closeEvidence(focus = true) {
+    ++this.evidenceRequest;
+    const returning = this.evidenceReturn;
+    if (!returning) return false;
+    this.evidenceReturn = undefined;
+    this.evidenceTabs.clear();
+    this.inspector.removeAttribute('data-expanded');
+    const { origin, scroll, before, opened } = returning;
+    const restoreScroll = focus && Math.abs(scroll.scrollTop - opened) < 1;
+    this.inspector.hidden = true;
+    this.inspector.replaceChildren();
+    if (restoreScroll) scroll.scrollTop = before;
+    if (focus) (origin?.isConnected ? origin : document.getElementById('research-reader-title'))?.focus({ preventScroll: true });
+    return true;
+  }
+
+  private labelEvidenceSize() {
+    const control = this.inspector.querySelector<HTMLButtonElement>('[data-evidence-expand]')!;
+    const expanded = this.inspector.hasAttribute('data-expanded');
+    control.title = expanded ? t("恢复并排阅读") : t("展开证据预览");
+    control.setAttribute('aria-label', control.title);
+    control.setAttribute('aria-pressed', String(expanded));
+  }
+
+  private selectEvidenceTab(tab: EvidenceTab, focusTab: boolean) {
+    const multiple = this.evidenceTabs.size > 1;
+    this.inspector.innerHTML = (multiple ? `<div class="research-evidence-tabs" role="tablist" aria-label="${ht("原始证据")}">${[...this.evidenceTabs.values()].map(item =>
+      `<span role="presentation"><button type="button" role="tab" id="research-evidence-tab-${escape(item.id)}" data-evidence-tab="${escape(item.id)}" aria-selected="${item === tab}" tabindex="${item === tab ? 0 : -1}" aria-controls="research-active-evidence" title="${escape(item.title)}">${escape(item.title)}</button>
+      <button type="button" data-dismiss-evidence="${escape(item.id)}" aria-label="${ht("关闭 {0}", escape(item.title))}">${icon('close', 12)}</button></span>`).join('')}</div>` : '') + tab.markup;
+    this.inspector.querySelector('.research-evidence-content')!.replaceWith(tab.body);
+    tab.body.id = 'research-active-evidence';
+    if (multiple) { tab.body.setAttribute('role', 'tabpanel'); tab.body.setAttribute('aria-labelledby', 'research-evidence-tab-' + tab.id); }
+    else { tab.body.removeAttribute('role'); tab.body.removeAttribute('aria-labelledby'); }
+    this.inspector.querySelector('[data-evidence-reveal]')!.addEventListener('click', tab.reveal);
+    this.labelEvidenceSize();
+    this.evidenceReturn!.origin = tab.origin;
+    const selected = this.inspector.querySelector<HTMLButtonElement>('[aria-selected="true"]');
+    (focusTab && selected ? selected : this.inspector.querySelector<HTMLButtonElement>('[data-tools-close]'))?.focus({ preventScroll: true });
+    if (focusTab) selected?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }
+
+  async evidence(root: string, id: string, sourceDocument?: string, returnLabel = t("返回正文"), origin?: HTMLElement, besideReader = false) {
+    const request = ++this.evidenceRequest;
+    const existing = besideReader && this.evidenceTabs.get(id);
+    if (existing) { existing.origin = origin; this.selectEvidenceTab(existing, true); return; }
     const file = await window.meki.openResearchEvidence(root, id, sourceDocument);
+    if (request !== this.evidenceRequest) return;
     if (file.kind === 'pdf' || file.kind === 'pptx') {
       this.report.show([file], {
         read: async () => file,
@@ -288,31 +390,31 @@ export class ResearchTools {
       });
       return;
     }
-    this.show(`<div class="dialog-heading research-evidence-heading">
+    const markup = `<div class="dialog-heading research-evidence-heading">
       <button type="button" class="icon-button" data-tools-close aria-label="${escape(returnLabel)}" title="${escape(returnLabel)}" autofocus>${icon('back', 17)}</button>
-      <div><h2 id="research-tools-title">${escape(file.title)}</h2><small>${escape(file.source)} · ${escape(file.relativePath)}</small></div>${closeButton(ht("关闭证据预览"))}
+      <div><h2 id="${besideReader ? 'research-inspector-title' : 'research-tools-title'}">${escape(file.title)}</h2><small>${escape(file.source)} · ${escape(file.relativePath)}</small></div>
+      ${besideReader ? `<button type="button" class="icon-button" data-evidence-expand>${icon('focus', 15)}</button>` : ''}${closeButton(ht("关闭证据预览"))}
     </div><div class="research-evidence-content"></div>
     <div class="research-actions research-evidence-footer"><span>${ht("只读来源")}</span>
-      <button type="button" class="secondary-button" data-evidence-reveal>${ht("定位原文件")}</button></div>`, 'research-evidence-preview');
-    if (origin) this.dialog.addEventListener('close', () => {
-      if (!this.dialog.open && origin.isConnected) origin.focus({ preventScroll: true });
-    }, { once: true });
-    const body = this.dialog.querySelector<HTMLElement>('.research-evidence-content')!;
-    if (file.kind === 'image') {
-      const image = document.createElement('img');
-      image.src = `data:${file.mime};base64,${file.content}`;
-      image.alt = file.title;
-      body.append(image);
-    } else if (file.kind === 'csv' || file.kind === 'tsv') {
-      showEvidenceTable(body, file.content ?? '', file.kind === 'tsv' ? '\t' : ',', file.title);
+      <button type="button" class="secondary-button" data-evidence-reveal>${ht("定位原文件")}</button></div>`;
+    const reveal = () => { void window.meki.revealResearchEvidence(root, id, sourceDocument).catch(error => this.notify(String(error), true)); };
+    if (besideReader) {
+      const scroll = document.getElementById('document-scroll')!;
+      const before = this.evidenceReturn?.before ?? scroll.scrollTop;
+      const opened = this.evidenceReturn?.opened;
+      this.inspector.hidden = false;
+      this.evidenceReturn = { origin, scroll, before, opened: opened ?? scroll.scrollTop };
+      const tab = { id, title: file.title, body: evidenceContent(file), markup, reveal, origin };
+      this.evidenceTabs.set(id, tab);
+      this.selectEvidenceTab(tab, false);
     } else {
-      const text = document.createElement(file.kind === 'text' ? 'pre' : 'p');
-      text.textContent = file.content ?? t("可在原目录中查看此文件。");
-      body.append(text);
+      this.show(markup, 'research-evidence-preview');
+      this.dialog.querySelector('.research-evidence-content')!.replaceWith(evidenceContent(file));
+      this.dialog.querySelector('[data-evidence-reveal]')!.addEventListener('click', reveal);
+      if (origin) this.dialog.addEventListener('close', () => {
+        if (!this.dialog.open && origin.isConnected) origin.focus({ preventScroll: true });
+      }, { once: true });
     }
-    this.dialog.querySelector('[data-evidence-reveal]')!.addEventListener('click', () => {
-      void window.meki.revealResearchEvidence(root, id, sourceDocument).catch(error => this.notify(String(error), true));
-    });
   }
 
   previewReports(root: string, files: ResearchReference[], origin: HTMLButtonElement | undefined, viewBody: () => Promise<void>) {
