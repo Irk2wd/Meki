@@ -1,13 +1,55 @@
 .document-tabs { display:flex; align-items:stretch; height:38px; min-height:38px; flex-shrink:0; border-bottom:1px solid var(--border); background:var(--sidebar-bg,var(--bg)); padding:0 10px; gap:3px }
-.document-tab-list,.pane-tab-list { display:flex; align-items:stretch; flex:1; min-width:0; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; gap:2px }
+.document-tab-list, .pane-tab-list {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
 .document-tab-list::-webkit-scrollbar,.pane-tab-list::-webkit-scrollbar { display:none }
-.document-tab { display:flex; align-items:center; min-width:95px; max-width:min(220px,100%); border-bottom:2px solid transparent; color:var(--muted); flex:0 0 auto }
-.document-tab.active { color:var(--text); border-bottom-color:var(--accent); background:var(--hover) }
+.document-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 95px;
+  max-width: min(220px, 100%);
+  height: 28px;
+  border-radius: 6px;
+  color: var(--soft);
+}
+.document-tab + .document-tab::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: -4px;
+  inset-block: 7px;
+  border-inline-start: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  pointer-events: none;
+}
+.document-tab:not(.active):hover { color: var(--text); background-color: color-mix(in srgb, var(--text) 5%, transparent); }
+.document-tab.active { color: var(--text); background-color: color-mix(in srgb, var(--text) 9%, var(--surface)); }
+.editor-pane:not(.active-pane) .document-tab.active {
+  color: var(--soft);
+  background-color: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
 .document-tab button { border:0; background:transparent; color:inherit; cursor:pointer; padding:0; display:flex; gap:6px; align-items:center; font:inherit; font-size:12px; min-width:0 }
-.document-tab button[role="tab"] { height:100%; padding:0 6px 0 8px; flex:1 1 auto; overflow:hidden }
+.document-tab button[role="tab"] { height:100%; padding:0 2px 0 4px; flex:1 1 auto; overflow:hidden; border-radius:inherit }
 .document-tab button[role="tab"] > span:nth-child(2) { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-.document-tab .close-document-tab { width:26px; height:26px; margin:0 3px 0 0; padding:0; flex:0 0 26px; justify-content:center; opacity:.6; font-size:16px; line-height:1; border-radius:4px }
-.close-document-tab:hover { opacity:1; color:var(--accent) }
+.document-tab .close-document-tab { width:26px; height:26px; margin-inline-end:1px; padding:0; flex:0 0 26px; justify-content:center; color:var(--soft); font-size:16px; line-height:1; border-radius:5px }
+.document-tab .close-document-tab:is(:hover, :focus-visible) { color:var(--text); background-color:color-mix(in srgb, var(--text) 9%, transparent) }
+.document-tab button:focus-visible { outline-offset:-2px; }
+@media (prefers-reduced-motion: no-preference) {
+  .document-tab { transition: background-color 140ms ease-out, color 140ms ease-out; }
+}
+@media (forced-colors: active) {
+  .document-tab.active { outline: 1px solid Highlight; outline-offset: -1px; }
+  .editor-pane:not(.active-pane) .document-tab.active { outline-color: GrayText; }
+  .document-tab + .document-tab::before { border-color: GrayText; }
+}
 .tab-dirty { width:6px; flex:0 0 6px; font-size:8px; opacity:0; color:var(--accent) }.tab-dirty.visible { opacity:1 }.tab-paused { flex-shrink:0; color:#ac7c36; font-size:10px }
 .tab-add,.tab-settings { border:0; color:var(--muted); background:transparent; cursor:pointer; padding:4px 10px }
 .tab-add:hover,.tab-settings:hover { background:var(--hover); color:var(--text) }

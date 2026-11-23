@@ -12,8 +12,7 @@
 .pane-divider { flex:0 0 6px; background:var(--border); touch-action:none; position:relative; z-index:5; }
 .row > .pane-divider { cursor:col-resize; }.column > .pane-divider { cursor:row-resize; }
 .pane-divider:hover,.pane-divider:focus-visible,.resizing-panes .pane-divider:active { background:var(--accent); }
-.pane-tabs { display:flex; align-items:stretch; flex-shrink:0; height:38px; min-height:38px; min-width:0; border-bottom:1px solid var(--border); background:var(--side); }
-.active-pane > .pane-tabs { box-shadow:inset 0 2px var(--accent); }
+.pane-tabs { display:flex; align-items:stretch; flex-shrink:0; height:38px; min-height:38px; min-width:0; padding-inline:6px 0; border-bottom:1px solid var(--border); background:var(--side); }
 .pane-merge { margin-left:auto; padding:3px 8px; color:var(--muted); flex-shrink:0; }
 .document-tab [role=tab] { cursor:grab; touch-action:none; user-select:none; }
 .pane-drop-preview { position:fixed; z-index:180; pointer-events:none; border:2px solid var(--accent); border-radius:5px; background:color-mix(in srgb,var(--accent) 15%,transparent); }
