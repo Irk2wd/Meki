@@ -28,16 +28,25 @@ async function verify(label) {
     const rect = node => { const box = node.getBoundingClientRect(); return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height }; };
     const active = strip.querySelector('.document-tab.active');
     return { bounds: rect(strip), active: active ? rect(active) : null, close: active ? rect(active.querySelector('[data-close-tab]')) : null,
-      tabs: [...strip.querySelectorAll('.document-tab')].map(tab => ({ tab: rect(tab), name: rect(tab.querySelector('[role=tab] > span:nth-child(2)')), close: rect(tab.querySelector('[data-close-tab]')) })) };
+      tabs: [...strip.querySelectorAll('.document-tab')].map(tab => {
+        const divider = getComputedStyle(tab, '::before');
+        return { tab: rect(tab), name: rect(tab.querySelector('[role=tab] > span:nth-child(2)')), close: rect(tab.querySelector('[data-close-tab]')),
+          divider: divider.content === 'none' ? null : { width: parseFloat(divider.borderInlineStartWidth), height: parseFloat(divider.height), pointerEvents: divider.pointerEvents } };
+      }) };
   }));
   for (const strip of strips) {
     assert.ok(strip.active && strip.close, label);
     assert.ok(strip.active.left >= strip.bounds.left - 1 && strip.active.right <= strip.bounds.right + 1, `${label}: complete active tab must be visible: ${JSON.stringify(strip)}`);
     assert.ok(strip.close.width >= 24 && strip.close.left >= strip.bounds.left - 1 && strip.close.right <= strip.bounds.right + 1, `${label}: close button is clipped`);
-    for (const tab of strip.tabs) {
+    for (const [index, tab] of strip.tabs.entries()) {
       assert.ok(tab.name.right <= tab.close.left + 1 && tab.close.right <= tab.tab.right + 1, `${label}: filename overlaps its close button`);
       assert.equal(tab.close.width, 26); assert.equal(tab.close.height, 26);
-      assert.ok(Math.abs((tab.close.top + tab.close.bottom) / 2 - (tab.tab.top + tab.tab.bottom - 2) / 2) < 1, `${label}: close button is not vertically centered`);
+      assert.ok(Math.abs((tab.close.top + tab.close.bottom) / 2 - (tab.tab.top + tab.tab.bottom) / 2) < 1, `${label}: close button is not vertically centered`);
+      if (index === 0) assert.equal(tab.divider, null, `${label}: divider before the first document`);
+      else {
+        assert.ok(tab.divider?.width > 0 && tab.divider.height > 0 && tab.divider.height < tab.tab.height, `${label}: adjacent documents need a short divider`);
+        assert.equal(tab.divider.pointerEvents, 'none', `${label}: divider intercepts the tab controls`);
+      }
     }
   }
   const controls = await page.locator('.document-tabs > button:visible,.pane-merge:visible').evaluateAll(nodes => nodes.map(node => {
