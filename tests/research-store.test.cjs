@@ -39,6 +39,26 @@ test('a research phase requires a start date and allows an unknown end date', ()
   assert.throws(() => validate({ end: '2026-11-17' }), /\.end must be on or after its start/);
 });
 
+test('summary excerpts prefer the project’s conclusion field, then a conclusion section, then the first prose sentence', async t => {
+  const project = structuredClone(exampleProject);
+  const type = project.recordTypes.find(type => type.kind === 'summary');
+  type.conclusionField = 'finding';
+  type.fields = [{ id: 'finding', label: 'Finding', type: 'text' }];
+  const store = await ResearchStore.initialize(await projectFolder(t), project, exampleRecords);
+  const original = await store.read('exploration-review');
+  const body = '# Report\n\nBackground. More context.\n\n## Conclusion\n\nA measured result. Other detail.';
+  const latest = async () => (await store.snapshot()).records.find(item => item.record.id === original.record.id).excerpt;
+  const update = async change => store.writeBatch({ records: [{ id: original.record.id, ifRevision: (await store.read(original.record.id)).revision, ...change }] });
+  await update({ body, fields: { finding: '项目自定义结论。还有细节。' } });
+  assert.equal(await latest(), '项目自定义结论。');
+  await update({ fields: { finding: null } });
+  assert.equal(await latest(), 'A measured result.');
+  await update({ body: '# Report\n\nBackground. More context.' });
+  assert.equal(await latest(), 'Background.');
+  type.conclusionField = 'missing';
+  assert.throws(() => validateProject(project), /conclusionField/);
+});
+
 test('a legacy project keeps its records and sibling Markdown links', async t => {
   const root = await projectFolder(t);
   await fs.mkdir(path.join(root, 'records'), { recursive: true });

@@ -105,7 +105,8 @@ async function main(args) {
           note: 'Provide one image slot per column in every row. The first comparison registers the default type when needed. Use the returned projectRevision for another write.',
         },
         summary: { date: 'date written', coverage: { start: 'inclusive date', end: 'inclusive date' }, sources: 'document IDs from list or resolve',
-          relatedProjects: 'IDs from the other projects’ describe output' },
+          relatedProjects: 'IDs from the other projects’ describe output',
+          progress: 'The phase highlights its latest dated summary up to today in the project timezone. list returns its excerpt. To supply a conclusion, set the summary type’s optional conclusionField to a text field ID and write that field with batch, or write a Conclusion/结论 paragraph. Otherwise the first prose sentence is shown. Cite comparisons and records with sources and indexed files with evidence.' },
       },
       writes: {
         batch: {

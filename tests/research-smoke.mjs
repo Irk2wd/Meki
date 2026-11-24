@@ -429,6 +429,12 @@ try {
   await page.locator('[data-research-phase="exploration"]').click();
   assert.equal(await page.locator('.research-entry').count(), 2);
   const phaseSummary = page.locator('.research-phase-summaries [data-research-record=exploration-review]');
+  await phaseSummary.locator('.research-progress-conclusion').getByText('保守阈值稳定了遮挡边缘，适合进入复测。').waitFor();
+  const progressSource = page.locator('[data-research-progress-link=tile-culling]');
+  await progressSource.click();
+  await page.locator('#research-reader-title').getByText('测试分块遮挡剔除').waitFor();
+  await closeReader();
+  await progressSource.and(page.locator(':focus')).waitFor();
   assert.deepEqual(await phaseSummary.locator('.research-summary-dates > span').allTextContents(), ['覆盖 2026-11-05 – 2026-11-13', '撰写于 2026-11-16']);
   await page.locator('#research-date').fill('2026-11-07');
   assert.equal(await page.locator('.research-entry').count(), 1);

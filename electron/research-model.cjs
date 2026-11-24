@@ -189,7 +189,7 @@ function validateProject(project) {
   array(project.recordTypes, 'project.recordTypes', 24);
   assert(project.recordTypes.length > 0, 'Define at least one record type.');
   for (const type of project.recordTypes) {
-    object(type, 'record type', ['id', 'label', 'kind', 'icon', 'description', 'fields', 'template']);
+    object(type, 'record type', ['id', 'label', 'kind', 'icon', 'description', 'fields', 'conclusionField', 'template']);
     id(type.id, 'record type.id');
     string(type.label, `recordTypes.${type.id}.label`);
     assert(['entry', 'summary', 'comparison', 'event'].includes(type.kind), `recordTypes.${type.id}.kind must be entry, summary, comparison, or event.`);
@@ -201,6 +201,10 @@ function validateProject(project) {
     array(type.fields, `recordTypes.${type.id}.fields`, 32);
     type.fields.forEach(rule => validateField(rule, type.id));
     unique(type.fields.map(rule => rule.id), `recordTypes.${type.id}.fields`);
+    if (type.conclusionField !== undefined) {
+      assert(type.kind === 'summary' && type.fields.some(field => field.id === type.conclusionField && field.type === 'text'),
+        `recordTypes.${type.id}.conclusionField must name a text field on a summary type.`);
+    }
     string(type.template, `recordTypes.${type.id}.template`, { limit: 16000, empty: true });
     const keys = new Set([...TEMPLATE_KEYS, ...type.fields.map(rule => `field.${rule.id}`)]);
     for (const [, key] of type.template.matchAll(TOKEN)) assert(keys.has(key), `Unknown template value {{${key}}} in ${type.id}.`);

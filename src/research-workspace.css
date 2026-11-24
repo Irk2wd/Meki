@@ -408,6 +408,19 @@
 :is(.research-phase-summaries, .research-indexed-files, .research-project-list) li button > svg { flex: 0 0 auto; color: var(--accent); }
 .research-phase-summaries li button > svg { color: var(--research-summary); }
 .research-summary-item { display: flex; align-items: center; gap: 4px; }
+.research-stage-create { margin-block: 10px; }
+.research-phase-summaries.research-progress { padding: 12px 14px; background: var(--bg); }
+.research-progress .research-progress-latest [data-research-record] { align-items: flex-start; padding: 5px 0; border-color: transparent; background: transparent; }
+.research-progress-latest [data-research-record] > svg { margin-top: 4px; }
+.research-progress .research-progress-conclusion { display: block; margin-bottom: 5px; font: 600 17px/1.55 var(--body-font); color: var(--text); }
+.research-progress-conclusion + .research-summary-title { font-size: 12px; font-weight: 500; color: var(--accent); }
+.research-progress .research-progress-other { margin-top: 14px; }
+.research-progress-links, .research-progress-links details[open] > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.research-progress-links { margin-block-start: 5px; }
+.research-progress-links button, .research-progress-links summary { padding: 3px 0; color: var(--accent); font-size: 12px; cursor: pointer; }
+.research-progress-links button { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; text-align: start; overflow-wrap: anywhere; }
+.research-progress-links button:hover { text-decoration: underline; text-underline-offset: 3px; }
+.research-progress-links details[open] { flex-basis: 100%; }
 .research-summary-item button.research-summary-properties { width: 28px; flex: 0 0 28px; padding: 4px; border-color: transparent; justify-content: center; }
 :is(.research-phase-summaries, .research-indexed-files, .research-project-list) li button > span { min-width: 0; flex: 1; }
 :is(.research-phase-summaries, .research-indexed-files, .research-project-list) li strong { display: block; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }

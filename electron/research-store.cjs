@@ -41,8 +41,9 @@ function recordReference({ record, relativePath }) {
   return { id: record.id, title: record.title, date: record.date, relativePath };
 }
 
-function progressExcerpt(body) {
+function progressExcerpt(body, summary = false) {
   let fence = '';
+  let first = '', conclusion = false;
   for (const raw of body.slice(0, 8192).split(/\r?\n/)) {
     const line = raw.trim();
     const marker = line.match(/^(`{3,}|~{3,})/);
@@ -51,12 +52,21 @@ function progressExcerpt(body) {
       else if (marker[1].startsWith(fence)) fence = '';
       continue;
     }
-    if (fence || !line || /^(?:#{1,6}(?:\s|$)|[|<>!]|[-+*]\s|[-=_*]{3,}$|\d+[.)]\s)/.test(line)) continue;
+    if (fence || !line) continue;
+    if (/^#{1,6}(?:\s|$)/.test(line)) {
+      conclusion = /^#{1,6}\s+(?:结论(?:与下一步)?|主要结论|conclusions?|findings|key findings)\s*#*$/i.test(line);
+      continue;
+    }
+    if (/^(?:[|<>!]|[-+*]\s|[-=_*]{3,}$|\d+[.)]\s)/.test(line)) continue;
     const plain = line.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
       .replace(/(\*\*|__|`)(.+?)\1/g, '$2').trim();
-    if (plain) return Array.from(plain.split(/(?<=[。！？])|(?<=[.!?])\s/)[0]).slice(0, 120).join('');
+    if (plain) {
+      const sentence = Array.from(plain.split(/(?<=[。！？])|(?<=[.!?])\s/)[0]).slice(0, 120).join('');
+      if (!summary || conclusion) return sentence;
+      first ||= sentence;
+    }
   }
-  return '';
+  return first;
 }
 
 function portablePath(file) {
@@ -186,7 +196,7 @@ class ResearchStore {
     return publicRecord(await this.readFile(target, recordId));
   }
 
-  async catalog(bodyIds = new Set(), matches, withExcerpts = false) {
+  async catalog(bodyIds = new Set(), matches, excerptTypes) {
     const items = new Map();
     const problems = [];
     const seen = new Set();
@@ -206,7 +216,11 @@ class ResearchStore {
           seen.add(recordId);
           const item = await this.readFile(target, recordId);
           if (matches?.(item)) matchingIds.push(recordId);
-          if (withExcerpts) item.excerpt = progressExcerpt(item.body);
+          if (excerptTypes) {
+            const type = excerptTypes.get(item.record.type);
+            const field = type?.conclusionField && item.record.fields[type.conclusionField];
+            item.excerpt = (typeof field === 'string' && field.trim() && progressExcerpt(field)) || progressExcerpt(item.body, type?.kind === 'summary');
+          }
           if (!bodyIds.has(recordId)) delete item.body;
           items.set(recordId, item);
         } catch (error) {
@@ -385,7 +399,8 @@ class ResearchStore {
 
   async snapshot(filter) {
     const { project, revision } = await this.manifest();
-    const { items, problems, matchingIds } = await this.catalog(new Set(), filter && researchMatcher(validateFilter(filter), project), true);
+    const { items, problems, matchingIds } = await this.catalog(new Set(), filter && researchMatcher(validateFilter(filter), project),
+      new Map(project.recordTypes.map(type => [type.id, type])));
     const index = await this.documentIndex(items, await this.readIndex());
     const records = [...items.values()].map(({ record, revision, relativePath, excerpt }) => ({
       record, revision, relativePath, ...(excerpt ? { excerpt } : {}),
@@ -653,6 +668,8 @@ const projectGuide = `# mekiR 研究项目的 Agent 指引
 总结的 \`type\` 取自本项目 \`kind\` 为 \`summary\` 的记录类型 ID。用 \`date\` 记撰写日期，用 \`coverage.start\` 和 \`coverage.end\` 记覆盖区间，首尾日期均计入。用 \`sources\` 引用依据，同一批次先写入新来源，再写总结。用 \`relatedProjects\` 保存其他项目的 ID，在总结的原项目更新同一条记录。
 
 导入归档时用 \`import-archive\` 预览，核对新增、变化和缺件后提交返回的 token。导入信息保存在 \`run\` 中，项目字段可按现有规则用 \`batch\` 补录。用 \`list --query\`、\`--month\`、\`--field\` 或 \`--filter\` 查询相关记录。
+
+阶段页从最新总结提取一句结论，并显示该总结的来源和证据。若总结类型配置了 conclusionField，在它指向的文本字段里写结论；也可以在 Markdown 的「结论」小节写明。用 list 返回的 excerpt 检查读者将看到的内容。
 
 ## 修改字段、模板和视图
 

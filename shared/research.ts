@@ -32,6 +32,7 @@ export interface ResearchType {
   icon?: string;
   description?: string;
   fields: ResearchField[];
+  conclusionField?: string;
   template: string;
 }
 
