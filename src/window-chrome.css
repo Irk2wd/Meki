@@ -31,10 +31,10 @@
   .platform-win32 #window-caption {
     padding-inline-end: max(8px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 144px))));
   }
-  #window-caption .brand { height: 28px; padding: 0 7px 0 0; gap: 5px; }
-  #window-caption .brand-mark { width: 26px; height: 26px; }
-  #window-caption .brand-mark svg { width: 21px; height: 21px; }
-  #window-caption .brand-wordmark { width: auto; height: 17px; }
+  #window-caption .brand { height: 28px; padding: 0 9px 0 0; gap: 5px; }
+  #window-caption .brand-mark { width: 28px; height: 28px; }
+  #window-caption .brand-mark svg { width: 18px; height: 18px; }
+  #window-caption .brand-wordmark { width: auto; height: 14px; }
   #window-caption .brand-wordmark svg { width: auto; height: 100%; }
   #window-caption button { -webkit-app-region: no-drag; }
   #window-caption .icon-button { width: 28px; height: 26px; border-radius: 6px; }

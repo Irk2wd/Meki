@@ -1273,6 +1273,7 @@ try {
   assert.equal(await inline.locator('[data-wipe-row]').inputValue(), '1');
   await closeReader();
   await timelineView.click();
+  await rangeButton.waitFor();
   pass('a cited comparison can be scrubbed in the record and opened at its original image');
 
   const beforeBackfill = await phaseOrder();
@@ -1282,6 +1283,7 @@ try {
     id: `baseline-display-${index}`, ifRevision: null, title, type: saved.type, phaseId: 'baseline',
     date: sameDay, comparison: saved.comparison, body: '历史展示图注',
   })) });
+  await idle();
   await refresh.click();
   const baseline = phases.filter({ hasText: '基线测量' });
   const marker = baseline.getByRole('button', { name: `${sameDay} 的 2 条可视化展示`, exact: true });
@@ -1612,6 +1614,19 @@ try {
   await sizeWindow(1280);
   await navDivider().waitFor();
   assert.equal(await listDivider().count(), 0);
+  const pageHeading = page.locator('.research-overview h1');
+  const wideTitle = await pageHeading.evaluate(el => parseFloat(getComputedStyle(el).fontSize));
+  assert.equal(wideTitle, 24);
+  await navDivider().press('End');
+  const narrowTitle = await pageHeading.evaluate(el => parseFloat(getComputedStyle(el).fontSize));
+  assert.ok(narrowTitle >= 20 && narrowTitle < wideTitle, 'heading follows the research column as it narrows inside the same window');
+  for (const selector of ['[data-research-range-preset]', '[data-research-destination="timeline"]']) {
+    const clearance = await page.locator(selector).first().evaluate(el => el.clientHeight - parseFloat(getComputedStyle(el).lineHeight));
+    assert.ok(clearance >= 10, `${selector} needs vertical space around its label`);
+  }
+  await navDivider().press('Enter');
+  assert.equal(await pageHeading.evaluate(el => parseFloat(getComputedStyle(el).fontSize)), wideTitle);
+  pass('research headings adapt to the column and navigation and date controls leave room around their labels');
   await openAppearance();
   await page.locator('#theme-choices button[data-theme="kraft"]').click();
   const font = page.locator('#font-family');
