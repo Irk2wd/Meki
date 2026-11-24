@@ -1089,7 +1089,7 @@ export class ResearchWorkspace {
     const today = state ? projectToday(state.project.timezone) : '';
     this.renderedDay = today;
     this.panel.dataset.width = this.widths.workspace;
-    const toggle = `<button type="button" class="icon-button" data-action="sidebar" aria-label="${ht("显示或隐藏侧栏")}" title="${ht("显示或隐藏侧栏")}">${icon('layout', 17)}</button>`;
+    const toggle = document.getElementById('window-caption') ? '' : `<button type="button" class="icon-button" data-action="sidebar" aria-label="${ht("显示或隐藏侧栏")}" title="${ht("显示或隐藏侧栏")}">${icon('layout', 17)}</button>`;
     const phaseCrumb = active?.page === 'timeline' && state?.project.phases.find(phase => phase.id === this.phaseId)?.title;
     this.toolbar.innerHTML = `<div class="research-breadcrumb">${toggle}${state ? `<span title="${escape(state.project.title)}">${escape(state.project.title)}</span><i aria-hidden="true">/</i>` : ''}
       <span>${escape(active?.label || t("科研项目"))}</span>${phaseCrumb ? `<i aria-hidden="true">/</i><span>${escape(phaseCrumb)}</span>` : ''}</div>

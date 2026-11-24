@@ -138,7 +138,7 @@ try {
   assert.ok((await fs.readFile(documentPath, 'utf8')).startsWith('\uFEFF---\r\ntitle: 私人文稿\r\n---\r\n'));
   record('rich edit immediately saved, metadata retained');
   await click(page, 'math');
-  if (process.platform === 'darwin') {
+  if (['darwin', 'win32'].includes(process.platform)) {
     assert.equal(await page.locator('#math-dialog').evaluate(dialog => getComputedStyle(dialog).webkitAppRegion), 'no-drag');
     const nativeWindow = await app.browserWindow(page);
     const previousSize = await nativeWindow.evaluate(win => win.getContentSize());
@@ -153,7 +153,7 @@ try {
       assert.ok(bounds.titlebar > 0 && bounds.top >= bounds.titlebar - 1 && bounds.bottomGap > 0, JSON.stringify(bounds));
     }
     await nativeWindow.evaluate((win, size) => { win.webContents.setZoomFactor(1); win.setContentSize(...size); }, previousSize);
-    record('macOS dialogs stay clear of native window controls when the window or page zoom changes');
+    record('dialogs stay clear of native window controls when the window or page zoom changes');
   }
   await page.locator('#math-input').fill('\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}');
   await page.locator('#math-preview .meki-math mjx-container[jax="SVG"] svg').waitFor();

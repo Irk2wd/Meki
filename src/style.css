@@ -18,7 +18,7 @@
 dialog:modal { -webkit-app-region: no-drag; }
 
 /* Native window controls keep their size when the page zoom changes. */
-.platform-darwin dialog:modal {
+:is(.platform-darwin, .platform-win32) dialog:modal {
   --dialog-top: calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 0px));
   --dialog-bottom: 12px;
   inset-block: var(--dialog-top) var(--dialog-bottom);

@@ -1651,7 +1651,7 @@ try {
   assert.deepEqual(await widths(), [adjusted[0], adjusted[1] - 12, adjusted[2] + 12]);
   assert.notEqual((await dividerStyle(listDivider())).outline, 'none');
   await listDivider().press('ArrowRight');
-  const toggleSidebar = () => page.locator('.research-toolbar [data-action="sidebar"]');
+  const toggleSidebar = () => page.getByRole('button', { name: '显示或隐藏侧栏', exact: true });
   await toggleSidebar().click();
   await navDivider().waitFor({ state: 'hidden' });
   assert.equal((await widths())[2], adjusted[2]);

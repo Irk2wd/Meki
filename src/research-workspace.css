@@ -37,6 +37,12 @@
   background: color-mix(in srgb, var(--text) 32%, var(--bg));
 }
 .research-column-divider:is(:hover, [data-resizing], :focus-visible:not([data-pointer-focus]))::before { background: color-mix(in srgb, var(--accent) 56%, var(--bg)); }
+body:not(.window-fitted) #window-caption + .research-shell > .research-column-divider::before {
+  inset-block: var(--window-radius) calc(var(--window-gutter) + var(--window-radius));
+}
+body:not(.window-fitted) #window-caption + .research-shell > .research-column-divider:not(:hover, [data-resizing], :focus-visible)::before {
+  background: transparent;
+}
 .research-column-divider:is(:hover, [data-resizing], :focus-visible:not([data-pointer-focus]))::after { height: 32px; background: var(--accent); }
 .research-column-divider:focus-visible:not([data-pointer-focus])::after { outline: 2px solid var(--accent); outline-offset: 2px; }
 .research-resizing, .research-resizing * { user-select: none; cursor: col-resize !important; }
@@ -131,7 +137,6 @@
 .research-breadcrumb i { font-style: normal; opacity: .65; }
 .research-breadcrumb button, .research-toolbar > button { flex: none; }
 .research-toolbar button { -webkit-app-region: no-drag; }
-.platform-darwin.sidebar-hidden .research-toolbar { padding-left: 83px; }
 .research-content { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; padding: clamp(22px, 4vh, 38px) clamp(15px, 2.4vw, 34px) 44px; }
 .research-content > * { margin-inline: auto; }
 #research-workspace[data-width="comfort"] .research-content { padding-inline: clamp(18px, 4.5vw, 66px); }
@@ -584,9 +589,6 @@
     #research-evidence-inspector [data-evidence-expand] { display: none; }
   }
 }
-@media (max-width: 760px) {
-  .platform-darwin #research-evidence-inspector > :first-child { padding-inline-start: 66px; }
-}
 @media (prefers-reduced-motion: no-preference) {
   #research-evidence-inspector:not([hidden]) { animation: research-reader-in 160ms cubic-bezier(.2,.65,.28,1); }
 }
@@ -783,7 +785,6 @@
 }
 @media (max-width: 940px) {
   .research-reader-open > #document-surface { width: auto; inset: 7px; border-radius: 15px; }
-  .platform-darwin.sidebar-hidden .research-reader-header { padding-left: 83px; }
 }
 @media (max-width: 720px) {
   .research-timeline { --label-width: 106px; }

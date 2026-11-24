@@ -88,6 +88,7 @@ export interface BootState {
   transferred?: boolean;
   startInProject: boolean;
   platform: string;
+  windowFitted: boolean;
   version: string;
   updatesAvailable: boolean;
   settings: Settings;
@@ -108,6 +109,7 @@ export interface MekiAPI {
   applyUpdate(): Promise<void>;
   onUpdate(callback: (state: UpdateState) => void): () => void;
   boot(): Promise<BootState>;
+  showApplicationMenu(left: number, bottom: number): Promise<void>;
   newWindow(): Promise<string>;
   detachDocument(tabId: string): Promise<boolean>;
   tileWindows(): Promise<void>;

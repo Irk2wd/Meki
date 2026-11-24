@@ -33,6 +33,7 @@ import { FontPicker } from './font-picker';
 import { ThemePicker } from './theme-picker';
 import { editorViewCtx } from '@milkdown/kit/core';
 import './style.css';
+import { installWindowChrome } from './window-chrome';
 import './print.css';
 import './formula.css';
 import './settings.css';
@@ -627,6 +628,7 @@ function hideResearch() {
 }
 
 async function dispatch(action: string, payload?: unknown, origin?: HTMLElement) {
+  if (action === 'window-fit') { document.body.classList.toggle('window-fitted', payload === true); return; }
   if (action === 'window-notice') { notify(String(payload)); return; }
   if (action === 'settings-changed' && ready) {
     settings = { ...settings, ...payload as Partial<Settings> }; applySettings(); updateStatus(); documents.refreshSettings(); return;
@@ -903,6 +905,7 @@ async function start() {
   el('[data-action="updates"]').hidden = !boot.updatesAvailable;
   aboutDialog = new AboutDialog(boot.version, updateDialog ? () => updateDialog!.open() : undefined);
   document.body.classList.add(`platform-${boot.platform}`);
+  installWindowChrome(boot.platform, boot.windowFitted, notify);
   settings = boot.settings; workspace = boot.workspace; recentFiles = boot.recentFiles; applySettings();
   panes = new PaneWorkspace({ settings: () => settings, blocked: () => busy || !ready || composing || !!document.querySelector('dialog[open]'),
     changed: (tab, content) => {

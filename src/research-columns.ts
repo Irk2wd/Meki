@@ -110,7 +110,8 @@ export class ResearchColumns {
     const active = this.shell.classList.contains('research-shell') && !this.panel.hidden;
     const reading = active && this.host.classList.contains('research-reader-open');
     const hasNav = this.navigation.getClientRects().length > 0;
-    const layout = columnLayout(this.shell.clientWidth, hasNav, reading, this.preferred, this.host.classList.contains('research-stage-reading'));
+    const availableWidth = this.host.clientWidth + this.navigation.offsetWidth;
+    const layout = columnLayout(availableWidth, hasNav, reading, this.preferred, this.host.classList.contains('research-stage-reading'));
     this.layout = layout;
     this.host.classList.toggle('research-peek-split', layout.split);
     this.host.classList.toggle('research-stage-index', layout.stageIndex);
