@@ -52,11 +52,8 @@ export class FormatMenu {
   private close() { this.menu.hidden = true; this.button.setAttribute('aria-expanded', 'false'); }
   private position() {
     const trigger = this.button.getBoundingClientRect();
-    const top = trigger.bottom + 6;
-    const margin = 8;
-    this.menu.style.top = `${top}px`;
-    this.menu.style.left = `${Math.max(margin, Math.min(trigger.left, innerWidth - this.menu.offsetWidth - margin))}px`;
-    this.menu.style.maxHeight = `${Math.max(0, innerHeight - top - margin)}px`;
+    this.menu.style.setProperty('--format-menu-top', `${trigger.bottom + 6}px`);
+    this.menu.style.setProperty('--format-menu-left', `${trigger.left}px`);
   }
   private toggle() {
     if (this.host.blocked()) return;
