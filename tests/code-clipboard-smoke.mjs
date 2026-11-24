@@ -87,6 +87,21 @@ async function richClipboard(text, withVSCode = true) {
 }
 try {
   await launch();
+  const win = await app.browserWindow(page);
+  const originalSize = await win.evaluate(win => win.getContentSize());
+  await page.locator('#format-menu-button').click();
+  await win.evaluate(win => win.setContentSize(900, 480));
+  await page.waitForFunction(() => innerHeight === 480);
+  const menu = page.locator('#format-menu');
+  const layout = await menu.evaluate(el => {
+    const box = el.getBoundingClientRect(), trigger = document.querySelector('#format-menu-button').getBoundingClientRect();
+    return { belowTrigger: box.top >= trigger.bottom, bottomGap: innerHeight - box.bottom, scrollable: el.scrollHeight > el.clientHeight };
+  });
+  assert.ok(layout.belowTrigger && layout.bottomGap >= 7 && layout.scrollable, JSON.stringify(layout));
+  await menu.locator('[data-edit-command="code-settings"]').click();
+  await page.locator('#code-options-dialog button[aria-label="关闭代码设置"]').click();
+  await win.evaluate((win, size) => win.setContentSize(...size), originalSize);
+  record('the format menu fits a shortened window and its last command opens by pointer');
   assert.equal(await saveText(), original);
   await options({ wrap: true, 'indent-size': 4, 'tab-size': 6, 'auto-indent': false, 'language-mode': 'default', 'default-language': 'python' });
   await options({ 'indent-size': 3.5, 'indent-kind': 'tabs' });
