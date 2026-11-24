@@ -43,6 +43,10 @@ let app, page;
 const results = [], errors = [];
 const pass = name => { results.push(name); console.log(`PASS ${name}`); };
 async function idle() { await page.waitForFunction(() => !document.body.classList.contains('is-busy')); }
+async function showReaderReferences() {
+  const toggle = page.locator('#research-reference-toggle');
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+}
 async function closeReader() {
   await idle();
   await page.locator('[data-action="research-close-reader"]').click();
@@ -263,6 +267,8 @@ try {
   assert.equal(await page.locator('.research-entry').count(), 1);
   await page.locator('.research-entry [data-research-record=forest-validation]').click();
   const sampleLinks = page.locator('#research-reader-related');
+  assert.equal(await sampleLinks.isVisible(), false);
+  await showReaderReferences();
   await sampleLinks.locator('[data-research-related=forest-timings]').click();
   const sampleTable = page.getByRole('table', { name: '逐视角 CPU 计时表 · CSV' });
   await sampleTable.getByRole('cell', { name: '487.47', exact: true }).waitFor();
@@ -733,6 +739,7 @@ try {
   await page.locator('[data-research-record=paper-decision]').click();
   const related = page.locator('#research-reader-related');
   const inspector = page.locator('#research-evidence-inspector');
+  await showReaderReferences();
   await related.getByText('固定四视角并报告逐轮计时。').waitFor();
   await page.locator('#visual-editor a[href="mekir:forest-canopy"]').click();
   await inspector.getByRole('heading', { name: '树冠原图' }).waitFor();
@@ -943,6 +950,7 @@ try {
   await shared.click();
   await page.locator('#research-reader-title').getByText('森林结果采用决定').waitFor();
   assert.match(await page.locator('#research-reader-context').innerText(), /实时渲染性能研究/);
+  await showReaderReferences();
   await related.getByText('论文分析项目', { exact: true }).waitFor();
   await related.getByRole('button', { name: '论文 v3' }).click();
   await inspector.locator('pre').getByText(/Four-view validation/).waitFor();
@@ -1176,6 +1184,17 @@ try {
   assert.ok(clickedDuringRefresh, 'The record click must overlap the pending refresh');
   const inline = page.locator('#document-scroll .research-wipe');
   await inline.getByRole('slider').waitFor();
+  const headerHeight = await page.locator('.research-reader-header').evaluate(node => node.getBoundingClientRect().height);
+  await page.locator('#document-scroll').evaluate(node => { node.scrollTop = 0; });
+  await page.locator('.research-reader-heading.body-title-visible').waitFor();
+  await page.locator('#document-scroll').evaluate(node => {
+    const heading = node.querySelector('.ProseMirror > h1');
+    node.scrollTop = Math.ceil(heading.getBoundingClientRect().bottom - node.getBoundingClientRect().top) + 16;
+  });
+  await page.locator('.research-reader-heading:not(.body-title-visible)').waitFor();
+  assert.equal(await page.locator('.research-reader-header').evaluate(node => node.getBoundingClientRect().height), headerHeight);
+  await page.locator('#document-scroll').evaluate(node => { node.scrollTop = 0; });
+  await page.locator('.research-reader-heading.body-title-visible').waitFor();
   assert.ok(await inline.evaluate(figure => {
     const slot = figure.closest('.research-inline-comparisons');
     return slot.parentElement.classList.contains('ProseMirror') && slot.previousElementSibling?.tagName === 'P'
@@ -1637,6 +1656,7 @@ try {
   assert.equal(await phaseLink('validation').getAttribute('aria-current'), 'location');
   assert.equal(await page.locator('.research-breadcrumb span').last().innerText(), '复测与验证');
   const timingLink = page.locator('#research-reader-related [data-research-related=forest-timings]');
+  await showReaderReferences();
   const stageInspector = page.locator('#research-evidence-inspector');
   await timingLink.click();
   await stageInspector.getByRole('table').waitFor();

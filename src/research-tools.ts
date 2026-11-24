@@ -347,7 +347,10 @@ export class ResearchTools {
     this.inspector.hidden = true;
     this.inspector.replaceChildren();
     if (restoreScroll) scroll.scrollTop = before;
-    if (focus) (origin?.isConnected ? origin : document.getElementById('research-reader-title'))?.focus({ preventScroll: true });
+    if (focus) {
+      const target = origin?.closest('#research-reader-related[hidden]') ? document.getElementById('research-reference-toggle') : origin;
+      (target?.isConnected ? target : document.getElementById('research-reader-title'))?.focus({ preventScroll: true });
+    }
     return true;
   }
 

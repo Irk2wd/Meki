@@ -69,6 +69,7 @@ document.querySelector('#app')!.innerHTML = `
         ${button('research-reader-back', ht("返回研究列表"), 'back')}
         <div class="research-reader-heading"><span id="research-reader-context"></span><h2 id="research-reader-title" tabindex="-1"></h2></div>
       </div>
+      <div class="research-reader-utilities"><button type="button" id="research-reference-toggle" aria-expanded="false" aria-controls="research-reader-related" hidden>${icon('link', 15)}<span>${ht("证据与关联")}</span>${icon('down', 12)}</button></div>
       <div class="research-reader-actions">
         <button type="button" class="icon-button" data-peek-step="-1" hidden title="${ht("上一条记录")}" aria-label="${ht("上一条记录")}">${icon('back', 15)}</button>
         <button type="button" class="icon-button" data-peek-step="1" hidden title="${ht("下一条记录")}" aria-label="${ht("下一条记录")}">${icon('chevron', 15)}</button>
@@ -155,6 +156,33 @@ let researchEditing = false;
 interface ResearchReaderStep { tabId: string; scroll: number; editing: boolean; link?: { selector: string; index: number } }
 const researchReaderHistory: ResearchReaderStep[] = [];
 let researchRelatedMarkup = '';
+const researchReferenceToggle = el<HTMLButtonElement>('#research-reference-toggle');
+const researchRelatedPanel = el('#research-reader-related');
+researchReferenceToggle.addEventListener('click', () => {
+  const expanded = researchReferenceToggle.getAttribute('aria-expanded') !== 'true';
+  researchReferenceToggle.setAttribute('aria-expanded', String(expanded));
+  researchRelatedPanel.hidden = !expanded;
+});
+let observedReaderTitle: HTMLElement | null = null;
+let readerTitleObserver: IntersectionObserver | undefined;
+function syncReaderTitle(reading: boolean) {
+  const title = el('#research-reader-title');
+  const heading = reading ? document.querySelector<HTMLElement>('#visual-editor .ProseMirror > h1:nth-child(1 of :not(.ProseMirror-widget, .prosemirror-virtual-cursor))') : null;
+  const target = heading && heading.textContent?.trim() === title.textContent?.trim() ? heading : null;
+  if (target === observedReaderTitle) return;
+  readerTitleObserver?.disconnect();
+  observedReaderTitle = target;
+  const label = el('.research-reader-heading');
+  const root = target?.closest('.document-scroll');
+  if (!target || !root) { label.classList.remove('body-title-visible'); return; }
+  const bounds = target.getBoundingClientRect();
+  const viewport = root.getBoundingClientRect();
+  label.classList.toggle('body-title-visible', bounds.bottom > viewport.top && bounds.top < viewport.bottom);
+  readerTitleObserver = new IntersectionObserver(([entry]) => {
+    if (observedReaderTitle === target) label.classList.toggle('body-title-visible', entry.isIntersecting && entry.intersectionRect.height > 0);
+  }, { root });
+  readerTitleObserver.observe(target);
+}
 let lifecycleSettingsQueue: Promise<void> = Promise.resolve();
 let lifecycleSettingsPending = 0;
 const externalBanner = document.createElement('div');
@@ -257,10 +285,11 @@ function updateStatus() {
   const related = researchUI.readerOpen ? researchUI.readerRelated(current.path) : '';
   if (related !== researchRelatedMarkup) {
     researchRelatedMarkup = related;
-    const panel = el('#research-reader-related');
-    panel.innerHTML = related;
-    panel.hidden = !related;
+    researchRelatedPanel.innerHTML = related;
   }
+  if (!researchUI.readerOpen) researchReferenceToggle.setAttribute('aria-expanded', 'false');
+  researchReferenceToggle.hidden = !related;
+  researchRelatedPanel.hidden = !related || (!researchEditing && researchReferenceToggle.getAttribute('aria-expanded') !== 'true');
   el('#dirty-dot').hidden = !dirty();
   el('#save-state').innerHTML = savingAutomatically ? t("自动保存中…") : busy ? t("处理中…") : dirty() ? `<span class="unsaved-tick">●</span> ${ht("未保存")}` : current.path ? `<span class="saved-tick">✓</span> ${ht("已保存")}` : t("本地文稿");
   el('#toggle-autosave').textContent = t("自动保存：{0}", settings.autoSave ? t("开") : t("关"));
@@ -268,6 +297,7 @@ function updateStatus() {
   el('#toggle-autosave').title = settings.autoSave ? t("停止输入 {0} 秒后保存。点击关闭；标签栏 ••• 可设置间隔。", settings.autoSaveInterval) : t("点击开启自动保存；标签栏 ••• 可设置保存和版本记录间隔。");
   el('#document-state').textContent = documents.pauseMessage() || (settings.autoSave ? current.path ? t("停止输入 {0} 秒后自动保存", settings.autoSaveInterval) : t("未命名文稿 · 请先保存到文件") : editor.mode === 'source' ? t("Markdown 源码") : t("即时预览"));
   documents.render();
+  syncReaderTitle(researchUI.readerOpen && !researchEditing);
   const cjk = (current.content.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu) || []).length;
   const words = (current.content.replace(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu, ' ').match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || []).length;
   el('#word-count').textContent = t("{0} 字", (cjk + words).toLocaleString(getLocale()));
@@ -496,6 +526,9 @@ function mayEditDocument() { return !researchUI.visible || (researchUI.readerOpe
 function setResearchEditing(value: boolean) {
   if (value) researchUI.closeEvidence(false);
   researchEditing = value;
+  const toolbar = el('.formatbar');
+  const toolbarHost = el(researchUI.readerOpen && !value ? '.research-reader-utilities' : '.research-document-tools');
+  if (toolbar.parentElement !== toolbarHost) toolbarHost.append(toolbar);
   el('.main-area').classList.toggle('research-reader-editing', researchUI.readerOpen && value);
   const toggle = el<HTMLButtonElement>('[data-action="research-edit-body"]');
   const surface = el('#document-surface');
