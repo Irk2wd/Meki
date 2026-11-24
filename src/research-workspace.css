@@ -535,11 +535,15 @@
 #research-evidence-inspector .research-table-scroll table { width: max-content; min-width: 100%; }
 #research-evidence-inspector .research-table-scroll :is(th, td) { padding-inline: 10px; }
 #research-evidence-inspector .research-evidence-footer { justify-content: space-between; gap: 8px; font-size: 12px; color: var(--soft); }
+#research-evidence-inspector .research-evidence-footer > span { margin-inline-end: auto; }
+#research-evidence-inspector [data-evidence-pin] { gap: 5px; }
+#research-evidence-inspector [data-evidence-pin][aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
 .research-evidence-tabs { display: flex; gap: 4px; flex: none; min-width: 0; overflow-x: auto; scrollbar-width: thin; padding: 2px 1px 6px; border-bottom: 1px solid var(--border); }
 .research-evidence-tabs > span { display: inline-flex; flex: none; align-items: center; min-width: 0; border-radius: 5px; }
 .research-evidence-tabs > span:has([aria-selected="true"]) { background: var(--accent-soft); color: var(--accent); }
 .research-evidence-tabs button { padding: 4px 5px; color: inherit; font-size: 11px; }
 .research-evidence-tabs [role="tab"] { max-width: 13em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.research-evidence-tabs [role="tab"] svg { margin-inline-end: 4px; vertical-align: -2px; color: var(--accent); }
 .research-evidence-tabs [data-dismiss-evidence] { display: inline-grid; place-items: center; min-width: 22px; min-height: 24px; }
 @media screen {
   .research-reader-open > #document-surface { container: research-reader / inline-size; }

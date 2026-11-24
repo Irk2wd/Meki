@@ -33,6 +33,7 @@ const heading = (title: string) => `<div class="dialog-heading"><h2 id="research
 const feedback = '<p class="research-form-error" role="alert"></p>';
 interface EvidenceTab {
   id: string; title: string; body: HTMLElement; markup: string; reveal: () => void; origin?: HTMLElement;
+  viewport: HTMLElement; scroll?: { left: number; top: number };
 }
 
 function evidenceContent(file: ResearchEvidenceFile) {
@@ -57,6 +58,8 @@ export class ResearchTools {
   private dialog = document.createElement('dialog');
   private inspector = document.createElement('aside');
   private evidenceTabs = new Map<string, EvidenceTab>();
+  private temporaryEvidenceId?: string;
+  private displayedEvidence?: EvidenceTab;
   private evidenceRequest = 0;
   private evidenceReturn?: { origin?: HTMLElement; scroll: HTMLElement; before: number; opened: number };
   private report = new ResearchReportPreview();
@@ -75,11 +78,23 @@ export class ResearchTools {
         this.inspector.toggleAttribute('data-expanded');
         this.labelEvidenceSize();
       }
-      if (target.dataset.evidenceTab) this.selectEvidenceTab(this.evidenceTabs.get(target.dataset.evidenceTab)!, true);
+      if (target.dataset.evidenceTab) {
+        ++this.evidenceRequest;
+        this.selectEvidenceTab(this.evidenceTabs.get(target.dataset.evidenceTab)!, true);
+      }
+      if (target.dataset.evidencePin) {
+        const tab = this.evidenceTabs.get(target.dataset.evidencePin)!;
+        if (tab.id === this.temporaryEvidenceId) this.temporaryEvidenceId = undefined;
+        else this.makeTemporary(tab);
+        this.selectEvidenceTab(tab, false);
+        this.inspector.querySelector<HTMLButtonElement>('[data-evidence-pin]')!.focus({ preventScroll: true });
+      }
       if (target.dataset.dismissEvidence) {
+        ++this.evidenceRequest;
         const ids = [...this.evidenceTabs.keys()], id = target.dataset.dismissEvidence;
         const active = this.inspector.querySelector<HTMLElement>('[aria-selected="true"]')?.dataset.evidenceTab;
         this.evidenceTabs.delete(id);
+        if (id === this.temporaryEvidenceId) this.temporaryEvidenceId = undefined;
         const nextId = active === id ? ids[ids.indexOf(id) + 1] || ids[ids.indexOf(id) - 1] : active;
         const next = nextId && this.evidenceTabs.get(nextId);
         if (next) this.selectEvidenceTab(next, true);
@@ -90,6 +105,7 @@ export class ResearchTools {
       const tab = (event.target as Element).closest<HTMLButtonElement>('[data-evidence-tab]');
       if (!tab || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
+      ++this.evidenceRequest;
       const tabs = [...this.evidenceTabs.values()], index = tabs.findIndex(item => item.id === tab.dataset.evidenceTab);
       const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 :
         (index + (event.key === 'ArrowLeft' ? -1 : 1) + tabs.length) % tabs.length;
@@ -341,6 +357,8 @@ export class ResearchTools {
     if (!returning) return false;
     this.evidenceReturn = undefined;
     this.evidenceTabs.clear();
+    this.temporaryEvidenceId = undefined;
+    this.displayedEvidence = undefined;
     this.inspector.removeAttribute('data-expanded');
     const { origin, scroll, before, opened } = returning;
     const restoreScroll = focus && Math.abs(scroll.scrollTop - opened) < 1;
@@ -362,15 +380,34 @@ export class ResearchTools {
     control.setAttribute('aria-pressed', String(expanded));
   }
 
+  private makeTemporary(tab: EvidenceTab) {
+    if (this.temporaryEvidenceId) this.evidenceTabs.delete(this.temporaryEvidenceId);
+    this.evidenceTabs.delete(tab.id);
+    this.evidenceTabs.set(tab.id, tab);
+    this.temporaryEvidenceId = tab.id;
+  }
+
   private selectEvidenceTab(tab: EvidenceTab, focusTab: boolean) {
-    const multiple = this.evidenceTabs.size > 1;
-    this.inspector.innerHTML = (multiple ? `<div class="research-evidence-tabs" role="tablist" aria-label="${ht("原始证据")}">${[...this.evidenceTabs.values()].map(item =>
-      `<span role="presentation"><button type="button" role="tab" id="research-evidence-tab-${escape(item.id)}" data-evidence-tab="${escape(item.id)}" aria-selected="${item === tab}" tabindex="${item === tab ? 0 : -1}" aria-controls="research-active-evidence" title="${escape(item.title)}">${escape(item.title)}</button>
-      <button type="button" data-dismiss-evidence="${escape(item.id)}" aria-label="${ht("关闭 {0}", escape(item.title))}">${icon('close', 12)}</button></span>`).join('')}</div>` : '') + tab.markup;
+    const previous = this.displayedEvidence;
+    if (previous) previous.scroll = { left: previous.viewport.scrollLeft, top: previous.viewport.scrollTop };
+    const tabs = [...this.evidenceTabs.values()].map(item => {
+      const pinned = item.id !== this.temporaryEvidenceId;
+      const state = pinned ? ht("已固定") : ht("临时预览");
+      return `<span role="presentation"><button type="button" role="tab" id="research-evidence-tab-${escape(item.id)}" data-evidence-tab="${escape(item.id)}" aria-selected="${item === tab}" tabindex="${item === tab ? 0 : -1}" aria-controls="research-active-evidence" aria-description="${state}" title="${escape(item.title)} · ${state}">${pinned ? icon('pin', 12) : ''}${escape(item.title)}</button>
+        <button type="button" data-dismiss-evidence="${escape(item.id)}" aria-label="${ht("关闭 {0}", escape(item.title))}">${icon('close', 12)}</button></span>`;
+    });
+    this.inspector.innerHTML = `<div class="research-evidence-tabs" role="tablist" aria-label="${ht("原始证据")}">${tabs.join('')}</div>` + tab.markup;
     this.inspector.querySelector('.research-evidence-content')!.replaceWith(tab.body);
+    this.displayedEvidence = tab;
+    if (tab.scroll) tab.viewport.scrollTo(tab.scroll);
     tab.body.id = 'research-active-evidence';
-    if (multiple) { tab.body.setAttribute('role', 'tabpanel'); tab.body.setAttribute('aria-labelledby', 'research-evidence-tab-' + tab.id); }
-    else { tab.body.removeAttribute('role'); tab.body.removeAttribute('aria-labelledby'); }
+    tab.body.setAttribute('role', 'tabpanel');
+    tab.body.setAttribute('aria-labelledby', 'research-evidence-tab-' + tab.id);
+    const pin = this.inspector.querySelector<HTMLButtonElement>('[data-evidence-pin]')!;
+    const pinned = tab.id !== this.temporaryEvidenceId;
+    pin.setAttribute('aria-pressed', String(pinned));
+    pin.title = pinned ? t("取消固定") : t("固定到右栏");
+    pin.querySelector('span')!.textContent = pinned ? t("已固定") : t("固定到右栏");
     this.inspector.querySelector('[data-evidence-reveal]')!.addEventListener('click', tab.reveal);
     this.labelEvidenceSize();
     this.evidenceReturn!.origin = tab.origin;
@@ -399,6 +436,7 @@ export class ResearchTools {
       ${besideReader ? `<button type="button" class="icon-button" data-evidence-expand>${icon('focus', 15)}</button>` : ''}${closeButton(ht("关闭证据预览"))}
     </div><div class="research-evidence-content"></div>
     <div class="research-actions research-evidence-footer"><span>${ht("只读来源")}</span>
+      ${besideReader ? `<button type="button" class="secondary-button" data-evidence-pin="${escape(id)}" aria-label="${ht("固定到右栏")}">${icon('pin', 14)}<span></span></button>` : ''}
       <button type="button" class="secondary-button" data-evidence-reveal>${ht("定位原文件")}</button></div>`;
     const reveal = () => { void window.meki.revealResearchEvidence(root, id, sourceDocument).catch(error => this.notify(String(error), true)); };
     if (besideReader) {
@@ -407,8 +445,9 @@ export class ResearchTools {
       const opened = this.evidenceReturn?.opened;
       this.inspector.hidden = false;
       this.evidenceReturn = { origin, scroll, before, opened: opened ?? scroll.scrollTop };
-      const tab = { id, title: file.title, body: evidenceContent(file), markup, reveal, origin };
-      this.evidenceTabs.set(id, tab);
+      const body = evidenceContent(file);
+      const tab = { id, title: file.title, body, markup, reveal, origin, viewport: body.querySelector<HTMLElement>('.research-table-scroll') ?? body };
+      this.makeTemporary(tab);
       this.selectEvidenceTab(tab, false);
     } else {
       this.show(markup, 'research-evidence-preview');

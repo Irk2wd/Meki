@@ -39,6 +39,7 @@ const paths: Record<string, string> = {
   people: '<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2m2-15a3 3 0 0 1 0 6m4 9v-2a4 4 0 0 0-4-4"/>',
   target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
   bookmark: '<path d="M6 3h12v18l-6-4-6 4z"/>',
+  pin: '<path d="m16 3 5 5-3 1-4 5v3l-2 1-6-6 1-2h3l5-4zM9 15l-6 6"/>',
   chart: '<path d="M3 4v16h18M6 15l4-4 4 2 6-7"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4m8-4v4M3 10h18m-13 5h.01m4 0h.01m4 0h.01"/>',
   bulb: '<path d="M9 18v-3a6 6 0 1 1 6 0v3M9 18h6m-5 3h4"/>',
