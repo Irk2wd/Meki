@@ -37,6 +37,7 @@ export class FormatMenu {
     this.dialog.innerHTML = `<form method="dialog"><div class="dialog-heading"><h2 id="insert-title">${ht("插入")}</h2><button class="icon-button" value="cancel" formnovalidate aria-label="${ht("取消插入")}">×</button></div><div id="insert-fields"></div><p id="insert-feedback" role="status"></p><div class="dialog-actions"><button value="cancel" formnovalidate class="secondary-button">${ht("取消")}</button><button type="button" class="primary-button" id="insert-confirm">${ht("插入")}</button></div></form>`;
     document.body.append(this.dialog);
     this.button.addEventListener('click', () => this.toggle());
+    window.addEventListener('resize', () => { if (!this.menu.hidden) this.position(); });
     this.menu.addEventListener('mousedown', event => { if ((event.target as HTMLElement).closest('button')) event.preventDefault(); });
     this.menu.addEventListener('click', event => { const command = (event.target as HTMLElement).closest<HTMLElement>('[data-edit-command]')?.dataset.editCommand; if (command) this.execute(command); });
     this.dialog.querySelector('#insert-confirm')!.addEventListener('click', () => this.confirm());
@@ -49,11 +50,19 @@ export class FormatMenu {
   connect(editor: WritingEditor) { editor.code.onLastLanguage = codeLastLanguage => { if (this.host.settings().codeLastLanguage !== codeLastLanguage) this.host.changeSettings({ codeLastLanguage }); }; }
   apply(settings: Settings) { document.body.classList.toggle('hide-code-lines', !settings.codeLineNumbers); const option = this.menu.querySelector<HTMLElement>('[data-edit-command="code-lines"]')!; option.setAttribute('aria-pressed', String(settings.codeLineNumbers)); option.textContent = t("{0}代码块行号", settings.codeLineNumbers ? '✓ ' : ''); const headings = this.menu.querySelector<HTMLElement>('[data-edit-command="heading-numbering"]')!; headings.setAttribute('aria-pressed', String(settings.headingNumbering)); headings.textContent = t("{0}显示标题编号", settings.headingNumbering ? '✓ ' : ''); }
   private close() { this.menu.hidden = true; this.button.setAttribute('aria-expanded', 'false'); }
+  private position() {
+    const trigger = this.button.getBoundingClientRect();
+    const top = trigger.bottom + 6;
+    const margin = 8;
+    this.menu.style.top = `${top}px`;
+    this.menu.style.left = `${Math.max(margin, Math.min(trigger.left, innerWidth - this.menu.offsetWidth - margin))}px`;
+    this.menu.style.maxHeight = `${Math.max(0, innerHeight - top - margin)}px`;
+  }
   private toggle() {
     if (this.host.blocked()) return;
     const open = this.menu.hidden; this.close(); if (!open) return;
     this.menu.hidden = false; this.button.setAttribute('aria-expanded', 'true');
-    const bounds = this.button.getBoundingClientRect(); this.menu.style.left = `${Math.max(8, Math.min(bounds.left, innerWidth - 360))}px`; this.menu.style.top = `${bounds.bottom + 6}px`;
+    this.position();
     this.menu.querySelectorAll<HTMLButtonElement>('[data-edit-command^="table-"]').forEach(button => { button.disabled = !this.editor.actions.inTable(); });
   }
   execute(command: string) {
