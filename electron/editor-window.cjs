@@ -1,7 +1,8 @@
 'use strict';
 const { t, getLocale } = require('./i18n.mjs');
 
-const { app, BrowserWindow, Menu, dialog, shell, screen, clipboard, session } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, screen, clipboard, session, nativeTheme, systemPreferences } = require('electron');
+const { windowChromeOptions, fittedWindow } = require('./window-chrome.cjs');
 const bootstrap = globalThis[Symbol.for('meki.bootstrap')];
 const { WorkspaceStore, documentStatus } = require('./workspace-store.cjs');
 const { validateSession } = require('./lifecycle-store.cjs');
@@ -45,6 +46,7 @@ let rendererBooted = false;
 let commandsReady = false;
 let closingAllowed = false;
 let windowSaveTimer;
+let lastWindowFit;
 let saveOperation = null;
 let saveInput = null;
 let activeDocument = { name: t("未命名.md"), path: null, dirty: false };
@@ -409,13 +411,23 @@ function registerIpc() {
     options.initialSession = undefined; options.transferred = false;
     if (!TEST_MODE) mainWindow.show();
   });
+  register('show-application-menu', (left, bottom) => {
+    if (process.platform !== 'win32' || !Number.isFinite(left) || !Number.isFinite(bottom)) return;
+    const zoom = mainWindow.webContents.getZoomFactor();
+    const [width, height] = mainWindow.getContentSize();
+    const x = Math.min(width - 1, Math.max(0, Math.round(left * zoom)));
+    const y = Math.min(height - 1, Math.max(0, Math.round(bottom * zoom)));
+    const menu = rebuildMenu();
+    return new Promise(resolve => menu.popup({ window: mainWindow, x, y, callback: () => resolve() }));
+  });
   register('new-window', () => coordinator.newWindow(id));
   register('detach-document', tabId => coordinator.detach(id, tabId));
   register('tile-windows', () => coordinator.tile(id));
   register('cancel-close', () => coordinator.cancelClose(id));
   register('release-document', file => coordinator.releaseClaim(id, file));
   register('boot', async () => {
-    if (bootResult) return { ...bootResult, settings: store.metadata.settings, recentFiles: store.metadata.recentFiles, recentFolders: store.metadata.recentFolders, workspace };
+    if (bootResult) return { ...bootResult, windowFitted: fittedWindow(mainWindow, process.platform),
+      settings: store.metadata.settings, recentFiles: store.metadata.recentFiles, recentFolders: store.metadata.recentFolders, workspace };
     let initialDoc = null;
     const firstLaunchPath = launchPaths.shift();
     const session = options.initialSession || await lifecycle.restore(store.metadata.settings.reopenSession);
@@ -426,7 +438,8 @@ function registerIpc() {
       catch (error) { console.warn('Meki could not restore its last document:', error.message); }
     }
     bootResult = {
-      platform: process.platform, version: bootstrap?.runtime?.version || app.getVersion(), locale: getLocale(), settings: store.metadata.settings,
+      platform: process.platform, windowFitted: fittedWindow(mainWindow, process.platform),
+      version: bootstrap?.runtime?.version || app.getVersion(), locale: getLocale(), settings: store.metadata.settings,
       recovery: session ? null : recovery, session, initialDoc: initialDoc || (options.fresh ? { path: null, name: t("未命名.md"), content: '', revision: null } : null), transferred: options.transferred === true, windowId: id, recentFiles: store.metadata.recentFiles, recentFolders: store.metadata.recentFolders, workspace,
     };
     rendererBooted = true;
@@ -748,6 +761,7 @@ function rebuildMenu() {
   const menu = Menu.buildFromTemplate(template);
   if (mainWindow && process.platform !== 'darwin') mainWindow.setMenu(menu);
   if (!BrowserWindow.getFocusedWindow() || mainWindow?.isFocused()) Menu.setApplicationMenu(menu);
+  return menu;
 }
 
 function restoredBounds() {
@@ -778,6 +792,26 @@ function queueWindowSave() {
   windowSaveTimer = setTimeout(() => persistWindowBounds().catch((error) => console.warn('Could not save window position:', error.message)), 500);
 }
 
+function frameOptions() {
+  const contrast = process.platform === 'win32' && nativeTheme.shouldUseHighContrastColors
+    ? { background: systemPreferences.getColor('window'), text: systemPreferences.getColor('window-text') } : undefined;
+  return windowChromeOptions(process.platform, store.metadata.settings, contrast);
+}
+
+function refreshFrame() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const { backgroundColor, titleBarOverlay } = frameOptions();
+  mainWindow.setBackgroundColor(backgroundColor);
+  if (process.platform === 'win32') mainWindow.setTitleBarOverlay(titleBarOverlay);
+}
+
+function updateWindowFit() {
+  const fitted = fittedWindow(mainWindow, process.platform);
+  if (fitted === lastWindowFit) return;
+  lastWindowFit = fitted;
+  if (rendererBooted) sendCommand('window-fit', fitted);
+}
+
 function createWindow() {
   session.defaultSession.setSpellCheckerEnabled(store.metadata.settings.spellcheck);
   rendererBooted = false;
@@ -786,8 +820,7 @@ function createWindow() {
   bootResult = null;
   mainWindow = new BrowserWindow({
     ...restoredBounds(), minWidth: 480, minHeight: 420, show: false,
-    title: 'Meki', backgroundColor: '#faf9f6', icon: path.join(appDirectory, 'assets', 'icon.png'),
-    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', titleBarOverlay: true, trafficLightPosition: { x: 18, y: 17 } } : {}),
+    title: 'Meki', icon: path.join(appDirectory, 'assets', 'icon.png'), ...frameOptions(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false,
       sandbox: true, webSecurity: true, spellcheck: true, devTools: Boolean(developerUrl) || TEST_MODE,
@@ -827,6 +860,11 @@ function createWindow() {
     if (coordinator.sessions.get(id).bounds?.maximized) mainWindow.maximize();
   });
   mainWindow.on('focus', rebuildMenu);
+  if (process.platform === 'win32') {
+    nativeTheme.on('updated', refreshFrame);
+    mainWindow.once('closed', () => nativeTheme.off('updated', refreshFrame));
+  }
+  for (const event of ['resize', 'move', 'resized', 'moved', 'maximize', 'unmaximize', 'restore', 'enter-full-screen', 'leave-full-screen']) mainWindow.on(event, updateWindowFit);
   for (const event of ['resize', 'move', 'maximize', 'unmaximize']) mainWindow.on(event, queueWindowSave);
   mainWindow.on('blur', () => sendCommand('autosave-blur'));
   mainWindow.on('close', (event) => {
@@ -858,7 +896,7 @@ function createWindow() {
 }
 
 const controller = {
-  id, sendCommand, isTrustedRenderer, rebuildMenu, authorize, acceptLaunchPath, persistWindowBounds,
+  id, sendCommand, isTrustedRenderer, rebuildMenu, refreshFrame, authorize, acceptLaunchPath, persistWindowBounds,
   get window() { return mainWindow; },
   get activeDocument() { return activeDocument; },
   get saveOperation() { return saveOperation; },

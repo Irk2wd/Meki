@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('meki', Object.freeze({
     return () => ipcRenderer.removeListener('meki:update-state', listener);
   },
   boot: () => invoke('boot'),
+  showApplicationMenu: (left, bottom) => invoke('show-application-menu', left, bottom),
   newWindow: () => invoke('new-window'),
   detachDocument: tabId => invoke('detach-document', tabId),
   tileWindows: () => invoke('tile-windows'),

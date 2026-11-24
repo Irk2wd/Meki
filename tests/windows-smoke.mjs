@@ -57,7 +57,37 @@ async function launch(args = []) {
 async function crash() { if (app) { await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await app.close().catch(() => {}); app = null; } }
 async function quit() { const closed = app.waitForEvent('close'); await app.evaluate(({ app }) => { setTimeout(() => app.quit(), 20); }); await closed; app = null; }
 try {
-  let first = await launch(['--open', a]); await action(first, 'folder'); await append(first, '\nA unsaved before new window'); await open(first, b);
+  let first = await launch(['--open', a]);
+  if (['darwin', 'win32'].includes(process.platform)) {
+    const win = await app.browserWindow(first);
+    const bounds = await win.evaluate(win => win.getBounds());
+    await win.evaluate(win => win.setSize(880, 590));
+    const caption = first.locator('#window-caption');
+    await caption.getByRole('button', { name: '显示或隐藏侧栏' }).click();
+    await first.locator('body.sidebar-hidden').waitFor({ state: 'attached' });
+    await caption.getByRole('button', { name: '显示或隐藏侧栏' }).click();
+    const geometry = await caption.evaluate(node => {
+      const safe = navigator.windowControlsOverlay.getTitlebarAreaRect();
+      const buttons = [...node.querySelectorAll('button')].map(button => button.getBoundingClientRect());
+      return { safe: safe.width > 0 && buttons.every(box => box.left >= safe.left && box.right <= safe.right + 1),
+        drag: getComputedStyle(node).webkitAppRegion, clickable: [...node.querySelectorAll('button')].every(button => getComputedStyle(button).webkitAppRegion === 'no-drag') };
+    });
+    assert.deepEqual(geometry, { safe: true, drag: 'drag', clickable: true });
+    assert.equal(await caption.getByRole('button', { name: '应用菜单' }).count(), process.platform === 'win32' ? 1 : 0);
+    const surface = first.locator('#shell > .main-area');
+    assert.ok(await surface.evaluate(el => parseFloat(getComputedStyle(el).borderTopRightRadius) > 0));
+    await win.evaluate(win => win.maximize());
+    await first.waitForFunction(() => document.body.classList.contains('window-fitted') && getComputedStyle(document.querySelector('.main-area')).marginRight === '0px');
+    assert.equal(await surface.evaluate(el => getComputedStyle(el).borderTopRightRadius), '0px');
+    assert.equal(await first.evaluate(async () => (await window.meki.boot()).windowFitted), true);
+    await win.evaluate(win => win.unmaximize());
+    await first.waitForFunction(() => !document.body.classList.contains('window-fitted'));
+    assert.ok(await surface.evaluate(el => parseFloat(getComputedStyle(el).marginRight) > 0));
+    assert.equal(await first.evaluate(async () => (await window.meki.boot()).windowFitted), false);
+    await win.evaluate((win, size) => win.setBounds(size), bounds);
+    pass('native caption controls remain accessible and the reading surface follows maximize and restore');
+  }
+  await action(first, 'folder'); await append(first, '\nA unsaved before new window'); await open(first, b);
   let second = await newWindow(first);
   assert.equal(app.windows().length, 2); assert.equal(await first.locator('.document-tab').count(), 2); assert.equal((await active(second)).path, null);
   await tab(first, a); assert.match(await text(first), /A unsaved before new window/);

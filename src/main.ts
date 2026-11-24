@@ -30,6 +30,7 @@ import { normalizeCustomCss, writingAppearance, writingFont } from './appearance
 import { FontPicker } from './font-picker';
 import { ThemePicker } from './theme-picker';
 import './style.css';
+import { installWindowChrome } from './window-chrome';
 import './print.css';
 import './formula.css';
 import './settings.css';
@@ -360,6 +361,7 @@ async function runExport(options: ExportOptions) {
 }
 const exportDialog = new ExportDialog(runExport);
 async function dispatch(action: string, payload?: unknown) {
+  if (action === 'window-fit') { document.body.classList.toggle('window-fitted', payload === true); return; }
   if (action === 'window-notice') { notify(String(payload)); return; }
   if (action === 'settings-changed' && ready) {
     settings = { ...settings, ...payload as Partial<Settings> }; applySettings(); updateStatus(); documents.refreshSettings(); return;
@@ -585,6 +587,7 @@ async function start() {
   platform = boot.platform;
   aboutDialog = new AboutDialog(boot.version, () => updateDialog!.open());
   document.body.classList.add(`platform-${boot.platform}`);
+  installWindowChrome(boot.platform, boot.windowFitted, notify);
   settings = boot.settings; workspace = boot.workspace; recentFiles = boot.recentFiles; applySettings();
   panes = new PaneWorkspace({ settings: () => settings, blocked: () => busy || !ready || composing || !!document.querySelector('dialog[open]'),
     changed: (tab, content) => {

@@ -100,7 +100,10 @@ class WindowManager {
   }
   settingsChanged(source, patch) {
     const saved = Object.fromEntries(Object.keys(patch).map(key => [key, this.store.metadata.settings[key]]));
-    for (const item of this.controllers.values()) if (item.id !== source) item.sendCommand('settings-changed', saved);
+    for (const item of this.controllers.values()) {
+      if ('theme' in patch || 'installedThemes' in patch) item.refreshFrame();
+      if (item.id !== source) item.sendCommand('settings-changed', saved);
+    }
     this.refreshMenus();
   }
   async newWindow(source) {

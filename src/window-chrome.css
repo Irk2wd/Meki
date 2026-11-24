@@ -1,0 +1,69 @@
+@media screen {
+  body:is(.platform-win32, .platform-darwin) {
+    --window-caption-height: max(36px, env(titlebar-area-height, 0px));
+  }
+  :is(.platform-win32, .platform-darwin) #app {
+    --window-surround: var(--side);
+    --window-gutter: 8px;
+    --window-radius: 10px;
+    --window-line: color-mix(in srgb, var(--text) 14%, var(--window-surround));
+    display: flex;
+    flex-direction: column;
+    background: var(--window-surround);
+  }
+  :is(.platform-win32, .platform-darwin).window-inactive #app {
+    --window-line: color-mix(in srgb, var(--text) 8%, var(--window-surround));
+  }
+  #window-caption {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-inline: 10px;
+    min-height: var(--window-caption-height);
+    flex: none;
+    color: var(--soft);
+    -webkit-app-region: drag;
+    user-select: none;
+  }
+  .platform-darwin #window-caption {
+    padding-inline-start: max(78px, calc(env(titlebar-area-x, 0px) + 4px));
+  }
+  .platform-win32 #window-caption {
+    padding-inline-end: max(8px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 144px))));
+  }
+  #window-caption .brand { height: 28px; padding: 0 7px 0 0; gap: 5px; }
+  #window-caption .brand-mark { width: 26px; height: 26px; }
+  #window-caption .brand-mark svg { width: 21px; height: 21px; }
+  #window-caption .brand-wordmark { width: auto; height: 17px; }
+  #window-caption .brand-wordmark svg { width: auto; height: 100%; }
+  #window-caption button { -webkit-app-region: no-drag; }
+  #window-caption .icon-button { width: 28px; height: 26px; border-radius: 6px; }
+  #window-caption .icon-button:is(:hover, [aria-expanded="true"]) { color: var(--text); background: var(--hover); }
+  #window-caption + #shell { flex: 1; min-height: 0; height: auto; }
+  #window-caption + #shell > .sidebar { background: var(--window-surround); border-inline-end: 0; }
+  #window-caption + #shell > .main-area {
+    margin: 1px var(--window-gutter) var(--window-gutter) 1px;
+    border-radius: var(--window-radius);
+    background: var(--bg);
+    box-shadow: 0 0 0 1px var(--window-line);
+    overflow: clip;
+  }
+  :is(.sidebar-hidden, .focus-mode) #window-caption + #shell > .main-area { margin-inline-start: var(--window-gutter); }
+  .platform-darwin #window-caption + #shell .titlebar { padding-left: 16px; }
+  .window-fitted #window-caption + #shell > .main-area {
+    margin: 0; border-radius: 0; box-shadow: none;
+  }
+  @media (max-width: 760px) {
+    :is(.platform-win32, .platform-darwin) #app { --window-gutter: 4px; --window-radius: 7px; }
+    body:not(.window-fitted) #window-caption + #shell > .main-area { margin-inline-start: var(--window-gutter); }
+    #window-caption [data-action="sidebar"] { display: none; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    #window-caption + #shell > .main-area { transition: box-shadow 150ms ease-out; }
+  }
+  @media (forced-colors: active) {
+    #window-caption { background: Canvas; color: CanvasText; }
+    body:not(.window-fitted) #window-caption + #shell > .main-area { outline: 1px solid CanvasText; }
+  }
+}
+@media print { #window-caption { display: none; } }
