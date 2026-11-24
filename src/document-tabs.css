@@ -17,7 +17,7 @@
   flex: 0 0 auto;
   min-width: 95px;
   max-width: min(220px, 100%);
-  height: 28px;
+  height: 30px;
   border-radius: 6px;
   color: var(--soft);
 }
@@ -37,7 +37,7 @@
   box-shadow: inset 0 0 0 1px var(--border);
 }
 .document-tab button { border:0; background:transparent; color:inherit; cursor:pointer; padding:0; display:flex; gap:6px; align-items:center; font:inherit; font-size:12px; min-width:0 }
-.document-tab button[role="tab"] { height:100%; padding:0 2px 0 4px; flex:1 1 auto; overflow:hidden; border-radius:inherit }
+.document-tab button[role="tab"] { height:100%; padding:0 6px 0 8px; flex:1 1 auto; overflow:hidden; border-radius:inherit }
 .document-tab button[role="tab"] > span:nth-child(2) { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .document-tab .close-document-tab { width:26px; height:26px; margin-inline-end:1px; padding:0; flex:0 0 26px; justify-content:center; color:var(--soft); font-size:16px; line-height:1; border-radius:5px }
 .document-tab .close-document-tab:is(:hover, :focus-visible) { color:var(--text); background-color:color-mix(in srgb, var(--text) 9%, transparent) }

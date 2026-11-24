@@ -39,7 +39,8 @@ async function verify(label) {
     assert.ok(strip.active.left >= strip.bounds.left - 1 && strip.active.right <= strip.bounds.right + 1, `${label}: complete active tab must be visible: ${JSON.stringify(strip)}`);
     assert.ok(strip.close.width >= 24 && strip.close.left >= strip.bounds.left - 1 && strip.close.right <= strip.bounds.right + 1, `${label}: close button is clipped`);
     for (const [index, tab] of strip.tabs.entries()) {
-      assert.ok(tab.name.right <= tab.close.left + 1 && tab.close.right <= tab.tab.right + 1, `${label}: filename overlaps its close button`);
+      assert.ok(tab.close.left - tab.name.right >= 5 && tab.close.right <= tab.tab.right + 1, `${label}: filename needs space before the close button`);
+      assert.ok(tab.name.top - tab.tab.top >= 4 && tab.tab.bottom - tab.name.bottom >= 4, `${label}: filename needs space above and below`);
       assert.equal(tab.close.width, 26); assert.equal(tab.close.height, 26);
       assert.ok(Math.abs((tab.close.top + tab.close.bottom) / 2 - (tab.tab.top + tab.tab.bottom) / 2) < 1, `${label}: close button is not vertically centered`);
       if (index === 0) assert.equal(tab.divider, null, `${label}: divider before the first document`);
