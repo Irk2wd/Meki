@@ -171,9 +171,9 @@ try {
   await page.locator('#source-editor .cm-content').click();
   await page.keyboard.insertText('# 新文稿\n\n$$\ny=2\\label{fresh}\n$$\n\n$\\eqref{fresh}$\n');
   await page.locator('[data-mode="visual"]').click();
-  await page.waitForSelector('.ProseMirror svg [id$="-fresh"]');
-  assert.equal(await page.locator('.ProseMirror svg [id$="-fresh"] [data-c="31"]').count(),1);
-  assert.equal(await page.locator('.ProseMirror [data-mml-node="mlabeledtr"]').count(),1);
+  await page.waitForFunction(() =>
+    document.querySelectorAll('.ProseMirror svg [id$="-fresh"] [data-c="31"]').length === 1 &&
+    document.querySelectorAll('.ProseMirror [data-mml-node="mlabeledtr"]').length === 1);
   assert.ok(await linksResolve(page));
   await action('open');
   pass('new documents restart numbering and do not retain another document’s labels');
