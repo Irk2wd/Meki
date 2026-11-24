@@ -1,6 +1,6 @@
 import { ht, t } from '../electron/i18n.mjs';
 import eventIcons from '../electron/research-event-icons.json';
-import type { ResearchEntry, ResearchEvidenceFile, ResearchFilter, ResearchGoalMode, ResearchImportPreview, ResearchPhase, ResearchReference, ResearchRelationKind, ResearchSnapshot, ResearchType, ResearchWidth } from '../shared/research';
+import type { ResearchDocument, ResearchEntry, ResearchEvidenceFile, ResearchField, ResearchFilter, ResearchGoalMode, ResearchImportPreview, ResearchPhase, ResearchReference, ResearchRelationKind, ResearchSnapshot, ResearchType, ResearchValue, ResearchWidth } from '../shared/research';
 import { icon } from './icons';
 import { ResearchReportPreview } from './research-report-preview';
 import { showEvidenceTable } from './research-evidence-table';
@@ -27,6 +27,20 @@ export function runFields(): Record<string, string> {
 }
 
 const escape = escapeResearch;
+export function fieldValue(rule: ResearchField | undefined, value: ResearchValue) {
+  if (typeof value === 'boolean') return value ? t("是") : t("否");
+  return rule?.unit ? `${value} ${rule.unit}` : String(value);
+}
+
+export function fieldRuleDetails(rule: ResearchField, includeDescription = true) {
+  const kind = { text: t("文本"), number: t("数值"), boolean: t("是／否"), date: t("日期"), choice: t("枚举选项") };
+  return [kind[rule.type], rule.unit, rule.required ? t("必填") : t("可选字段"),
+    rule.min === undefined ? undefined : t("最小值 {0}", rule.min),
+    rule.max === undefined ? undefined : t("最大值 {0}", rule.max),
+    rule.options && t("选项 {0}", rule.options.join(' / ')),
+    rule.default === undefined ? undefined : t("新记录默认值 {0}", String(rule.default)),
+    includeDescription && rule.description].filter(Boolean).join(' · ');
+}
 const option = researchOption;
 const closeButton = (label = ht("取消")) => `<button type="button" class="icon-button" data-tools-close aria-label="${label}" title="${label}">${icon('close', 16)}</button>`;
 const heading = (title: string) => `<div class="dialog-heading"><h2 id="research-tools-title">${escape(title)}</h2>${closeButton()}</div>`;
@@ -142,6 +156,31 @@ export class ResearchTools {
       catch (error) { message.textContent = String(error).replace(/^Error: (?:Error invoking remote method '[^']+': Error: )?/, ''); }
       finally { this.submitting = false; buttons.forEach(button => { button.disabled = false; }); }
     });
+  }
+
+  showFieldRules({ record, fieldOrigins, currentFields }: ResearchDocument, manifestFile: string, origin: HTMLElement, selected?: string) {
+    const values = Object.entries(record.fields);
+    const expanded = selected ?? (values.length === 1 ? values[0][0] : undefined);
+    const rows = values.map(([id, value]) => {
+      const captured = Object.hasOwn(fieldOrigins || {}, id) ? fieldOrigins![id] : undefined;
+      const current = currentFields?.find(rule => rule.id === id);
+      const same = current && captured && JSON.stringify(current, Object.keys(current).sort()) === JSON.stringify(captured.rule, Object.keys(captured.rule).sort());
+      const describe = (rule: ResearchField) => `<span>${escape(rule.description || rule.label)}</span><small class="research-rule-constraints">${escape(rule.label)} · ${escape(fieldRuleDetails(rule, false))}</small>`;
+      const archive = manifestFile === 'meki-project.json' ? 'records/.field-rules' : '.mekir/field-rules';
+      return `<details class="research-rule-row" data-rule-id="${escape(id)}"${expanded === id ? ' open' : ''}>
+        <summary><span>${escape(captured?.rule.label || current?.label || id)}</span><strong>${escape(fieldValue(captured?.rule, value))}</strong></summary>
+        <dl><dt>${ht("记录采用的口径")}</dt><dd>${captured ? describe(captured.rule) : ht("写入时的定义未留存。")}</dd>
+          ${captured ? `<dt>${ht("取值来源")}</dt><dd>${captured.source === 'default' ? ht("创建时的项目默认值") : ht("记录写入值")}</dd>` : ''}
+          <dt>${ht("当前项目规则")}</dt><dd>${same ? ht("与记录采用的口径一致。") : current ? describe(current) : ht("当前记录类型已移除此字段。")}</dd></dl>
+        <details class="research-rule-files"><summary>${ht("规则文件")}</summary><dl>
+          ${captured && record.fieldRules ? `<dt>${ht("记录采用的口径")}</dt><dd><code>${archive}/${escape(record.fieldRules)}.json</code></dd>` : ''}
+          <dt>${ht("当前项目规则")}</dt><dd><code>${escape(manifestFile)} · ${escape(record.type)} / ${escape(id)}</code></dd></dl></details>
+      </details>`;
+    });
+    this.show(`<div class="dialog-heading"><div><h2 id="research-tools-title">${ht("字段口径")}</h2><small>${escape(record.title)}</small></div>${closeButton(ht("关闭"))}</div>${rows.join('')}`, 'research-field-rules');
+    const first = this.dialog.querySelector<HTMLElement>(expanded ? 'details[open] summary' : 'summary');
+    first?.focus();
+    this.dialog.addEventListener('close', () => { if (!this.dialog.open && origin.isConnected) origin.focus({ preventScroll: true }); }, { once: true });
   }
 
   editDescription({ root, project, revision }: ResearchSnapshot, focus: () => void) {

@@ -80,6 +80,50 @@ test('a legacy project keeps its records and sibling Markdown links', async t =>
   await assert.rejects(fs.access(path.join(root, '.mekir')), { code: 'ENOENT' });
 });
 
+test('field definitions follow each written value across configuration changes, retries and raw editor saves', async t => {
+  const store = await ResearchStore.initialize(await projectFolder(t), exampleProject, exampleRecords);
+  const first = await store.read('forest-validation');
+  assert.equal(first.fieldOrigins.gpu_ms.rule.unit, 'ms');
+  assert.equal(first.fieldOrigins.gpu_ms.source, 'record');
+  assert.equal(first.fieldOrigins.gpu.source, 'default');
+  const { project, revision } = await store.manifest();
+  const type = project.recordTypes.find(type => type.id === first.record.type);
+  type.fields.find(rule => rule.id === 'gpu_ms').description = 'Revised timing protocol.';
+  type.fields = type.fields.filter(rule => rule.id !== 'gpu');
+  type.template = type.template.replace('{{field.gpu}}', '');
+  await store.configure({ ifRevision: revision, project });
+  const read = () => store.read(first.record.id);
+  const batch = (record, patch) => store.writeBatch({ records: [{ id: record.record.id, ifRevision: record.revision, ...patch }] });
+  await batch(first, { body: 'Revised notes.' });
+  const note = await read();
+  assert.equal(note.record.fieldRules, first.record.fieldRules);
+  assert.deepEqual(note.fieldOrigins, first.fieldOrigins);
+  await batch(note, { fields: { gpu_ms: 13 } });
+  assert.equal((await batch(note, { fields: { gpu_ms: 13 } })).records[0].changed, false);
+  const revised = await read();
+  assert.equal(revised.fieldOrigins.gpu_ms.rule.description, 'Revised timing protocol.');
+  assert.deepEqual(revised.fieldOrigins.gpu, first.fieldOrigins.gpu);
+  const file = path.join(store.root, revised.relativePath);
+  const disk = await fs.readFile(file, 'utf8');
+  const edit = { path: file, revision: revised.revision, content: disk.replace('"gpu_ms": 13', '"gpu_ms": 14') };
+  let saved;
+  await store.saveDocument(edit, async document => { saved = document.content; await fs.writeFile(file, saved); });
+  assert.equal((await read()).record.fields.gpu_ms, 14);
+  assert.equal((await read()).fieldOrigins.gpu_ms.rule.description, 'Revised timing protocol.');
+  await fs.writeFile(file, saved.replace('"gpu_ms": 14', '"gpu_ms": 15'));
+  const external = await read();
+  assert.equal(external.fieldOrigins.gpu_ms, undefined);
+  assert.deepEqual(external.fieldOrigins.gpu, first.fieldOrigins.gpu);
+  await batch(external, { fields: { gpu: null } });
+  const cleared = await read();
+  assert.equal(cleared.fieldOrigins?.gpu, undefined);
+  assert.equal(cleared.fieldOrigins?.gpu_ms, undefined);
+  const original = await store.read('baseline-city');
+  await fs.unlink(path.join(store.root, '.mekir/field-rules', original.record.fieldRules + '.json'));
+  assert.equal((await store.read('baseline-city')).fieldOrigins, undefined);
+  assert.match((await store.read('baseline-city')).body, /12\.8/);
+});
+
 test('the index reserves IDs and resolves only documents inside the project', async t => {
   const root = await projectFolder(t);
   const store = await ResearchStore.initialize(root, exampleProject, exampleRecords);

@@ -8,6 +8,7 @@ const { atomicWrite, readBytes, decodeDocument, digest, isDocumentPath, isWithin
 const { WorkspaceStore } = require('./workspace-store.cjs');
 const { bindDirectory, boundSources, sourceDirectory, evidencePath } = require('./research-evidence.cjs');
 const { researchMatcher } = require('./research-filter.cjs');
+const { captureFieldRules, readFieldOrigins, saveFieldRules } = require('./research-field-history.cjs');
 const { planArchive, MAX_RUNS } = require('./research-import.cjs');
 const { comparisonImages } = require('./research-comparison.mjs');
 const {
@@ -33,8 +34,8 @@ function revisionConflict(label) {
 }
 
 function publicRecord(item) {
-  const { record, revision, relativePath, body } = item;
-  return { record, revision, relativePath, body };
+  const { record, revision, relativePath, body, fieldOrigins } = item;
+  return { record, revision, relativePath, body, ...(fieldOrigins && { fieldOrigins }) };
 }
 
 function recordReference({ record, relativePath }) {
@@ -126,7 +127,10 @@ class ResearchStore {
     await fs.mkdir(destination);
     await fs.mkdir(path.join(destination, METADATA));
     for (const directory of store.recordDirectories) await fs.mkdir(directory);
-    for (const item of changes) await atomicWrite(path.join(destination, item.relativePath), item.bytes);
+    for (const item of changes) {
+      await saveFieldRules(store, item.record, item.ruleBytes);
+      await atomicWrite(path.join(destination, item.relativePath), item.bytes);
+    }
     await atomicWrite(store.indexPath, encodeJson({ version: 1, documents: {} }));
     await fs.writeFile(path.join(destination, 'AGENTS.md'), projectGuide, { flag: 'wx' });
     // The manifest makes the project visible to the app once its files are ready.
@@ -166,13 +170,15 @@ class ResearchStore {
       (pathKey(path.dirname(file)) === pathKey(directory) && RECORD_FILE.test(path.basename(file))));
   }
 
-  async readFile(target, recordId) {
+  async readFile(target, recordId, includeRules = false, cache) {
     const entry = await statIfPresent(target);
     assert(entry?.isFile(), `Record ${recordId} does not exist as a regular Markdown file.`);
     const { bytes, mode } = await readBytes(target);
     const { content, newline, bom } = decodeDocument(bytes);
+    const document = parseMarkdown(content, recordId);
     return {
-      ...parseMarkdown(content, recordId), revision: digest(bytes), mode, newline, bom,
+      ...document, revision: digest(bytes), mode, newline, bom,
+      fieldOrigins: includeRules ? await readFieldOrigins(this, document.record, cache) : undefined,
       relativePath: portablePath(path.relative(this.root, target)),
     };
   }
@@ -193,11 +199,17 @@ class ResearchStore {
   async read(recordId) {
     const target = await this.findRecord(recordId);
     assert(target, `Record ${recordId} does not exist.`);
-    return publicRecord(await this.readFile(target, recordId));
+    const item = publicRecord(await this.readFile(target, recordId, true));
+    if (Object.keys(item.record.fields).length) {
+      const { project } = await this.manifest();
+      item.currentFields = project.recordTypes.find(type => type.id === item.record.type)?.fields.filter(rule => Object.hasOwn(item.record.fields, rule.id)) || [];
+    }
+    return item;
   }
 
   async catalog(bodyIds = new Set(), matches, excerptTypes) {
     const items = new Map();
+    const rules = new Map();
     const problems = [];
     const seen = new Set();
     const matchingIds = [];
@@ -214,7 +226,7 @@ class ResearchStore {
             throw new Error(`Multiple files use record ID ${recordId}.`);
           }
           seen.add(recordId);
-          const item = await this.readFile(target, recordId);
+          const item = await this.readFile(target, recordId, Boolean(excerptTypes) || bodyIds.has(recordId), rules);
           if (matches?.(item)) matchingIds.push(recordId);
           if (excerptTypes) {
             const type = excerptTypes.get(item.record.type);
@@ -402,8 +414,8 @@ class ResearchStore {
     const { items, problems, matchingIds } = await this.catalog(new Set(), filter && researchMatcher(validateFilter(filter), project),
       new Map(project.recordTypes.map(type => [type.id, type])));
     const index = await this.documentIndex(items, await this.readIndex());
-    const records = [...items.values()].map(({ record, revision, relativePath, excerpt }) => ({
-      record, revision, relativePath, ...(excerpt ? { excerpt } : {}),
+    const records = [...items.values()].map(({ record, revision, relativePath, excerpt, fieldOrigins }) => ({
+      record, revision, relativePath, ...(fieldOrigins && { fieldOrigins }), ...(excerpt ? { excerpt } : {}),
       issues: [
         ...relationshipIssues(record, project),
         ...fieldIssues(record, project.recordTypes.find(type => type.id === record.type)).map(issue => issue.message),
@@ -491,6 +503,7 @@ class ResearchStore {
       if (item.bytes) {
         const directory = path.dirname(target);
         assert(await this.directory(directory, true), `Missing record folder: ${directory}.`);
+        await saveFieldRules(this, item.record, item.ruleBytes);
         await atomicWrite(target, item.bytes, { mode: item.mode, beforeCommit: async () => {
           const current = await this.findRecord(item.record.id);
           if (current && pathKey(current) !== pathKey(target)) throw revisionConflict(item.record.id);
@@ -522,7 +535,7 @@ class ResearchStore {
       for (const change of changes) {
         const old = items.get(change.id);
         if (!old) { change.body = bodies.get(change.id); continue; }
-        const full = await this.readFile(path.join(this.root, old.relativePath), change.id);
+        const full = await this.readFile(path.join(this.root, old.relativePath), change.id, true);
         if (full.revision !== old.revision) throw revisionConflict(change.id);
         if (full.record.run?.importedBodyRevision === digest(Buffer.from(full.body))) change.body = bodies.get(change.id);
         items.set(change.id, full);
@@ -582,13 +595,24 @@ class ResearchStore {
       assert(!entry || entry.isFile(), 'The record path must be a regular file.');
       const revision = entry ? digest((await readBytes(target)).bytes) : null;
       if (!overwrite && revision !== document.revision) throw new RevisionConflictError(target);
-      const { items } = await this.catalog();
+      const { items } = await this.catalog(new Set([recordId]));
       const index = await this.readIndex();
       assert(!index.paths.has(recordId) && !index.evidence.has(recordId), `The document index already uses ID ${recordId}.`);
       const { documents } = await this.documentIndex(items, index);
-      const { record } = parseMarkdown(document.content.replace(/\r\n/g, '\n'), recordId);
-      validateChange(record, items.get(recordId)?.record, project, documents);
-      return save();
+      const normalized = document.content.replace(/\r\n/g, '\n');
+      const { record } = parseMarkdown(normalized, recordId);
+      const previous = items.get(recordId);
+      validateChange(record, previous?.record, project, documents);
+      const submitted = record.fieldRules;
+      const bytes = captureFieldRules(record, previous, project.recordTypes.find(type => type.id === record.type), record.fields);
+      if (record.fieldRules === submitted) {
+        await saveFieldRules(this, record, bytes);
+        return save(document);
+      }
+      const content = normalized.replace(/^---[ \t]*\n[\s\S]*?\n---[ \t]*(?=\n|$)/, () => `---\n${JSON.stringify(record, null, 2)}\n---`);
+      parseMarkdown(content, recordId);
+      await saveFieldRules(this, record, bytes);
+      return save({ ...document, content });
     });
   }
 
@@ -620,6 +644,7 @@ class ResearchStore {
       if (body !== undefined) assert(typeof body === 'string' && !body.includes('\0'), 'body must be Markdown text.');
       validateChange(record, existing?.record, project, documents, pending);
       const markdown = body?.replace(/\r\n/g, '\n') ?? existing?.body ?? templateBody(record, project, documents, this.sourceHref);
+      const ruleBytes = captureFieldRules(record, existing, type, patch);
       if (existing && isDeepStrictEqual(existing.record, record) && existing.body === markdown) return existing;
       if ((ifRevision ?? null) !== (existing?.revision ?? null)) throw revisionConflict(change.id);
       const normalized = formatMarkdown(record, markdown);
@@ -629,7 +654,7 @@ class ResearchStore {
       assert(bytes.length <= MAX_DOCUMENT_BYTES, 'The Markdown record exceeds 16 MB.');
       const directory = this.summaryPath && record.coverage ? SUMMARIES : RECORDS;
       const item = {
-        record, body: markdown, bytes, revision: digest(bytes), before: existing?.revision ?? null,
+        record, body: markdown, bytes, ruleBytes, revision: digest(bytes), before: existing?.revision ?? null,
         relativePath: existing?.relativePath ?? `${directory}/${fileName(record.id)}`, mode: existing?.mode,
       };
       items.set(record.id, item);
@@ -654,6 +679,8 @@ const projectGuide = `# mekiR 研究项目的 Agent 指引
 在 \`fields\` 中使用字段 ID。按字段说明从实际产物取值，遵守类型、单位、范围与必填要求。枚举使用 \`options\` 中的原值。用正文说明缺失数据及原因。若必填项缺少有效值和可用默认值，先补证据。
 
 ## 写入记录
+
+读取历史字段时，先核对 read 或 list 给出的 fieldOrigins。rule 是该值写入时采用的定义，source 为 record（明确写入）或 default（创建时采用项目默认值）。用 read.currentFields 对照当前定义。缺少来源时把历史口径记为未知。通过 batch 更新实际改变的字段，保留项目内 field-rules 快照和文稿中的引用。
 
 1. 用 \`list\` 查找同一轮运行，复用稳定记录 ID。用 \`read <目录> <ID>\` 获取已有的字段、正文和 \`revision\`。发生日期采用项目时区的实际日期。
 2. 用 \`batch <目录> --input <文件或 ->\` 提交 \`ifProjectRevision\` 和 \`records\`。前者取自 \`describe.revision\`。新记录提交 \`id\`、\`ifRevision: null\`、\`type\`、\`title\`、\`date\` 及所需属性。已有记录提交 \`id\`、\`read.revision\` 作为 \`ifRevision\`，以及要修改的内容。

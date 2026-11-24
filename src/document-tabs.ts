@@ -6,6 +6,7 @@ import './document-tabs.css';
 import type { PaneWorkspace, DockRequest } from './pane-workspace';
 import { groups, reconcileLayout, type PaneLayout } from '../electron/pane-layout.mjs';
 import { configureTabStrip, revealActiveTab } from './tab-strip';
+import { separateMetadata } from './markdown';
 
 export interface DocumentTab {
   id: string; document: DocumentFile; savedContent: string; snapshot?: EditorSnapshot;
@@ -235,6 +236,14 @@ export class DocumentTabs {
     if (!result) return false;
     // Only the bytes submitted to this save become the baseline. Later keystrokes stay dirty.
     this.hooks.editor().flush();
+    if (result.content !== snapshot.content && /(?:^|[\\/])r-[a-z][a-z0-9_-]*\.md$/.test(result.path || '')) {
+      const before = separateMetadata(snapshot.content), after = separateMetadata(result.content);
+      if (before.prefix && after.prefix && before.body === after.body && tab.document.content.startsWith(before.prefix)) {
+        tab.document.content = after.prefix + tab.document.content.slice(before.prefix.length);
+        tab.snapshot = undefined;
+        this.hooks.panes().views.get(tab.id)?.editor.applyResearchHeader(before.prefix, after.prefix);
+      }
+    }
     tab.document.path = result.path; tab.document.name = result.name; tab.document.revision = result.revision; tab.savedContent = result.content;
     tab.paused = null; tab.status = null; tab.acknowledged = ''; tab.recovered = false;
     try { await this.persist(); }

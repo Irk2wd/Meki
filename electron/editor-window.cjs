@@ -232,7 +232,7 @@ async function saveDocument(input) {
 }
 
 async function saveToDisk(document, options = {}) {
-  const save = () => store.saveDocument(document, { ...options, beforeReplace: (filePath, bytes) => lifecycle.record(filePath, bytes) });
+  const save = (file = document) => store.saveDocument(file, { ...options, beforeReplace: (filePath, bytes) => lifecycle.record(filePath, bytes) });
   const project = await ResearchStore.forDocument(document.path);
   return project ? project.saveDocument(document, save, options.overwrite) : save();
 }
@@ -688,7 +688,14 @@ function registerIpc() {
   register('create-research-demo', createResearchDemo);
   register('configure-research-project', async (root, input) => { await (await requireResearch(root)).configure(input); });
   register('write-research-batch', async (root, input) => (await requireResearch(root)).writeBatch(input));
-  register('read-research-record', async (root, id) => (await requireResearch(root)).read(id));
+  register('read-research-record', async (root, id, sourceDocument) => {
+    const active = await requireResearch(root);
+    const linked = await linkedDocumentProject(sourceDocument);
+    if (!linked) return active.read(id);
+    const file = await linked.findRecord(id);
+    if (!file || pathKey(file) !== pathKey(sourceDocument)) throw new Error(t("这份阶段总结在当前项目中暂不可用。"));
+    return linked.read(id);
+  });
   register('open-research-record', async (root, recordId) => {
     const selected = workspaceStore;
     const project = await requireResearch(root);

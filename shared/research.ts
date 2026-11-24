@@ -36,6 +36,8 @@ export interface ResearchType {
   template: string;
 }
 
+export interface ResearchFieldOrigin { source: 'record' | 'default'; rule: ResearchField }
+
 export interface ResearchView {
   id: string;
   label: string;
@@ -138,17 +140,19 @@ export interface ResearchRecord {
   run?: ResearchRun;
   comparison?: ResearchComparison;
   fields: Record<string, ResearchValue>;
+  fieldRules?: string;
 }
 
 export interface ResearchEntry {
   record: ResearchRecord;
   excerpt?: string;
+  fieldOrigins?: Record<string, ResearchFieldOrigin>;
   revision: string;
   relativePath: string;
   issues: string[];
 }
 
-export interface ResearchDocument extends Omit<ResearchEntry, 'issues'> { body: string }
+export interface ResearchDocument extends Omit<ResearchEntry, 'issues'> { body: string; currentFields?: ResearchField[] }
 
 
 export interface ResearchReference {
@@ -183,7 +187,7 @@ export interface ResearchSnapshot {
 
 export interface ResearchBatch {
   ifProjectRevision?: string;
-  records: Array<Partial<Omit<ResearchRecord, 'fields'>> & {
+  records: Array<Partial<Omit<ResearchRecord, 'fields' | 'fieldRules'>> & {
     id: string;
     ifRevision?: string | null;
     body?: string;

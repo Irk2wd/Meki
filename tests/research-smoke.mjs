@@ -586,6 +586,7 @@ try {
   const config = discovery.project;
   assert.equal(config.recordTypes.find(type => type.id === 'experiment').fields.find(field => field.id === 'gpu_ms').min, 0);
   const experiment = config.recordTypes.find(type => type.id === 'experiment');
+  experiment.fields.find(field => field.id === 'gpu_ms').description = '固定机位，并保存原始逐帧计时表。';
   experiment.fields.push({ id: 'build', label: '渲染构建', type: 'text', required: true, description: '渲染器 commit 或制品 ID。' });
   const outcome = experiment.fields.find(field => field.id === 'outcome');
   outcome.options = ['有效', '待复核', '无效'];
@@ -605,6 +606,13 @@ try {
   await page.locator('.research-rules').getByText(/最小值 0/).waitFor();
   await page.locator('.research-rules').getByText(/新记录默认值 待复核/).waitFor();
   await verificationView.click();
+  const metric = page.locator('[data-field-record=forest-validation][data-research-field=gpu_ms]');
+  await metric.click();
+  const historicalRules = page.locator('#research-tools-dialog [data-rule-id=gpu_ms][open]');
+  await historicalRules.getByText(/去掉预热帧后的 GPU 帧时间中位数/).waitFor();
+  await historicalRules.getByText(/固定机位，并保存原始逐帧计时表/).waitFor();
+  await page.keyboard.press('Escape');
+  await metric.and(page.locator(':focus')).waitFor();
   await page.locator('[data-research-edit=forest-validation]').click();
   assert.equal(await dialog.locator('[name=field-build]').inputValue(), '');
   assert.equal(await dialog.locator('[name=field-outcome] option:checked').innerText(), '历史值 需复测');
@@ -613,8 +621,31 @@ try {
   await dialog.waitFor({ state: 'hidden' });
   const historical = command('read', ['forest-validation']).record.fields;
   assert.equal(historical.gpu_ms, 11.5);
+  assert.equal(command('read', ['forest-validation']).fieldOrigins.gpu_ms.rule.description, '固定机位，并保存原始逐帧计时表。');
   assert.equal(historical.outcome, '需复测');
   assert.equal(Object.hasOwn(historical, 'build'), false);
+  await page.locator('.research-entry-title [data-research-record=forest-validation]').click();
+  await page.locator('[data-action=research-edit-body]').click();
+  await page.locator('[data-mode=source]').click();
+  const previousTiming = command('read', ['forest-validation']);
+  const timingMarkdown = await fs.readFile(path.join(project, previousTiming.relativePath), 'utf8');
+  await page.locator('#source-editor .cm-content').click();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+  await page.keyboard.insertText(timingMarkdown.replace('"gpu_ms": 11.5', '"gpu_ms": 11.6'));
+  await page.locator('[data-action=save]').click();
+  await idle();
+  const savedTiming = command('read', ['forest-validation']);
+  assert.equal(savedTiming.record.fields.gpu_ms, 11.6);
+  assert.notEqual(savedTiming.record.fieldRules, previousTiming.record.fieldRules);
+  assert.equal(await page.locator('#dirty-dot').isVisible(), false);
+  await page.locator('[data-action=research-edit-body]').click();
+  await page.locator('#research-field-toggle').click();
+  const readerRule = page.locator('#research-tools-dialog [data-rule-id=gpu_ms]');
+  await readerRule.locator('> summary').click();
+  await readerRule.getByText('11.6 ms', { exact: true }).waitFor();
+  await readerRule.getByText('与记录采用的口径一致。').waitFor();
+  await page.keyboard.press('Escape');
+  await closeReader();
   const original = command('read', [manual.id]);
   const run = {
     id: 'agent-verification', type: experiment.id, title: 'Agent 批次复测', date: '2026-11-18', phaseId: 'validation',

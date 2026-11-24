@@ -10,7 +10,7 @@ import type { EditorView } from '@milkdown/kit/prose/view';
 import { TimelineEventLayout, timelineEventButton, type TimelineEventDay } from './research-timeline-events';
 import { adjustDays, brushDays, datesForDays, dayNumber, isoDay, shiftRange, timelineOverview, type RangeHandle, type TimelineWindow } from './research-timeline-range';
 import { reportReferences } from './research-report-links';
-import { escapeResearch as escape, relationLabels, researchOption as option, ResearchTools, runFields, timelineIcon, type ResearchWidths } from './research-tools';
+import { escapeResearch as escape, fieldRuleDetails, fieldValue, relationLabels, researchOption as option, ResearchTools, runFields, timelineIcon, type ResearchWidths } from './research-tools';
 import './research-workspace.css';
 
 const errorText = (error: unknown) => String(error).replace(/^Error: (?:Error invoking remote method '[^']+': Error: )?/, '');
@@ -102,11 +102,6 @@ function groupByPhase(entries: ResearchEntry[]) {
   return phases;
 }
 
-function fieldValue(rule: ResearchField, value: ResearchValue) {
-  if (typeof value === 'boolean') return value ? t("是") : t("否");
-  return rule.unit ? `${value} ${rule.unit}` : String(value);
-}
-
 function fieldControl(rule: ResearchField, value: ResearchValue | undefined, validate: boolean) {
   const name = `name="field-${rule.id}"${validate && rule.required ? ' required' : ''}`;
   const text = value === undefined ? '' : String(value);
@@ -121,14 +116,6 @@ function fieldControl(rule: ResearchField, value: ResearchValue | undefined, val
   return `<input ${name} type="${rule.type}" value="${escape(text)}" maxlength="1000"${number}>`;
 }
 
-function fieldRuleDetails(rule: ResearchField) {
-  return [rule.type, rule.unit, rule.required ? t("必填") : t("可选字段"),
-    rule.min === undefined ? undefined : t("最小值 {0}", rule.min),
-    rule.max === undefined ? undefined : t("最大值 {0}", rule.max),
-    rule.options && t("选项 {0}", rule.options.join(' / ')),
-    rule.default === undefined ? undefined : t("新记录默认值 {0}", String(rule.default)),
-    rule.description].filter(Boolean).join(' · ');
-}
 interface TimelineOptions {
   revealPhase?: string;
   activePhase: string;
@@ -646,7 +633,7 @@ export class ResearchWorkspace {
     const phase = state.project.phases.find(item => item.id === entry?.phaseId);
     const type = state.project.recordTypes.find(item => item.id === entry?.type);
     const sourceProject = this.snapshot?.root !== state.root ? state.project.title : '';
-    return { id: reference.id, linkedProject: sourceProject ? state.project.id : '', title: reference.title, context: [sourceProject, phase?.title, type?.label || t("资料"), entry?.date,
+    return { id: reference.id, linkedProject: sourceProject ? state.project.id : '', hasFields: Boolean(entry && Object.keys(entry.fields).length), title: reference.title, context: [sourceProject, phase?.title, type?.label || t("资料"), entry?.date,
       entry?.run?.missing.includes('RUN.md') ? t("待补报告") : ''].filter(Boolean).join(' · ') };
   }
 
@@ -693,6 +680,21 @@ export class ResearchWorkspace {
       ${run && context ? `<details><summary>${ht("运行信息")}${run.missing.length ? ` · ${ht("缺件 {0} 项", run.missing.length)}` : ''}</summary>
         <dl>${Object.entries(context).map(([key, value]) => `<dt>${escape(fields[key] || key)}</dt><dd>${escape(value)}</dd>`).join('')}
           ${run.missing.length ? `<dt>${ht("缺件")}</dt><dd>${escape(run.missing.join(', '))}</dd>` : ''}</dl></details>` : ''}`;
+  }
+  showReaderFields(path: string | null, origin: HTMLElement) {
+    const source = this.readerReference(path);
+    if (source && path) void this.showFields(source.reference.id, source.state, origin, undefined, path).catch(error => this.hooks.notify(errorText(error), true));
+  }
+  private async showFields(id: string, state: ResearchSnapshot, origin: HTMLElement, field?: string, path?: string) {
+    const root = this.root;
+    if (!root) return;
+    const request = ++this.referenceRequest;
+    const reader = this.readerItem;
+    const record = await window.meki.readResearchRecord(root, id, path);
+    if (request !== this.referenceRequest || root !== this.root || (path && (!this.readerOpen || reader !== this.readerItem))) return;
+    const trigger = origin.isConnected ? origin : field && this.content.querySelector<HTMLElement>(
+      `[data-field-record="${CSS.escape(id)}"][data-research-field="${CSS.escape(field)}"]`);
+    if (trigger) this.tools.showFieldRules(record, state.manifestFile, trigger, field);
   }
 
   clearReaderFigures() {
@@ -1353,10 +1355,12 @@ export class ResearchWorkspace {
     const titles = new Map(state.documents.map(({ id, title }) => [id, title]));
     return Array.from(byDate, ([date, items]) => `<div class="research-date-group">
       <time datetime="${date}">${escape(date)}</time>
-      <ul>${items.map(({ record, issues }) => {
+      <ul>${items.map(({ record, issues, fieldOrigins }) => {
         const type = state.project.recordTypes.find(item => item.id === record.type);
         const phase = state.project.phases.find(item => item.id === record.phaseId);
-        const fields = type?.fields.filter(rule => (!view?.fieldIds || view.fieldIds.includes(rule.id)) && Object.hasOwn(record.fields, rule.id)) || [];
+        const current = new Map(type?.fields.map(rule => [rule.id, rule]));
+        const fields = [...new Set([...current.keys(), ...Object.keys(record.fields)])]
+          .filter(id => Object.hasOwn(record.fields, id) && (!view?.fieldIds || view.fieldIds.includes(id)));
         const sources = [...new Set([...(record.sources || []), ...(record.evidence || [])])].filter(id => titles.has(id));
         return `<li class="research-entry">
           <div class="research-entry-title"><span class="research-entry-type${record.coverage ? ' summary' : ''}">${escape(type?.label || record.type)}</span>
@@ -1367,7 +1371,10 @@ export class ResearchWorkspace {
           ${phase || record.coverage || fields.length ? `<div class="research-entry-meta">
             ${phase ? `<span>${escape(phase.title)}</span>` : ''}
             ${record.coverage ? `<span>${ht("覆盖 {0}", escape(rangeText(record.coverage)))}</span>` : ''}
-            ${fields.map(rule => `<span>${escape(rule.label)} <strong>${escape(fieldValue(rule, record.fields[rule.id]))}</strong></span>`).join('')}
+            ${fields.map(id => {
+              const rule = Object.hasOwn(fieldOrigins || {}, id) ? fieldOrigins![id].rule : undefined;
+              return `<button type="button" data-research-field="${escape(id)}" data-field-record="${escape(record.id)}" title="${ht("字段口径")}">${escape(rule?.label || current.get(id)?.label || id)} <strong>${escape(fieldValue(rule, record.fields[id]))}</strong></button>`;
+            }).join('')}
           </div>` : ''}
           ${sources.length ? `<div class="research-sources"><span>${ht("来源文档")}</span>${sources.map(id => `<button type="button" data-research-record="${id}">${escape(titles.get(id)!)}</button>`).join('')}</div>` : ''}
           ${issues.length ? `<p class="research-issues">${escape(issues.join(' '))}</p>` : ''}
@@ -1415,6 +1422,10 @@ export class ResearchWorkspace {
     }
     if (this.hooks.blocked()) return;
     const data = button.dataset;
+    if (data.researchField && data.fieldRecord) {
+      await this.showFields(data.fieldRecord, state, button, data.researchField);
+      return;
+    }
     if (data.researchProgressLink) { await this.openReference(data.researchProgressLink, button); return; }
     if (data.researchTimelineEvents) {
       const ids = new Set(data.researchTimelineEvents.split(' '));
@@ -1697,6 +1708,7 @@ export class ResearchWorkspace {
       const control = this.input(`field-${rule.id}`);
       if (control.value === this.initialFieldValues.get(rule.id)) continue;
       const value = rule.type === 'text' ? control.value.trim() : control.value;
+      if (!original && rule.default !== undefined && value === String(rule.default)) continue;
       fields[rule.id] = !value ? null : rule.type === 'number' ? Number(value) : rule.type === 'boolean' ? value === 'true' : value;
     }
     const date = this.input('date').value;

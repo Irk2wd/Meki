@@ -13,7 +13,7 @@ import { toggleStrongCommand, toggleEmphasisCommand, wrapInBulletListCommand, cr
 import { type EditorState as RichState } from '@milkdown/kit/prose/state';
 import { closeHistory } from '@milkdown/kit/prose/history';
 import { EditorView, basicSetup } from 'codemirror';
-import { EditorState } from '@codemirror/state';
+import { EditorState, Transaction } from '@codemirror/state';
 import { isolateHistory } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { searchKeymap } from '@codemirror/search';
@@ -188,6 +188,13 @@ export class WritingEditor {
     this.visualContent = content;
     this.updating = false; this.code.loading = false;
     this.search.documentSwitched(); this.writing.updated();
+  }
+  applyResearchHeader(before: string, after: string) {
+    this.metadata = after;
+    if (this.visualContent.startsWith(before)) this.visualContent = after + this.visualContent.slice(before.length);
+    if (this.source.state.doc.sliceString(0, before.length) === before) {
+      this.source.dispatch({ changes: { from: 0, to: before.length, insert: after }, annotations: Transaction.addToHistory.of(false) });
+    }
   }
   snapshot(): EditorSnapshot {
     this.flush();

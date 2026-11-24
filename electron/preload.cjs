@@ -55,7 +55,7 @@ contextBridge.exposeInMainWorld('meki', Object.freeze({
   createResearchDemo: () => invoke('create-research-demo'),
   configureResearchProject: (root, input) => invoke('configure-research-project', root, input),
   writeResearchBatch: (root, input) => invoke('write-research-batch', root, input),
-  readResearchRecord: (root, id) => invoke('read-research-record', root, id),
+  readResearchRecord: (root, id, sourceDocument) => invoke('read-research-record', root, id, sourceDocument),
   openResearchRecord: (root, id) => invoke('open-research-record', root, id),
   openLinkedResearchSummary: (root, projectId, id) => invoke('open-linked-research-summary', root, projectId, id),
   bindResearchSource: (root, id, label) => invoke('bind-research-source', root, id, label),

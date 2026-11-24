@@ -69,7 +69,7 @@ document.querySelector('#app')!.innerHTML = `
         ${button('research-reader-back', ht("返回研究列表"), 'back')}
         <div class="research-reader-heading"><span id="research-reader-context"></span><h2 id="research-reader-title" tabindex="-1"></h2></div>
       </div>
-      <div class="research-reader-utilities"><button type="button" id="research-reference-toggle" aria-expanded="false" aria-controls="research-reader-related" hidden>${icon('link', 15)}<span>${ht("证据与关联")}</span>${icon('down', 12)}</button></div>
+      <div class="research-reader-utilities"><button type="button" id="research-field-toggle" aria-haspopup="dialog" hidden>${icon('list', 15)}<span>${ht("字段口径")}</span></button><button type="button" id="research-reference-toggle" aria-expanded="false" aria-controls="research-reader-related" hidden>${icon('link', 15)}<span>${ht("证据与关联")}</span>${icon('down', 12)}</button></div>
       <div class="research-reader-actions">
         <button type="button" class="icon-button" data-peek-step="-1" hidden title="${ht("上一条记录")}" aria-label="${ht("上一条记录")}">${icon('back', 15)}</button>
         <button type="button" class="icon-button" data-peek-step="1" hidden title="${ht("下一条记录")}" aria-label="${ht("下一条记录")}">${icon('chevron', 15)}</button>
@@ -157,6 +157,8 @@ interface ResearchReaderStep { tabId: string; scroll: number; editing: boolean; 
 const researchReaderHistory: ResearchReaderStep[] = [];
 let researchRelatedMarkup = '';
 const researchReferenceToggle = el<HTMLButtonElement>('#research-reference-toggle');
+const researchFieldToggle = el<HTMLButtonElement>('#research-field-toggle');
+researchFieldToggle.addEventListener('click', () => researchUI.showReaderFields(current.path, researchFieldToggle));
 const researchRelatedPanel = el('#research-reader-related');
 researchReferenceToggle.addEventListener('click', () => {
   const expanded = researchReferenceToggle.getAttribute('aria-expanded') !== 'true';
@@ -271,6 +273,7 @@ function updateStatus() {
   el('#document-name').title = current.path || t("尚未保存到文件");
   if (researchUI.readerOpen) {
     const label = researchUI.readerLabel(current.path);
+    researchFieldToggle.hidden = !label?.hasFields;
     researchUI.selectReaderItem(label?.id, label?.linkedProject);
     el('#research-reader-title').textContent = label?.title || current.name;
     el('#research-reader-context').textContent = [label?.context || t("资料"), dirty() ? t("未保存") : ''].filter(Boolean).join(' · ');

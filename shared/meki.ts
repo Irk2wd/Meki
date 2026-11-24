@@ -138,7 +138,7 @@ export interface MekiAPI {
   createResearchDemo(): Promise<Workspace | null>;
   configureResearchProject(root: string, input: { ifRevision: string; project: ResearchProject }): Promise<void>;
   writeResearchBatch(root: string, input: ResearchBatch): Promise<ResearchWriteResult>;
-  readResearchRecord(root: string, id: string): Promise<ResearchDocument>;
+  readResearchRecord(root: string, id: string, sourceDocument?: string): Promise<ResearchDocument>;
   openResearchRecord(root: string, id: string): Promise<DocumentFile | null>;
   openLinkedResearchSummary(root: string, projectId: string, id: string): Promise<{ document: DocumentFile; context: ResearchSnapshot } | null>;
   bindResearchSource(root: string, id: string, label?: string): Promise<BoundResearchSource | null>;

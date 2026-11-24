@@ -272,7 +272,8 @@ function validateComparison(grid) {
 }
 
 function validateRecord(record, expectedId) {
-  object(record, 'record', ['id', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'evidence', 'relations', 'run', 'relatedProjects', 'comparison']);
+  object(record, 'record', ['id', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'evidence', 'relations', 'run', 'relatedProjects', 'comparison', 'fieldRules']);
+  if (record.fieldRules !== undefined) assert(typeof record.fieldRules === 'string' && REVISION.test(record.fieldRules), 'record.fieldRules must be a field definitions digest.');
   id(record.id, 'record.id');
   assert(record.id === expectedId, `record.id must match the filename r-${expectedId}.md.`);
   id(record.type, 'record.type');
@@ -392,10 +393,11 @@ function validateChange(record, previous, project, documents, pending = new Set(
 function parseMarkdown(content, expectedId) {
   const match = /^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/.exec(content);
   assert(match, 'A research record needs a JSON metadata block between two --- lines.');
-  assert(match[1].length <= 64 * 1024, 'Research metadata exceeds 64 KiB.');
+  assert(match[1].length <= 64 * 1024 + 128, 'Research metadata exceeds 64 KiB.');
   let record;
   try { record = JSON.parse(match[1]); }
   catch { throw new Error('The research record metadata is not valid JSON.'); }
+  if (!record?.fieldRules) assert(match[1].length <= 64 * 1024, 'Research metadata exceeds 64 KiB.');
   return { record: validateRecord(record, expectedId), body: content.slice(match[0].length).replace(/^\n/, '') };
 }
 
@@ -427,5 +429,5 @@ module.exports = {
   RELATION_KINDS, RUN_CONTEXT, RUN_FILTER_FIELDS, validateSource, validateEvidencePath, validateEvidence, validateFilter,
   assert, object, array, id, date, listOfIds, validateProject, validateRecord, relationshipIssues,
   comparisonType,
-  fieldIssues, validateChange, parseMarkdown, formatMarkdown, fileName, templateBody,
+  fieldIssues, validateField, validateChange, parseMarkdown, formatMarkdown, fileName, templateBody,
 };
