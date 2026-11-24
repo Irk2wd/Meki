@@ -1,7 +1,7 @@
 {
   "name": "mekir",
   "productName": "mekiR",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "A local research workspace for dated experiments, phase summaries, and timelines.",
   "private": true,
   "type": "module",
