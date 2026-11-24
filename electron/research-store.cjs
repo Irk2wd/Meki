@@ -42,10 +42,16 @@ function recordReference({ record, relativePath }) {
   return { id: record.id, title: record.title, date: record.date, relativePath };
 }
 
+function firstSentence(value) {
+  const [start] = /^.{0,120}/u.exec(value.trimStart());
+  return start.split(/(?<=[。！？])|(?<=[.!?])\s/, 1)[0].trimEnd();
+}
+
 function progressExcerpt(body, summary = false) {
   let fence = '';
-  let first = '', conclusion = false;
-  for (const raw of body.slice(0, 8192).split(/\r?\n/)) {
+  let first = '', conclusionDepth = 0;
+  const text = summary ? body : body.slice(0, 8192);
+  for (const [raw] of text.matchAll(/[^\n]+/g)) {
     const line = raw.trim();
     const marker = line.match(/^(`{3,}|~{3,})/);
     if (marker) {
@@ -54,17 +60,21 @@ function progressExcerpt(body, summary = false) {
       continue;
     }
     if (fence || !line) continue;
-    if (/^#{1,6}(?:\s|$)/.test(line)) {
-      conclusion = /^#{1,6}\s+(?:结论(?:与下一步)?|主要结论|conclusions?|findings|key findings)\s*#*$/i.test(line);
+    const heading = /^(#{1,6})(?:\s+(.*)|$)/.exec(line);
+    if (heading) {
+      const title = (heading[2] || '').replace(/\s+#+$/, '');
+      if (/^(?:结论(?:与下一步)?|主要结论|conclusions?|findings|key findings)$/i.test(title)) conclusionDepth = heading[1].length;
+      else if (heading[1].length <= conclusionDepth) conclusionDepth = 0;
       continue;
     }
-    if (/^(?:[|<>!]|[-+*]\s|[-=_*]{3,}$|\d+[.)]\s)/.test(line)) continue;
-    const plain = line.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    if (first && !conclusionDepth) continue;
+    const prose = conclusionDepth ? line.replace(/^(?:[-+*]|\d+[.)])\s+/, '') : line;
+    if (/^(?:[|<>!]|[-+*]\s|[-=_*]{3,}$|\d+[.)]\s)/.test(prose)) continue;
+    const plain = prose.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
       .replace(/(\*\*|__|`)(.+?)\1/g, '$2').trim();
     if (plain) {
-      const sentence = Array.from(plain.split(/(?<=[。！？])|(?<=[.!?])\s/)[0]).slice(0, 120).join('');
-      if (!summary || conclusion) return sentence;
-      first ||= sentence;
+      if (!summary || conclusionDepth) return firstSentence(plain);
+      first = firstSentence(plain);
     }
   }
   return first;
@@ -231,7 +241,7 @@ class ResearchStore {
           if (excerptTypes) {
             const type = excerptTypes.get(item.record.type);
             const field = type?.conclusionField && item.record.fields[type.conclusionField];
-            item.excerpt = (typeof field === 'string' && field.trim() && progressExcerpt(field)) || progressExcerpt(item.body, type?.kind === 'summary');
+            item.excerpt = (typeof field === 'string' && firstSentence(field)) || progressExcerpt(item.body, type?.kind === 'summary');
           }
           if (!bodyIds.has(recordId)) delete item.body;
           items.set(recordId, item);

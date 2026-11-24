@@ -53,6 +53,11 @@ test('summary excerpts prefer the project’s conclusion field, then a conclusio
   assert.equal(await latest(), '项目自定义结论。');
   await update({ fields: { finding: null } });
   assert.equal(await latest(), 'A measured result.');
+  const appendix = ['~~~md', '## Findings', 'Example finding.', '~~~', '## Measurements', 'observations '.repeat(900), '## Findings', '### Timing', '- Frame time is 11.8 ms. More detail.'];
+  await update({ body: [body.split('## Conclusion')[0], ...appendix].join('\n\n') });
+  assert.equal(await latest(), 'Frame time is 11.8 ms.');
+  await update({ body: '# Report\n\nBackground. Other detail.\n\n## Findings\n\n## References\n\nAn unrelated source.' });
+  assert.equal(await latest(), 'Background.');
   await update({ body: '# Report\n\nBackground. More context.' });
   assert.equal(await latest(), 'Background.');
   type.conclusionField = 'missing';
