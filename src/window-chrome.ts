@@ -7,7 +7,7 @@ export function installWindowChrome(platform: string, fitted: boolean, notify: (
   const shell = document.querySelector<HTMLElement>('#shell')!;
   const caption = document.createElement('header');
   caption.id = 'window-caption';
-  const brand = shell.querySelector<HTMLElement>('.sidebar > .brand')!;
+  const brand = shell.querySelector<HTMLElement>('.sidebar .brand')!;
   const sidebar = shell.querySelector<HTMLButtonElement>('.document-location [data-action="sidebar"]')!;
   caption.append(brand, sidebar);
   if (platform === 'win32') {
