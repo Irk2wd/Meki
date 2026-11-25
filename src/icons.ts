@@ -3,6 +3,7 @@ import brandMark from './brand-mark.svg?raw';
 const paths: Record<string, string> = {
   page: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
   folder: '<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  folders: '<path d="M5 8V5a2 2 0 0 1 2-2h4l2 3h6a2 2 0 0 1 2 2v2"/><path d="M3 9h6l2 3h9l-2 7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   open: '<path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3M12 3h9v9M21 3 10 14"/>',
   save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2Z"/><path d="M7 3v6h9V3M7 21v-8h10v8"/>',

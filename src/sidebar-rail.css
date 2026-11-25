@@ -1,0 +1,76 @@
+/* Compact navigation keeps the same controls, shortcuts and selected tab as the full sidebar. */
+.sidebar-tabs button > svg, .workspace-label > .rail-only { display: none; }
+
+@media screen {
+  .sidebar-hidden:not(.focus-mode) #shell > .sidebar {
+    --rail-button: 34px;
+    display: flex;
+    flex: 0 0 48px;
+    width: 48px;
+    min-width: 48px;
+  }
+  .sidebar-hidden .sidebar > .brand { height: 48px; padding: 0; justify-content: center; }
+  .sidebar-hidden .sidebar .brand-wordmark,
+  .sidebar-hidden .sidebar .file-actions :is(span, kbd),
+  .sidebar-hidden .sidebar .workspace-label > :not(.rail-only),
+  .sidebar-hidden .sidebar .sidebar-tabs button > span,
+  .sidebar-hidden .sidebar .sidebar-settings-button > span,
+  .sidebar-hidden .sidebar :is(#files-panel, #outline-panel) { display: none; }
+  .sidebar-hidden .sidebar .workspace-label > .rail-only,
+  .sidebar-hidden .sidebar-tabs button > svg { display: inline-flex; }
+  .sidebar-hidden .sidebar > .file-actions,
+  .sidebar-hidden .sidebar > .sidebar-tabs,
+  .sidebar-hidden .sidebar > .sidebar-bottom {
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    margin: 0;
+    padding: 6px 0;
+  }
+  .sidebar-hidden .sidebar > .sidebar-tabs { margin-block-start: 5px; border: 0; }
+  .sidebar-hidden .sidebar > .sidebar-bottom { margin-block-start: auto; }
+  .sidebar-hidden .sidebar :is(.file-actions, .sidebar-tabs, .sidebar-bottom) > button,
+  .sidebar-hidden .sidebar > .workspace-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: var(--rail-button);
+    height: var(--rail-button);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    box-shadow: none;
+    background: transparent;
+  }
+  .sidebar-hidden .sidebar > .workspace-label { align-self: center; }
+  .sidebar-hidden .sidebar button:hover { background-color: var(--hover); }
+  .sidebar-hidden .sidebar-tabs button.active { background: var(--accent-soft); color: var(--accent); }
+  .sidebar-hidden .sidebar-tabs button.active::after { content: none; }
+
+  /* Anchor the label to its icon even inside a scrolling navigation group. */
+  .sidebar-hidden .sidebar button[aria-label] { anchor-name: --rail-icon; anchor-scope: --rail-icon; }
+  .sidebar-hidden .sidebar:not([data-keyboard-hints]) button[aria-label]:hover:not([title])::before,
+  .sidebar-hidden .sidebar[data-keyboard-hints] button[aria-label]:focus-visible::before {
+    content: attr(aria-label);
+    position: fixed;
+    position-anchor: --rail-icon;
+    left: calc(anchor(right) + 8px);
+    top: anchor(center);
+    translate: 0 -50%;
+    z-index: 85;
+    width: max-content;
+    max-width: min(260px, calc(100vw - 80px));
+    padding: 4px 9px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    color: var(--text);
+    font: 12px/1.5 var(--ui);
+    text-align: start;
+    overflow-wrap: anywhere;
+    pointer-events: none;
+  }
+}
