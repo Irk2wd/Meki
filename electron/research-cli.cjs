@@ -4,7 +4,8 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { parseArgs } = require('node:util');
-const { ResearchStore } = require('./research-store.cjs');
+const { projectToday, sortEntries, summaryCoversPhase } = require('./research-phases.mjs');
+const { ResearchStore, phaseFilingGuide } = require('./research-store.cjs');
 const { MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, DOCUMENT_SCHEME, RECORDS, FIELD_TYPES, TEMPLATE_KEYS, RELATION_KINDS, RUN_FILTER_FIELDS, assert, date, id, comparisonType } = require('./research-model.cjs');
 const { comparisonLimits } = require('./research-comparison.mjs');
 const { createExampleProject } = require('./research-example.cjs');
@@ -40,6 +41,27 @@ async function readInput(input) {
   return JSON.parse(value);
 }
 
+function phaseContext(project, items) {
+  const today = projectToday(project.timezone);
+  const kinds = new Map(project.recordTypes.map(type => [type.id, type.kind]));
+  const entries = [...items.values()].filter(({ record }) => record.date <= today).sort((a, b) => sortEntries(b, a));
+  const summaries = entries.filter(({ record }) => record.coverage || kinds.get(record.type) === 'summary');
+  const recent = new Map();
+  const brief = ({ record, excerpt }) => ({ id: record.id, title: record.title, date: record.date, ...(excerpt && { excerpt }) });
+  for (const entry of entries) {
+    const { phaseId, type, coverage } = entry.record;
+    if (!phaseId || coverage || kinds.get(type) !== 'entry') continue;
+    if (!recent.has(phaseId)) recent.set(phaseId, []);
+    const group = recent.get(phaseId);
+    if (group.length < 3) group.push(brief(entry));
+  }
+  return project.phases.map(phase => {
+    const summary = summaries.find(({ record }) => summaryCoversPhase(record, phase, project.phases, today));
+    return { phaseId: phase.id, title: phase.title, ...(phase.description && { description: phase.description }),
+      latestSummary: summary ? brief(summary) : null, recentExperiments: recent.get(phase.id) || [] };
+  });
+}
+
 async function main(args) {
   const { positionals, values } = parseArgs({
     args, allowPositionals: true,
@@ -71,8 +93,9 @@ async function main(args) {
   assert(store, `Could not find ${MANIFEST} or ${LEGACY_MANIFEST} in ${root}.`);
   if (command === 'describe') {
     const { project, revision } = await store.manifest();
+    const { items, problems } = await store.catalog(new Set(), undefined, new Map(project.recordTypes.map(type => [type.id, type])));
     return {
-      root: store.root, revision, project,
+      root: store.root, revision, project, phaseContext: phaseContext(project, items), problems,
       format: {
         manifest: store.manifestFile, recordPath: `${RECORDS}/r-<id>.md`,
         summaryPath: `${store.summaryPath ? SUMMARIES : RECORDS}/r-<id>.md`,
@@ -81,7 +104,8 @@ async function main(args) {
         fieldTypes: FIELD_TYPES, templateVariables: [...TEMPLATE_KEYS, 'field.<id>'],
         rules: {
           guide: 'AGENTS.md in the project root, when present',
-          instructions: 'project.instructions',
+          instructions: 'Read project.instructions and the project guide for local conventions.',
+          phaseSelection: phaseFilingGuide,
           recordTypes: 'Read project.recordTypes. Match record.type to the record type ID, then read its fields and template.',
           fields: 'Use field IDs as keys. Read each field’s type, description, unit, required, min, max, options and default. Use JSON numbers in the configured unit, JSON booleans, YYYY-MM-DD date strings and exact choice values.',
           fieldOrigins: 'read and list return fieldOrigins keyed by field ID when verified. Each entry contains the definition (rule) and source (record or default) for the saved value. read also returns currentFields for direct comparison. A missing origin means the historical definition is unknown. Project rule changes and unrelated edits preserve existing origins. batch manages record.fieldRules and its immutable snapshot automatically.',

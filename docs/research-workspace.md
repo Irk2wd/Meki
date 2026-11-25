@@ -117,6 +117,8 @@ node electron/research-cli.cjs read /path/to/project forest-validation
 node electron/research-cli.cjs batch /path/to/project --input batch.json
 ```
 
+`describe.phaseContext` 列出每个阶段的说明、最近一份阶段总结和最近三条实验，日期以项目时区为准。按本轮要回答的问题选择阶段。同一判断下的调参、换机位和补基线各记一条实验，沿用阶段 ID。进入新的研究决定时，在新阶段说明中写明要判断什么。普通实验暂时无法归类时可以省略 `phaseId`。
+
 从 `describe.project.recordTypes` 按 ID 选择 `record.type`。`fields` 以所选类型的字段 ID 为键。按每个字段的说明、单位、类型、取值范围和枚举从实际产物提取值。`project.instructions` 说明本项目的记录口径。各项目可以定义自己的类型、字段和正文模板。例如，渲染实验记录场景和帧时间，论文分析记录章节和稿件版本。
 
 新记录使用同一轮实验的稳定 ID，并在 `date` 写项目时区的实际发生日期。总结用 `date` 写撰写日期，用 `coverage` 写覆盖区间。下例使用渲染研究样例的类型和字段。执行前将 `ifProjectRevision` 替换为 `describe` 返回的 `revision`。

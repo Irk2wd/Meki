@@ -1,4 +1,5 @@
 import { getLocale, ht, t } from '../electron/i18n.mjs';
+import { overlaps, phaseSpan, projectToday, sortEntries, summaryCoversPhase } from '../electron/research-phases.mjs';
 import { comparisonImages } from '../electron/research-comparison.mjs';
 import { researchReportFormat } from '../electron/research-report-format.mjs';
 import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSnapshot, ResearchType, ResearchValue, ResearchView } from '../shared/research';
@@ -14,12 +15,9 @@ import { escapeResearch as escape, fieldRuleDetails, fieldValue, relationLabels,
 import './research-workspace.css';
 
 const errorText = (error: unknown) => String(error).replace(/^Error: (?:Error invoking remote method '[^']+': Error: )?/, '');
-const sortEntries = (a: Pick<ResearchEntry, 'record'>, b: Pick<ResearchEntry, 'record'>) =>
-  a.record.date.localeCompare(b.record.date) || a.record.id.localeCompare(b.record.id);
 const rangeText = (range: ResearchRange) => `${range.start} – ${range.end}`;
 const formatDay = (day: number, year = false) => new Intl.DateTimeFormat(getLocale(), { year: year ? 'numeric' : undefined, month: 'numeric', day: 'numeric', timeZone: 'UTC' }).format(day * 86400000);
 const containsDay = (range: ResearchRange, date: string) => range.start <= date && date <= range.end;
-const overlaps = (a: ResearchRange, b: ResearchRange) => a.start <= b.end && b.start <= a.end;
 const rangePresets = [
   { id: '7d', amount: 7, unit: 'days' },
   { id: '14d', amount: 14, unit: 'days' },
@@ -49,16 +47,6 @@ function savedWidths(): ResearchWidths {
     const saved = JSON.parse(localStorage.getItem(widthsKey) || '{}');
     return { workspace: saved.workspace === 'comfort' ? 'comfort' : 'edge', comparison: saved.comparison === 'comfort' ? 'comfort' : 'edge' };
   } catch { return { workspace: 'edge', comparison: 'edge' }; }
-}
-
-function projectToday(timeZone: string) {
-  const parts = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone }).formatToParts();
-  const value = (key: string) => parts.find(part => part.type === key)!.value;
-  return `${value('year')}-${value('month')}-${value('day')}`;
-}
-
-function phaseSpan({ start, end }: ResearchPhase, today: string): ResearchRange {
-  return { start, end: end ?? (today < start ? start : today) };
 }
 
 function phaseDates({ start, end }: ResearchPhase, today: string, short = false) {
@@ -284,19 +272,6 @@ function destinations(project: ResearchSnapshot['project']): Destination[] {
     key: `view:${view.id}`, label: view.label, glyph: view.layout === 'timeline' ? 'timeline' : 'list',
     page: view.layout === 'timeline' ? 'timeline' : 'view', view,
   })), { key: 'rules', label: t("项目设置"), glyph: 'settings', page: 'rules' }];
-}
-
-function summaryCoversPhase(record: ResearchEntry['record'], phase: ResearchPhase, phases: ResearchPhase[], today: string) {
-  if (record.phaseId === phase.id) return true;
-  const range = record.coverage;
-  const span = phaseSpan(phase, today);
-  if (!range || !overlaps(range, span)) return false;
-  const primary = phases.find(item => item.id === record.phaseId);
-  if (!primary) return true;
-  const primarySpan = phaseSpan(primary, today);
-  // Adjacent phases can overlap. Only coverage outside the primary phase extends the association.
-  return (range.start < primarySpan.start && span.start < primarySpan.start)
-    || (range.end > primarySpan.end && span.end > primarySpan.end);
 }
 
 interface Hooks {

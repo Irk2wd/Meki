@@ -18,10 +18,12 @@ const exampleProject = {
     '阶段总结写明确切的覆盖区间，引用作出判断所用的文档 ID。',
   ],
   phases: [
-    { id: 'baseline', title: '基线测量', start: '2026-11-02', end: '2026-11-06' },
-    { id: 'exploration', title: '方案探索', start: '2026-11-05', end: '2026-11-13' },
+    { id: 'baseline', title: '基线测量', start: '2026-11-02', end: '2026-11-06',
+      description: '确定后续遮挡剔除实验可以沿用哪条相机轨迹和哪种计时口径。' },
+    { id: 'exploration', title: '方案探索', start: '2026-11-05', end: '2026-11-13',
+      description: '在城市街区比较候选阈值，选出值得到树林场景复测的遮挡剔除方案。' },
     { id: 'validation', title: '复测与验证', start: '2026-11-12', end: '2026-11-18',
-      description: '固定相机轨迹和评测口径，在树林场景复测遮挡剔除和基线的表现。',
+      description: '判断选出的遮挡剔除方案在树林中能否稳定降低 GPU 帧时间。每个机位都与同轨迹的无剔除基线比较。',
       goals: [{ text: '补采同视角基线' }, { text: '复核逐轮计时' }] },
   ],
   recordTypes: [

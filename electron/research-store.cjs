@@ -680,6 +680,8 @@ function encodeJson(value, limit = MAX_JSON_BYTES) {
   return bytes;
 }
 
+const phaseFilingGuide = '归档前先看 describe.phaseContext，按本轮要回答的问题选择已有阶段。调参、换机位、补基线或重跑仍服务于同一项判断时，沿用阶段 ID，为每轮实验单独记一条。研究要作的决定改变时再建阶段，在阶段说明中写明这次要判断什么。普通实验暂时找不到归属时，可先按日期记录，留待归类。';
+
 const projectGuide = `# mekiR 研究项目的 Agent 指引
 
 ## 读取当前项目
@@ -687,6 +689,10 @@ const projectGuide = `# mekiR 研究项目的 Agent 指引
 每批写入前先运行 \`node "<mekiR 源码目录>/electron/research-cli.cjs" describe "<项目根目录>"\`。读取 \`project.instructions\`，按 \`project.recordTypes\` 中的 ID 选择记录类型，再使用该类型的字段和模板。项目可以各自定义实验、分析、写作记录或总结。
 
 在 \`fields\` 中使用字段 ID。按字段说明从实际产物取值，遵守类型、单位、范围与必填要求。枚举使用 \`options\` 中的原值。用正文说明缺失数据及原因。若必填项缺少有效值和可用默认值，先补证据。
+
+## 这轮实验属于哪个阶段
+
+${phaseFilingGuide}
 
 ## 写入记录
 
@@ -723,4 +729,4 @@ const projectGuide = `# mekiR 研究项目的 Agent 指引
 调整显示名称时沿用原 ID。字段的含义或单位变化时使用新 ID，并同步更新模板里的 \`{{field.<ID>}}\` 和视图的 \`fieldIds\`。配置保存后重新 \`describe\`，用 \`list\` 的 \`issues\` 检查历史记录，再按需用 \`batch\` 补录。项目规则放在配置的 \`instructions\`，项目协作流程可在这份 \`AGENTS.md\` 中维护。
 `;
 
-module.exports = { ResearchStore };
+module.exports = { ResearchStore, phaseFilingGuide };

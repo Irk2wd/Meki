@@ -39,6 +39,29 @@ test('a research phase requires a start date and allows an unknown end date', ()
   assert.throws(() => validate({ end: '2026-11-17' }), /\.end must be on or after its start/);
 });
 
+test('describe gives a fresh agent the stage decision, latest summary and three recent experiments', async t => {
+  const project = structuredClone(exampleProject);
+  project.phases = [{ id: 'review', title: '复测', start: '2000-01-01', description: '确认不同机位能否复现计时差异。' }];
+  const runs = ['a', 'b', 'c', 'd'].map((id, i) => ({
+    id, type: 'experiment', title: id, date: '2000-01-0' + (i + 1), phaseId: 'review',
+    fields: { scene: 'Forest' }, body: '本轮记录。',
+  }));
+  const root = await projectFolder(t);
+  await ResearchStore.initialize(root, project, [...runs,
+    { ...runs[0], id: 'future', date: '2999-01-01' },
+    { id: 'summary', type: 'stage-summary', title: '阶段复核', date: '2000-01-04',
+      coverage: { start: '2000-01-01', end: '2000-01-04' }, body: '## 结论\n\n两轮使用相同机位。' },
+  ]);
+  const describe = JSON.parse(require('node:child_process').execFileSync(process.execPath,
+    [require.resolve('../electron/research-cli.cjs'), 'describe', root], { encoding: 'utf8' }));
+  const [phase] = describe.phaseContext;
+  assert.equal(phase.phaseId, 'review');
+  assert.equal(phase.description, project.phases[0].description);
+  assert.equal(phase.latestSummary.excerpt, '两轮使用相同机位。');
+  assert.deepEqual(phase.recentExperiments.map(item => item.id), ['d', 'c', 'b']);
+  assert.ok((await fs.readFile(path.join(root, 'AGENTS.md'), 'utf8')).includes(describe.format.rules.phaseSelection));
+});
+
 test('summary excerpts prefer the project’s conclusion field, then a conclusion section, then the first prose sentence', async t => {
   const project = structuredClone(exampleProject);
   const type = project.recordTypes.find(type => type.kind === 'summary');
