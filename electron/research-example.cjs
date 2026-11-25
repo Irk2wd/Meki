@@ -36,7 +36,7 @@ const exampleProject = {
         { id: 'gpu_ms', label: 'GPU 帧时间', type: 'number', min: 0, unit: 'ms', description: '去掉预热帧后的 GPU 帧时间中位数。' },
         { id: 'outcome', label: '结果状态', type: 'choice', required: true, options: ['有效', '需复测', '无效'], default: '需复测' },
       ],
-      template: '# {{title}}\n\n## 结论\n\n<!-- 写下本轮能回答的问题，再交代对照与适用条件。缺少基线时，说明还需补哪一轮。 -->\n\n## 对照与依据\n\n{{sources}}\n\n## 实验设置\n\n- 场景：{{field.scene}}\n- 显卡：{{field.gpu}}\n- 分辨率：{{field.resolution}}\n',
+      template: '# {{title}}\n\n## 结论\n\n<!-- 同一问题的调参、换机位和补基线沿用原阶段。首句写出本轮能下的判断，再交代对照和适用条件。缺少基线时，写明还需补哪一轮。 -->\n\n## 对照与依据\n\n{{sources}}\n\n## 实验设置\n\n- 场景：{{field.scene}}\n- 显卡：{{field.gpu}}\n- 分辨率：{{field.resolution}}\n',
     },
     {
       id: 'stage-summary', label: '阶段总结', kind: 'summary', description: '汇总一段时间内的研究进展，引用支持判断的记录。',

@@ -118,7 +118,7 @@ async function main(args) {
         timeline: {
           start: 'Optional project.start (inclusive YYYY-MM-DD). Otherwise inferred from phases and dated records. The visible timeline ends on today in project.timezone.',
           phaseGoals: 'project.phaseGoals: hidden, list (default), or checklist. Changing the display preserves saved goals.',
-          phaseDetails: { description: 'optional text', goals: [{ text: 'goal text', done: 'optional JSON boolean' }] },
+          phaseDetails: { description: 'optional text describing the question this phase aims to answer', goals: [{ text: 'goal text', done: 'optional JSON boolean' }] },
           events: {
             kind: 'Use project.recordTypes with kind event for dated records, or comparison for image grids.',
             icons: Object.keys(require('./research-event-icons.json')),
@@ -133,7 +133,7 @@ async function main(args) {
         },
         summary: { date: 'date written', coverage: { start: 'inclusive date', end: 'inclusive date' }, sources: 'document IDs from list or resolve',
           relatedProjects: 'IDs from the other projects’ describe output',
-          progress: 'The phase highlights its latest dated summary up to today in the project timezone. list returns its excerpt. To supply a conclusion, set the summary type’s optional conclusionField to a text field ID and write that field with batch, or write a Conclusion/结论 paragraph. Otherwise the first prose sentence is shown. Cite comparisons and records with sources and indexed files with evidence.' },
+          progress: 'The phase shows its research question followed by the latest experiment finding or summary through today in the project timezone. A summary takes precedence on the same date. Read list.excerpt for the finding. Cite comparisons and records with sources and indexed files with evidence.' },
       },
       writes: {
         batch: {
