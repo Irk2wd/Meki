@@ -143,12 +143,19 @@ function comparePhaseProgress(a: ResearchEntry, b: ResearchEntry, recordTypes: R
 
 function rankPhases(phases: ResearchPhase[], entries: ResearchEntry[], today: string, recordTypes: ResearchType[], progressByPhase?: Map<string, ResearchEntry[]>) {
   const byPhase = groupByPhase(entries);
+  const reportTypes = new Set(recordTypes.filter(type => type.kind === 'entry' || type.kind === 'summary').map(type => type.id));
   return phases.map(phase => {
     const span = phaseSpan(phase, today);
     const assigned = byPhase.get(phase.id) || [];
-    const update = [...assigned, ...(progressByPhase?.get(phase.id) || [])].reduce<ResearchEntry | undefined>(
-      (last, item) => item.record.date <= today && (!last || comparePhaseProgress(last, item, recordTypes) < 0) ? item : last, undefined);
-    const latest = update?.record.date || '';
+    let latest = '';
+    let update: ResearchEntry | undefined;
+    for (const item of [...assigned, ...(progressByPhase?.get(phase.id) || [])]) {
+      const { record, excerpt } = item;
+      if (record.date > today) continue;
+      if (record.date > latest) latest = record.date;
+      if (!excerpt && (record.coverage || reportTypes.has(record.type))) continue;
+      if (!update || comparePhaseProgress(update, item, recordTypes) < 0) update = item;
+    }
     const group: keyof typeof phaseGroupOrder = today < span.start ? 'upcoming' : today > span.end ? 'ended' : 'ongoing';
     return { phase, span, group, latest, assigned, update };
   }).sort((a, b) => {
@@ -1213,7 +1220,7 @@ export class ResearchWorkspace {
   private renderStageSummaries(entries: ResearchEntry[], experiment: ResearchEntry | undefined, create: string, state: ResearchSnapshot, today: string) {
     if (!entries.length && !experiment) return create ? `<div class="research-actions research-stage-create">${create}</div>` : '';
     const sorted = entries.sort((a, b) => sortEntries(b, a));
-    const summary = sorted.find(item => item.record.date <= today);
+    const summary = sorted.find(item => item.record.date <= today && item.excerpt);
     const latest = experiment && (!summary || comparePhaseProgress(experiment, summary, state.project.recordTypes) > 0) ? experiment : summary;
     const row = (entry: ResearchEntry, featured = false) => {
       const { record, excerpt } = entry;

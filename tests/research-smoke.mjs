@@ -209,8 +209,21 @@ try {
   await phases.filter({ hasText: '方案探索' }).getByText('最近进展 11/19').waitFor();
   assert.equal(await phases.filter({ hasText: '方案探索' }).locator('.research-phase-progress').textContent(), explorationFinding);
   assert.deepEqual(await phaseOrder(), ['validation', 'exploration', 'baseline']);
-  command('batch', [], { records: [retrospective, concurrentRun].map(({ record }) =>
-    ({ id: record.id, ifRevision: command('read', [record.id]).revision, date: record.date })) });
+  command('batch', [], { records: [
+    { id: 'exploration-review', ifRevision: command('read', ['exploration-review']).revision, body: '## 待验证\n\n更换机位后复测。' },
+    { id: 'tile-culling', ifRevision: command('read', ['tile-culling']).revision, date: '2026-11-18' },
+  ] });
+  await refresh.click();
+  const exploring = phases.locator('[data-research-phase=exploration]');
+  const tileFinding = '城市街区同一轨迹上，分块剔除将 GPU 帧时间从 12.8 ms 降至 10.2 ms。';
+  await exploring.getByText(tileFinding, { exact: true }).waitFor();
+  assert.match(await exploring.innerText(), /最近进展 11\/19/);
+  await exploring.click();
+  await page.locator('.research-progress-latest').getByText(tileFinding, { exact: true }).waitFor();
+  await page.locator('.research-phase-summaries [data-research-record=exploration-review]').waitFor();
+  await exploring.click();
+  command('batch', [], { records: [retrospective, concurrentRun].map(({ record, body }) =>
+    ({ id: record.id, ifRevision: command('read', [record.id]).revision, date: record.date, body })) });
   await refresh.click();
   await phases.filter({ hasText: '方案探索' }).getByText('最近进展 11/16').waitFor();
   assert.equal(await page.locator('.research-timeline [data-research-record]').count(), 0);

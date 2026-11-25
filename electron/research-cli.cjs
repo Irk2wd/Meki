@@ -133,7 +133,7 @@ async function main(args) {
         },
         summary: { date: 'date written', coverage: { start: 'inclusive date', end: 'inclusive date' }, sources: 'document IDs from list or resolve',
           relatedProjects: 'IDs from the other projects’ describe output',
-          progress: 'The phase shows its research question followed by the latest experiment finding or summary through today in the project timezone. A summary takes precedence on the same date. Read list.excerpt for the finding. Cite comparisons and records with sources and indexed files with evidence.' },
+          progress: 'The phase shows its research question followed by the latest experiment or summary with a finding through today in the project timezone. A summary with a finding takes precedence on the same date. Read list.excerpt for the finding. Cite comparisons and records with sources and indexed files with evidence.' },
       },
       writes: {
         batch: {
