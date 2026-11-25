@@ -332,7 +332,7 @@ export class ResearchTools {
         <label class="wide">${ht("阶段名称")}<input name="title" value="${escapeResearch(original?.title ?? '')}" required maxlength="240" autofocus></label>
         <label>${ht("开始日期")}<input name="start" type="date" value="${escapeResearch(original?.start ?? today)}" required></label>
         <label>${ht("结束日期（可选）")}<input name="end" type="date" value="${escapeResearch(original?.end ?? '')}"></label>
-        <label class="wide">${ht("阶段说明")}<textarea name="description" rows="3" maxlength="2000">${escape(original?.description || '')}</textarea></label>
+        <label class="wide">${ht("本阶段要判断什么")}<textarea name="description" rows="3" maxlength="2000">${escape(original?.description || '')}</textarea></label>
         ${project.phaseGoals !== 'hidden' ? `<label class="wide">${ht("阶段目标（每行一项）")}<textarea name="goals" rows="4">${escape(original?.goals?.map(goal => goal.text).join('\n') || '')}</textarea></label>` : ''}
       </div>
       ${feedback}<div class="research-actions">

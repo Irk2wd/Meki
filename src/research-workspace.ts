@@ -1121,6 +1121,9 @@ export class ResearchWorkspace {
       canCreateEvent: project.recordTypes.some(type => type.kind === 'event'),
     }) : undefined;
     if (timelineView) this.phasePage = timelineView.page;
+    const latestExperiment = phase && projectPage ? sequence.filter(item =>
+      item.record.phaseId === phase.id && item.record.date <= today && item.excerpt && matches(item)
+    ).sort((a, b) => sortEntries(b, a))[0] : undefined;
     const phaseTitle = phase ? `<h2 id="research-journal-title">${escape(phase.title)}</h2><p class="research-phase-range">${escape(phaseDates(phase, today))}</p>`
       : `<h2 id="research-journal-title">${active.page === 'summaries' ? ht("已归档总结") : ht("实验记录")} <span>${entries.length + linkedSummaries.length}</span></h2>`;
     const lastExperiment = experiments.reduce((latest, { record }) => record.date > latest ? record.date : latest, '');
@@ -1145,8 +1148,9 @@ export class ResearchWorkspace {
               ${phase && projectPage ? `<button type="button" class="secondary-button" data-research-edit-phase="${phase.id}">${icon('settings', 14)}${ht("编辑阶段")}</button>` : ''}
               ${phase || this.date || this.recordFilter ? `<button type="button" class="secondary-button" data-research-clear>${ht("清除筛选")}</button>` : ''}</div>
           </div>
-          ${phase && projectPage ? this.renderStageSummaries((summariesByPhase.get(phase.id) || []).filter(matches), newSummary, state, today) : ''}
-          ${phase && projectPage ? this.renderPhaseDetails(phase, project.phaseGoals) : ''}
+          ${phase?.description && projectPage ? `<div class="research-phase-focus"><h3>${ht("本阶段要判断什么")}</h3><p>${escape(phase.description)}</p></div>` : ''}
+          ${phase && projectPage ? this.renderStageSummaries((summariesByPhase.get(phase.id) || []).filter(matches), latestExperiment, newSummary, state, today) : ''}
+          ${phase && projectPage ? this.renderPhaseGoals(phase, project.phaseGoals) : ''}
           ${phase && projectPage ? this.renderPhaseComparisons((eventsByPhase.get(phase.id) || []).filter(entry => entry.record.comparison && matches(entry))) : ''}
           ${phase && projectPage ? this.renderPhaseEvents((eventsByPhase.get(phase.id) || []).filter(entry => !entry.record.comparison && matches(entry)), types) : ''}
           <div class="research-record-filters">
@@ -1178,16 +1182,15 @@ export class ResearchWorkspace {
     }
   }
 
-  private renderPhaseDetails(phase: ResearchPhase, mode: ResearchSnapshot['project']['phaseGoals']) {
+  private renderPhaseGoals(phase: ResearchPhase, mode: ResearchSnapshot['project']['phaseGoals']) {
     const goals = mode === 'hidden' ? [] : phase.goals || [];
-    if (!phase.description && !goals.length) return '';
+    if (!goals.length) return '';
     const checklist = mode === 'checklist';
     return `<div class="research-phase-details">
-      ${phase.description ? `<div><h3>${ht("阶段说明")}</h3><p>${escape(phase.description)}</p></div>` : ''}
-      ${goals.length ? `<div><h3>${ht("阶段目标")}${checklist ? `<span>${goals.filter(goal => goal.done).length}/${goals.length}</span>` : ''}</h3>
+      <div><h3>${ht("阶段目标")}${checklist ? `<span>${goals.filter(goal => goal.done).length}/${goals.length}</span>` : ''}</h3>
         <ul${checklist ? ' class="research-goal-checklist"' : ''}>${goals.map((goal, index) => checklist
           ? `<li><label><input type="checkbox" data-research-goal="${index}"${goal.done ? ' checked' : ''}${this.savingGoals ? ' disabled' : ''}> ${escape(goal.text)}</label></li>`
-          : `<li>${escape(goal.text)}</li>`).join('')}</ul></div>` : ''}
+          : `<li>${escape(goal.text)}</li>`).join('')}</ul></div>
     </div>`;
   }
 
@@ -1199,22 +1202,28 @@ export class ResearchWorkspace {
       <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button></li>`).join('')}</ul></section>`;
   }
 
-  private renderStageSummaries(entries: ResearchEntry[], create: string, state: ResearchSnapshot, today: string) {
-    if (!entries.length) return create ? `<div class="research-actions research-stage-create">${create}</div>` : '';
+  private renderStageSummaries(entries: ResearchEntry[], experiment: ResearchEntry | undefined, create: string, state: ResearchSnapshot, today: string) {
+    if (!entries.length && !experiment) return create ? `<div class="research-actions research-stage-create">${create}</div>` : '';
     const sorted = entries.sort((a, b) => sortEntries(b, a));
-    const latest = sorted.find(item => item.record.date <= today);
-    const row = ({ record, excerpt }: ResearchEntry, featured = false) => `<li class="research-summary-item">
-      <button type="button" data-research-record="${record.id}">
-        ${icon('report', 18)}<span>${featured && excerpt ? `<strong class="research-progress-conclusion">${escape(excerpt)}</strong>` : ''}
+    const summary = sorted.find(item => item.record.date <= today);
+    // Prefer the phase summary when both records have the same date.
+    const latest = experiment && (!summary || experiment.record.date > summary.record.date) ? experiment : summary;
+    const row = (entry: ResearchEntry, featured = false) => {
+      const { record, excerpt } = entry;
+      const isExperiment = entry === experiment;
+      return `<li class="research-summary-item">
+      <button type="button" ${isExperiment ? 'data-research-progress-link' : 'data-research-record'}="${record.id}">
+        ${icon(isExperiment ? 'page' : 'report', 18)}<span>${featured && excerpt ? `<strong class="research-progress-conclusion">${escape(excerpt)}</strong>` : ''}
           <strong class="research-summary-title">${escape(record.title)}</strong>
           ${!featured && excerpt ? `<span class="research-summary-lede">${escape(excerpt)}</span>` : ''}
-          <small class="research-summary-dates">${record.coverage ? `<span>${ht("覆盖 {0}", escape(rangeText(record.coverage)))}</span>` : ''}<span>${ht("撰写于 {0}", escape(record.date))}</span></small></span>${icon('chevron', 14)}</button>
-      <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button></li>`;
+          <small class="research-summary-dates">${record.coverage ? `<span>${ht("覆盖 {0}", escape(rangeText(record.coverage)))}</span>` : ''}<span>${isExperiment ? ht("实验日期 {0}", escape(record.date)) : ht("撰写于 {0}", escape(record.date))}</span></small></span>${icon('chevron', 14)}</button>
+      ${isExperiment ? '' : `<button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button>`}</li>`;
+    };
     const others = sorted.filter(entry => entry !== latest);
     return `<section class="research-phase-summaries research-progress" aria-labelledby="research-phase-summaries-title">
       <div class="research-section-heading"><h3 id="research-phase-summaries-title">${latest ? ht("最新进展") : ht("阶段总结")}</h3>${create}</div>
       ${latest ? `<ul class="research-progress-latest">${row(latest, true)}</ul>${this.progressLinks(latest.record, state)}` : ''}
-      ${others.length ? `${latest ? `<h3 class="research-progress-other">${ht("其他阶段总结")}</h3>` : ''}<ul>${others.map(entry => row(entry)).join('')}</ul>` : ''}
+      ${others.length ? `${latest ? `<h3 class="research-progress-other">${latest === experiment ? ht("阶段总结") : ht("其他阶段总结")}</h3>` : ''}<ul>${others.map(entry => row(entry)).join('')}</ul>` : ''}
     </section>`;
   }
 

@@ -265,6 +265,12 @@ try {
   assert.equal(await page.locator('.research-entry').count(), 0);
   await page.locator('[data-research-phase=validation]').click();
   assert.equal(await page.locator('.research-entry').count(), 1);
+  const focus = page.locator('.research-phase-focus');
+  assert.match(await focus.innerText(), /本阶段要判断什么[\s\S]*同轨迹/);
+  assert.equal(await focus.evaluate(el => el.nextElementSibling.matches('.research-progress')), true);
+  const recentExperiment = page.locator('.research-progress-latest [data-research-progress-link=forest-validation]');
+  assert.equal(await recentExperiment.locator('.research-progress-conclusion').textContent(),
+    await page.locator('.research-entry-conclusion').textContent());
   await page.locator('.research-entry [data-research-record=forest-validation]').click();
   const sampleLinks = page.locator('#research-reader-related');
   assert.equal(await sampleLinks.isVisible(), false);
@@ -1051,6 +1057,8 @@ try {
   await switchProject(project);
   await timelineView.click();
   await page.clock.setFixedTime(new Date('2026-11-19T15:59:59Z'));
+  await refresh.click();
+  await page.waitForFunction(() => document.querySelector('[data-research-range]')?.dataset.end === '2026-11-19');
   const phaseDialog = page.locator('#research-tools-dialog');
   async function addPhase(title, start, useRestoredFocus = false) {
     await idle();
@@ -1163,7 +1171,12 @@ try {
   assert.ok(compactGrid.outerOverflow <= 1 && compactGrid.scrolled > 0 && compactGrid.lastImageReachable, JSON.stringify(compactGrid));
   await comparison.locator('.research-comparison-scroll').evaluate(grid => { grid.scrollTop = 0; });
   await comparisonWindow.evaluate((win, size) => win.setContentSize(...size), previousSize);
-  await page.waitForFunction(([w, h]) => innerWidth === w && innerHeight === h, previousSize);
+  await page.waitForFunction(([w, h]) => innerWidth === w && innerHeight === h &&
+    [...document.querySelectorAll('#research-comparison-dialog .research-comparison-image img')].every(image => {
+      const viewport = image.closest('[data-image-evidence]');
+      const fitted = Math.min(viewport.clientWidth, viewport.clientHeight * image.naturalWidth / image.naturalHeight);
+      return Math.abs(parseFloat(image.style.width) - fitted) < 0.01;
+    }), previousSize);
   for (const text of ['普通 Mesh', 'Ours', '树冠机位', '树干机位']) await comparison.getByRole(text.includes('机位') ? 'rowheader' : 'columnheader', { name: text }).waitFor();
   const imageState = () => imagesInView.evaluateAll(elements => elements.map(image => {
     const matrix = new DOMMatrix(image.style.transform);
