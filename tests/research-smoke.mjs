@@ -205,7 +205,7 @@ try {
   await idle();
   assert.deepEqual(await phaseOrder(), ['validation', 'exploration', 'baseline']);
   assert.match(await phases.filter({ hasText: '方案探索' }).innerText(), /最近进展 11\/16/);
-  const explorationFinding = '在城市街区的同一轨迹上，保守阈值下未见遮挡边缘闪烁，GPU 帧时间中位数从无剔除时的 12.8 ms 降到 10.7 ms。';
+  const explorationFinding = '在城市街区的同一条轨迹上，采用保守阈值后，GPU 帧时间低于无剔除基线，遮挡边缘也未见闪烁。';
   assert.equal(await phases.filter({ hasText: '方案探索' }).locator('.research-phase-progress').textContent(), explorationFinding);
   const eventTypes = page.locator('.research-timeline-footer [data-research-event-types]');
   assert.ok(await eventTypes.isHidden());
@@ -228,7 +228,7 @@ try {
   ] });
   await refresh.click();
   const exploring = phases.locator('[data-research-phase=exploration]');
-  const tileFinding = '城市街区同一轨迹上，分块剔除将 GPU 帧时间从 12.8 ms 降至 10.2 ms。';
+  const tileFinding = '在城市街区的同一条相机轨迹上，开启分块遮挡剔除后，GPU 帧时间缩短了。';
   await exploring.getByText(tileFinding, { exact: true }).waitFor();
   assert.match(await exploring.innerText(), /最近进展 11\/19/);
   await exploring.click();
@@ -488,6 +488,9 @@ try {
   await phaseSummary.click();
   await page.locator('#research-reader-title').getByText('方案探索阶段总结', { exact: true }).waitFor();
   assert.equal(await page.locator('#visual-editor .ProseMirror').getAttribute('contenteditable'), 'false');
+  const summaryTable = page.locator('#visual-editor table');
+  await summaryTable.getByRole('columnheader', { name: 'GPU 帧时间中位数（ms）' }).waitFor();
+  await summaryTable.getByRole('row').filter({ hasText: '保守深度阈值' }).getByRole('cell', { name: '10.7', exact: true }).waitFor();
   assert.match(await page.locator('#document-scroll').evaluate(content => getComputedStyle(content).backgroundImage), /linear-gradient/);
   assert.match(await page.locator('#visual-editor h1').first().evaluate(heading => getComputedStyle(heading).fontFamily), /monospace/);
   await page.locator('#visual-editor a[href="mekir:tile-culling"]').click();

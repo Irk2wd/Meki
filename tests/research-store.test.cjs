@@ -62,10 +62,12 @@ test('describe gives a fresh agent the stage decision, latest summary and three 
   const guide = await fs.readFile(path.join(root, 'AGENTS.md'), 'utf8');
   assert.ok(guide.includes(describe.format.rules.phaseSelection));
   assert.ok(guide.includes(describe.format.rules.experimentReport));
+  assert.match(describe.format.rules.experimentReport, /优先用 Markdown 表格/);
   for (const type of describe.project.recordTypes.filter(type => type.kind === 'entry' || type.kind === 'summary')) {
     const headings = type.template.split('\n').filter(line => line.startsWith('## '));
     assert.equal(headings[0], '## 结论');
     assert.equal(headings.at(-1), '## 待验证');
+    assert.match(type.template, /优先用 Markdown 表格/);
   }
 });
 

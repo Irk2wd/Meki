@@ -692,7 +692,8 @@ function encodeJson(value, limit = MAX_JSON_BYTES) {
 
 const phaseFilingGuide = '归档前先看 describe.phaseContext，按本轮要回答的问题选择已有阶段。调参、换机位、补基线或重跑仍服务于同一项判断时，沿用阶段 ID，为每轮实验单独记一条。研究要作的决定改变时再建阶段，在阶段说明中写明这次要判断什么。普通实验暂时找不到归属时，可先按日期记录，留待归类。';
 
-const reportWritingGuide = '实验记录和阶段总结都从证据已支持的结论写起。首句回答本轮研究疑问，再按重要性写出其他已确认的发现。交代测量对象、对照和适用范围，给出关键数值、单位和原始证据。缺少对照时先写本轮实测值或直接观察。把推测、待补的对照和下一次要做的验证集中放在文末「待验证」。没有遗留问题时可以省略这一节。';
+const comparisonTableGuide = '比较不同方案、轮次或条件下的数值时，优先用 Markdown 表格。标明比较对象，在表头写清指标和单位。正文解释差异对研究问题意味着什么，避免逐项复述表中数值。单个独立读数可以直接写在正文中。';
+const reportWritingGuide = `实验记录和阶段总结都从证据已支持的结论写起。首句回答本轮研究疑问，再按重要性写出其他已确认的发现。交代测量对象、对照和适用范围，并链接原始证据。${comparisonTableGuide}缺少对照时先写本轮实测值或直接观察。把推测、待补的对照和下一次要做的验证集中放在文末「待验证」。没有遗留问题时可以省略这一节。`;
 
 const projectGuide = `# mekiR 研究项目的 Agent 指引
 
@@ -747,4 +748,4 @@ ${reportWritingGuide}
 调整显示名称时沿用原 ID。字段的含义或单位变化时使用新 ID，并同步更新模板里的 \`{{field.<ID>}}\` 和视图的 \`fieldIds\`。配置保存后重新 \`describe\`，用 \`list\` 的 \`issues\` 检查历史记录，再按需用 \`batch\` 补录。项目规则放在配置的 \`instructions\`，项目协作流程可在这份 \`AGENTS.md\` 中维护。
 `;
 
-module.exports = { ResearchStore, phaseFilingGuide, reportWritingGuide };
+module.exports = { ResearchStore, phaseFilingGuide, reportWritingGuide, comparisonTableGuide };
