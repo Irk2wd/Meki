@@ -65,9 +65,31 @@ try {
     const caption = first.locator('#window-caption');
     const sidebar = first.locator('#app-sidebar');
     const expandedWidth = (await sidebar.boundingBox()).width;
+    await first.emulateMedia({ reducedMotion: 'no-preference' });
+    const reversal = await caption.getByRole('button', { name: '收起侧栏' }).evaluate(toggle => {
+      const sidebar = document.querySelector('#app-sidebar');
+      const main = document.querySelector('#shell > .main-area');
+      const gap = main.getBoundingClientRect().left - sidebar.getBoundingClientRect().right;
+      toggle.click();
+      const animation = sidebar.getAnimations()[0];
+      animation.currentTime = Number(animation.effect.getTiming().duration) * .6;
+      const before = sidebar.getBoundingClientRect();
+      const opacity = Number(getComputedStyle(sidebar.querySelector('.sidebar-content')).opacity);
+      const glyph = sidebar.querySelector('.sidebar-moving-glyphs[inert] svg');
+      const glyphVisible = glyph?.checkVisibility({ opacityProperty: true }) && glyph.getBoundingClientRect().width > 0;
+      toggle.click();
+      return { width: before.width, reversed: sidebar.getBoundingClientRect().width,
+        sameMotion: sidebar.getAnimations()[0] === animation, opacity, glyphVisible,
+        gapChange: main.getBoundingClientRect().left - sidebar.getBoundingClientRect().right - gap };
+    });
+    assert.ok(reversal.width > 48 && reversal.width < expandedWidth);
+    assert.ok(reversal.opacity > 0 && reversal.opacity < 1);
+    assert.ok(reversal.sameMotion && reversal.glyphVisible);
+    assert.equal(reversal.reversed, reversal.width);
+    assert.equal(reversal.gapChange, 0);
+    await first.waitForFunction(width => document.querySelector('#app-sidebar:not([data-folding])')?.offsetWidth === width, expandedWidth);
     await caption.getByRole('button', { name: '收起侧栏' }).click();
-    await first.locator('body.sidebar-hidden').waitFor({ state: 'attached' });
-    assert.equal((await sidebar.boundingBox()).width, 48);
+    await first.waitForFunction(() => document.querySelector('#app-sidebar:not([data-folding])')?.offsetWidth === 48);
     const outlineTab = sidebar.getByRole('tab', { name: '大纲' });
     await outlineTab.hover();
     assert.equal(await outlineTab.evaluate(button => getComputedStyle(button, '::before').content), '"大纲"');
@@ -78,8 +100,15 @@ try {
     assert.equal((await sidebar.boundingBox()).width, expandedWidth);
     await win.evaluate(win => win.setSize(640, 590));
     await first.waitForFunction(() => document.querySelector('#app-sidebar').offsetWidth === 48);
-    await caption.getByRole('button', { name: '展开侧栏' }).click();
-    assert.ok((await sidebar.boundingBox()).width > 48);
+    await first.emulateMedia({ reducedMotion: 'reduce' });
+    const immediate = await caption.getByRole('button', { name: '展开侧栏' }).evaluate(toggle => {
+      toggle.click();
+      const sidebar = document.querySelector('#app-sidebar');
+      return sidebar.offsetWidth > 48 && sidebar.getAnimations().length === 0;
+    });
+    assert.ok(immediate);
+    await first.emulateMedia({ reducedMotion: 'no-preference' });
+    pass('sidebar motion carries the document edge, reverses in place and honors reduced motion');
     await win.evaluate(win => win.setSize(880, 590));
     await first.waitForFunction(width => document.querySelector('#app-sidebar').offsetWidth === width, expandedWidth);
     const geometry = await caption.evaluate(node => {

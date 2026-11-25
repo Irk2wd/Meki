@@ -169,7 +169,7 @@ try {
   await rail.locator('[data-research-destination=entries][aria-current=page]').waitFor();
   await rail.getByRole('button', { name: '时间线', exact: true }).press('Enter');
   await rail.locator('[data-research-destination=timeline][aria-current=page]').waitFor();
-  assert.equal((await page.locator('#app-sidebar').boundingBox()).width, 48);
+  await page.waitForFunction(() => document.querySelector('#app-sidebar:not([data-folding])')?.offsetWidth === 48);
   await rail.getByRole('button', { name: '实验记录', exact: true }).hover();
   assert.equal(await rail.getByRole('button', { name: '时间线', exact: true }).evaluate(el => getComputedStyle(el, '::before').content), 'none');
   assert.equal(await rail.getByRole('button', { name: '实验记录', exact: true }).evaluate(el => getComputedStyle(el, '::before').content), '"实验记录"');
@@ -1718,7 +1718,16 @@ try {
   assert.deepEqual(await widths(), [adjusted[0], adjusted[1] - 12, adjusted[2] + 12]);
   assert.notEqual((await dividerStyle(listDivider())).outline, 'none');
   await listDivider().press('ArrowRight');
-  await page.getByRole('button', { name: '收起侧栏', exact: true }).click();
+  const duringFold = await page.getByRole('button', { name: '收起侧栏', exact: true }).evaluate(toggle => {
+    toggle.click();
+    const sidebar = document.querySelector('#app-sidebar');
+    const animation = sidebar.getAnimations()[0];
+    animation.currentTime = Number(animation.effect.getTiming().duration) * .6;
+    return { nav: sidebar.offsetWidth, preview: document.querySelector('#document-surface').offsetWidth };
+  });
+  assert.ok(duringFold.nav > 48 && duringFold.nav < adjusted[0]);
+  assert.equal(duringFold.preview, adjusted[2]);
+  await page.waitForFunction(() => !document.querySelector('#app-sidebar').hasAttribute('data-folding'));
   await navDivider().waitFor({ state: 'hidden' });
   assert.equal((await widths())[0], 48);
   assert.equal((await widths())[2], adjusted[2]);

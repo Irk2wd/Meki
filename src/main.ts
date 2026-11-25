@@ -48,20 +48,22 @@ const button = (action: string, label: string, glyph: string, cls = '') => `<but
 document.querySelector('#app')!.innerHTML = `
 <div class="shell" id="shell">
   <aside id="app-sidebar" class="sidebar" aria-label="${ht("文档导航")}">
-    <div class="brand"><button type="button" class="brand-mark" data-action="about" title="${ht("关于 {0}", productName)}" aria-label="${ht("关于 {0}", productName)}">${logo}</button><span class="brand-wordmark" role="img" aria-label="${productName}">${brandWordmark}</span></div>
-    <nav id="research-sidebar" hidden aria-label="${ht("项目导航")}"></nav>
-    <div class="file-actions"><button class="open-button" data-action="open" aria-label="${ht("打开文稿")}">${icon('folder')}<span>${ht("打开文稿")}</span><kbd id="open-shortcut">Ctrl O</kbd></button>${button('new', t("新建文稿"), 'plus')}</div>
-    <div class="workspace-selector">
-      <button type="button" id="workspace-switch" class="workspace-switch" aria-label="${ht("切换工作区")}" aria-haspopup="menu" aria-expanded="false" aria-controls="workspace-switch-menu" title="${ht("切换工作区")}">
-        ${icon('folders', 16)}<span><small>${ht("工作区")}</small><strong id="workspace-name">${ht("个人写作空间")}</strong></span>${icon('select', 14)}
-      </button>
-      <div id="workspace-switch-menu" class="popover workspace-switch-menu" role="menu" aria-label="${ht("切换工作区")}" tabindex="-1" hidden></div>
+    <div class="sidebar-content">
+      <div class="brand"><button type="button" class="brand-mark" data-action="about" title="${ht("关于 {0}", productName)}" aria-label="${ht("关于 {0}", productName)}">${logo}</button><span class="brand-wordmark" role="img" aria-label="${productName}">${brandWordmark}</span></div>
+      <nav id="research-sidebar" hidden aria-label="${ht("项目导航")}"></nav>
+      <div class="file-actions"><button class="open-button" data-action="open" aria-label="${ht("打开文稿")}">${icon('folder')}<span>${ht("打开文稿")}</span><kbd id="open-shortcut">Ctrl O</kbd></button>${button('new', t("新建文稿"), 'plus')}</div>
+      <div class="workspace-selector">
+        <button type="button" id="workspace-switch" class="workspace-switch" aria-label="${ht("切换工作区")}" aria-haspopup="menu" aria-expanded="false" aria-controls="workspace-switch-menu" title="${ht("切换工作区")}">
+          ${icon('folders', 16)}<span><small>${ht("工作区")}</small><strong id="workspace-name">${ht("个人写作空间")}</strong></span>${icon('select', 14)}
+        </button>
+        <div id="workspace-switch-menu" class="popover workspace-switch-menu" role="menu" aria-label="${ht("切换工作区")}" tabindex="-1" hidden></div>
+      </div>
+      <button type="button" class="research-entry-button" data-action="research" aria-pressed="false" aria-label="${ht("研究项目")}">${icon('diagram', 16)}<span>${ht("研究项目")}</span></button>
+      <div class="sidebar-tabs" role="tablist" aria-label="${ht("导航方式")}"><button role="tab" data-tab="files" aria-selected="false" aria-label="${ht("文件")}">${icon('page', 17)}<span>${ht("文件")}</span></button><button role="tab" class="active" data-tab="outline" aria-selected="true" aria-label="${ht("大纲")}">${icon('list', 17)}<span>${ht("大纲")}</span></button></div>
+      <div id="files-panel" hidden><div class="file-filter">${icon('search', 15)}<input id="file-filter" placeholder="${ht("搜索文件")}" aria-label="${ht("搜索本地文件")}"></div><div id="file-list"></div></div>
+      <nav id="outline-panel" aria-label="${ht("文档大纲")}"><div id="outline-list"></div></nav>
+      <div class="sidebar-bottom"><button type="button" id="sidebar-settings-button" aria-label="${ht("设置")}" class="sidebar-settings-button" aria-haspopup="menu" aria-expanded="false" aria-controls="sidebar-settings-menu">${icon('settings', 16)}<span>${ht("设置")}</span></button>${button('updates', t("检查更新"), 'refresh', 'update-entry sidebar-footer-icon')}${button('help', t("使用指南与快捷键"), 'help', 'sidebar-footer-icon')}</div>
     </div>
-    <button type="button" class="research-entry-button" data-action="research" aria-pressed="false" aria-label="${ht("研究项目")}">${icon('diagram', 16)}<span>${ht("研究项目")}</span></button>
-    <div class="sidebar-tabs" role="tablist" aria-label="${ht("导航方式")}"><button role="tab" data-tab="files" aria-selected="false" aria-label="${ht("文件")}">${icon('page', 17)}<span>${ht("文件")}</span></button><button role="tab" class="active" data-tab="outline" aria-selected="true" aria-label="${ht("大纲")}">${icon('list', 17)}<span>${ht("大纲")}</span></button></div>
-    <div id="files-panel" hidden><div class="file-filter">${icon('search', 15)}<input id="file-filter" placeholder="${ht("搜索文件")}" aria-label="${ht("搜索本地文件")}"></div><div id="file-list"></div></div>
-    <nav id="outline-panel" aria-label="${ht("文档大纲")}"><div id="outline-list"></div></nav>
-    <div class="sidebar-bottom"><button type="button" id="sidebar-settings-button" aria-label="${ht("设置")}" class="sidebar-settings-button" aria-haspopup="menu" aria-expanded="false" aria-controls="sidebar-settings-menu">${icon('settings', 16)}<span>${ht("设置")}</span></button>${button('updates', t("检查更新"), 'refresh', 'update-entry sidebar-footer-icon')}${button('help', t("使用指南与快捷键"), 'help', 'sidebar-footer-icon')}</div>
   </aside>
   <section class="main-area">
     <div class="research-reader-scrim" aria-hidden="true"></div>
@@ -716,7 +718,7 @@ async function dispatch(action: string, payload?: unknown, origin?: HTMLElement)
   closePopovers();
   if (action === 'export-options') { exportDialog.open(); return; }
   if (action === 'export-html' || action === 'export-pdf') { await runExport({ kind: action === 'export-html' ? 'html' : 'pdf' }); return; }
-  if (action === 'sidebar') return sidebarRail.setExpanded(!sidebarRail.expanded);
+  if (action === 'sidebar') return sidebarRail.toggle();
   if (action === 'focus') { changeSettings({ focus: !settings.focus }); if (settings.focus) notify(t("专注模式 · Ctrl/⌘ Shift F 返回")); return; }
   if (action === 'typewriter') return changeSettings({ typewriter: !settings.typewriter });
   if (action === 'paragraph-focus') return changeSettings({ paragraphFocus: !settings.paragraphFocus });

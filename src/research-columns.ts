@@ -112,7 +112,8 @@ export class ResearchColumns {
     const hasNav = this.navigation.getClientRects().length > 0 && !document.body.classList.contains('sidebar-hidden');
     // The fixed icon rail already sits outside the host. Only the full sidebar can be resized.
     const availableWidth = this.host.clientWidth + (hasNav ? this.navigation.offsetWidth : 0);
-    const layout = columnLayout(availableWidth, hasNav, reading, this.preferred, this.host.classList.contains('research-stage-reading'));
+    const stageNavigation = this.host.classList.contains('research-stage-reading');
+    const layout = columnLayout(availableWidth, hasNav, reading, this.preferred, stageNavigation);
     this.layout = layout;
     this.host.classList.toggle('research-peek-split', layout.split);
     this.host.classList.toggle('research-stage-index', layout.stageIndex);
@@ -121,8 +122,10 @@ export class ResearchColumns {
     this.handles.list.hidden = !layout.split || layout.stageIndex;
     if (this.drag && this.handles[this.drag.part].hidden) { this.finish(false); return; }
     if (!active) return;
-    if (hasNav) this.shell.style.setProperty('--research-navigation-width', `${layout.navigation.value}px`);
-    this.host.style.setProperty('--research-list-width', `${layout.list.value}px`);
+    // Keep the expanded target current even when the window is resized with the rail folded.
+    const expandedLayout = hasNav ? layout : columnLayout(availableWidth + this.navigation.offsetWidth, true, reading, this.preferred, stageNavigation);
+    this.shell.style.setProperty('--research-navigation-width', `${expandedLayout.navigation.value}px`);
+    this.host.style.setProperty('--research-list-width', `calc(100% - ${layout.preview}px)`);
     for (const part of ['navigation', 'list'] as const) {
       if (!this.handles[part].hidden) this.describe(this.handles[part], layout[part]);
     }
