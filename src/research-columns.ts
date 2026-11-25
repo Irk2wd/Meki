@@ -16,7 +16,7 @@ function savedWidth(column: keyof Widths) {
 
 function columnLayout(width: number, navigationVisible: boolean, reading: boolean, preferred: Widths, stageNavigation: boolean) {
   const defaultNav = width <= 820 ? 180 : width <= 1020 ? 205 : 236;
-  // The shell hides its sidebar at 760px. Stay in the overlay as the window gets smaller.
+  // A narrow workspace keeps the preview in an overlay.
   const fromStage = stageNavigation && navigationVisible;
   const split = reading && width > 760 && width - (navigationVisible ? minNavigation : 0) >= (fromStage ? minPreview : 730);
   const stageIndex = split && fromStage;
@@ -109,8 +109,9 @@ export class ResearchColumns {
   update() {
     const active = this.shell.classList.contains('research-shell') && !this.panel.hidden;
     const reading = active && this.host.classList.contains('research-reader-open');
-    const hasNav = this.navigation.getClientRects().length > 0;
-    const availableWidth = this.host.clientWidth + this.navigation.offsetWidth;
+    const hasNav = this.navigation.getClientRects().length > 0 && !document.body.classList.contains('sidebar-hidden');
+    // The fixed icon rail already sits outside the host. Only the full sidebar can be resized.
+    const availableWidth = this.host.clientWidth + (hasNav ? this.navigation.offsetWidth : 0);
     const layout = columnLayout(availableWidth, hasNav, reading, this.preferred, this.host.classList.contains('research-stage-reading'));
     this.layout = layout;
     this.host.classList.toggle('research-peek-split', layout.split);

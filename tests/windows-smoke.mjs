@@ -63,9 +63,25 @@ try {
     const bounds = await win.evaluate(win => win.getBounds());
     await win.evaluate(win => win.setSize(880, 590));
     const caption = first.locator('#window-caption');
-    await caption.getByRole('button', { name: '显示或隐藏侧栏' }).click();
+    const sidebar = first.locator('#app-sidebar');
+    const expandedWidth = (await sidebar.boundingBox()).width;
+    await caption.getByRole('button', { name: '收起侧栏' }).click();
     await first.locator('body.sidebar-hidden').waitFor({ state: 'attached' });
-    await caption.getByRole('button', { name: '显示或隐藏侧栏' }).click();
+    assert.equal((await sidebar.boundingBox()).width, 48);
+    const outlineTab = sidebar.getByRole('tab', { name: '大纲' });
+    await outlineTab.hover();
+    assert.equal(await outlineTab.evaluate(button => getComputedStyle(button, '::before').content), '"大纲"');
+    assert.equal(await outlineTab.locator('span').isVisible(), false);
+    assert.equal(await caption.getByRole('button', { name: '展开侧栏' }).getAttribute('aria-expanded'), 'false');
+    await outlineTab.press('Enter');
+    await first.locator('#outline-panel').waitFor();
+    assert.equal((await sidebar.boundingBox()).width, expandedWidth);
+    await win.evaluate(win => win.setSize(640, 590));
+    await first.waitForFunction(() => document.querySelector('#app-sidebar').offsetWidth === 48);
+    await caption.getByRole('button', { name: '展开侧栏' }).click();
+    assert.ok((await sidebar.boundingBox()).width > 48);
+    await win.evaluate(win => win.setSize(880, 590));
+    await first.waitForFunction(width => document.querySelector('#app-sidebar').offsetWidth === width, expandedWidth);
     const geometry = await caption.evaluate(node => {
       const safe = navigator.windowControlsOverlay.getTitlebarAreaRect();
       const buttons = [...node.querySelectorAll('button')].map(button => button.getBoundingClientRect());

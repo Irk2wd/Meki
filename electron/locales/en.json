@@ -398,6 +398,8 @@
   "图片地址无效。": "Invalid image URL.",
   "使用指南与快捷键": "Guide and shortcuts",
   "显示或隐藏侧栏": "Show or hide sidebar",
+  "收起侧栏": "Collapse sidebar",
+  "展开侧栏": "Expand sidebar",
   "插入数学公式": "Insert math",
   "插入 Mermaid 图表": "Insert Mermaid diagram",
   "插入图片": "Insert image",

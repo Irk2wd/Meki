@@ -38,7 +38,7 @@
   #window-caption .brand-wordmark svg { width: auto; height: 100%; }
   #window-caption button { -webkit-app-region: no-drag; }
   #window-caption .icon-button { width: 28px; height: 26px; border-radius: 6px; }
-  #window-caption .icon-button:is(:hover, [aria-expanded="true"]) { color: var(--text); background: var(--hover); }
+  #window-caption .icon-button:is(:hover, [aria-haspopup][aria-expanded="true"]) { color: var(--text); background: var(--hover); }
   #window-caption + #shell { flex: 1; min-height: 0; height: auto; }
   #window-caption + #shell > .sidebar { background: var(--window-surround); border-inline-end: 0; }
   #window-caption + #shell > .main-area {
@@ -48,7 +48,7 @@
     box-shadow: 0 0 0 1px var(--window-line);
     overflow: clip;
   }
-  :is(.sidebar-hidden, .focus-mode) #window-caption + #shell > .main-area { margin-inline-start: var(--window-gutter); }
+  .focus-mode #window-caption + #shell > .main-area { margin-inline-start: var(--window-gutter); }
   .platform-darwin #window-caption + #shell .titlebar { padding-left: 16px; }
   .window-fitted #window-caption + #shell > .main-area {
     margin: 0; border-radius: 0; box-shadow: none;
@@ -56,7 +56,6 @@
   @media (max-width: 760px) {
     :is(.platform-win32, .platform-darwin) #app { --window-gutter: 4px; --window-radius: 7px; }
     body:not(.window-fitted) #window-caption + #shell > .main-area { margin-inline-start: var(--window-gutter); }
-    #window-caption [data-action="sidebar"] { display: none; }
   }
   @media (prefers-reduced-motion: no-preference) {
     #window-caption + #shell > .main-area { transition: box-shadow 150ms ease-out; }

@@ -14,6 +14,7 @@ import { OutlinePanel } from './outline-panel';
 import { FormatMenu } from './format-menu';
 import { Shortcuts } from './shortcuts';
 import { SidebarSettings } from './sidebar-settings';
+import { SidebarRail } from './sidebar-rail';
 import { AttachmentOrganizer } from './attachment-organizer';
 import { UpdateDialog } from './update-dialog';
 import { AboutDialog } from './about-dialog';
@@ -46,21 +47,21 @@ const button = (action: string, label: string, glyph: string, cls = '') => `<but
 
 document.querySelector('#app')!.innerHTML = `
 <div class="shell" id="shell">
-  <aside class="sidebar" aria-label="${ht("文档导航")}">
+  <aside id="app-sidebar" class="sidebar" aria-label="${ht("文档导航")}">
     <div class="brand"><button type="button" class="brand-mark" data-action="about" title="${ht("关于 {0}", productName)}" aria-label="${ht("关于 {0}", productName)}">${logo}</button><span class="brand-wordmark" role="img" aria-label="${productName}">${brandWordmark}</span></div>
     <nav id="research-sidebar" hidden aria-label="${ht("项目导航")}"></nav>
-    <div class="file-actions"><button class="open-button" data-action="open">${icon('folder')}<span>${ht("打开文稿")}</span><kbd id="open-shortcut">Ctrl O</kbd></button>${button('new', t("新建文稿"), 'plus')}</div>
+    <div class="file-actions"><button class="open-button" data-action="open" aria-label="${ht("打开文稿")}">${icon('folder')}<span>${ht("打开文稿")}</span><kbd id="open-shortcut">Ctrl O</kbd></button>${button('new', t("新建文稿"), 'plus')}</div>
     <div class="workspace-selector">
-      <button type="button" id="workspace-switch" class="workspace-switch" aria-haspopup="menu" aria-expanded="false" aria-controls="workspace-switch-menu" title="${ht("切换工作区")}">
-        ${icon('folder', 16)}<span><small>${ht("工作区")}</small><strong id="workspace-name">${ht("个人写作空间")}</strong></span>${icon('select', 14)}
+      <button type="button" id="workspace-switch" class="workspace-switch" aria-label="${ht("切换工作区")}" aria-haspopup="menu" aria-expanded="false" aria-controls="workspace-switch-menu" title="${ht("切换工作区")}">
+        ${icon('folders', 16)}<span><small>${ht("工作区")}</small><strong id="workspace-name">${ht("个人写作空间")}</strong></span>${icon('select', 14)}
       </button>
       <div id="workspace-switch-menu" class="popover workspace-switch-menu" role="menu" aria-label="${ht("切换工作区")}" tabindex="-1" hidden></div>
     </div>
-    <button type="button" class="research-entry-button" data-action="research" aria-pressed="false">${icon('diagram', 16)}${ht("研究项目")}</button>
-    <div class="sidebar-tabs" role="tablist" aria-label="${ht("导航方式")}"><button role="tab" data-tab="files" aria-selected="false">${ht("文件")}</button><button role="tab" class="active" data-tab="outline" aria-selected="true">${ht("大纲")}</button></div>
+    <button type="button" class="research-entry-button" data-action="research" aria-pressed="false" aria-label="${ht("研究项目")}">${icon('diagram', 16)}<span>${ht("研究项目")}</span></button>
+    <div class="sidebar-tabs" role="tablist" aria-label="${ht("导航方式")}"><button role="tab" data-tab="files" aria-selected="false" aria-label="${ht("文件")}">${icon('page', 17)}<span>${ht("文件")}</span></button><button role="tab" class="active" data-tab="outline" aria-selected="true" aria-label="${ht("大纲")}">${icon('list', 17)}<span>${ht("大纲")}</span></button></div>
     <div id="files-panel" hidden><div class="file-filter">${icon('search', 15)}<input id="file-filter" placeholder="${ht("搜索文件")}" aria-label="${ht("搜索本地文件")}"></div><div id="file-list"></div></div>
     <nav id="outline-panel" aria-label="${ht("文档大纲")}"><div id="outline-list"></div></nav>
-    <div class="sidebar-bottom"><button type="button" id="sidebar-settings-button" class="sidebar-settings-button" aria-haspopup="menu" aria-expanded="false" aria-controls="sidebar-settings-menu">${icon('settings', 16)}<span>${ht("设置")}</span></button>${button('updates', t("检查更新"), 'refresh', 'update-entry sidebar-footer-icon')}${button('help', t("使用指南与快捷键"), 'help', 'sidebar-footer-icon')}</div>
+    <div class="sidebar-bottom"><button type="button" id="sidebar-settings-button" aria-label="${ht("设置")}" class="sidebar-settings-button" aria-haspopup="menu" aria-expanded="false" aria-controls="sidebar-settings-menu">${icon('settings', 16)}<span>${ht("设置")}</span></button>${button('updates', t("检查更新"), 'refresh', 'update-entry sidebar-footer-icon')}${button('help', t("使用指南与快捷键"), 'help', 'sidebar-footer-icon')}</div>
   </aside>
   <section class="main-area">
     <div class="research-reader-scrim" aria-hidden="true"></div>
@@ -216,12 +217,14 @@ const researchUI = new ResearchWorkspace(el('.main-area'), el('#research-sidebar
     if (switched) animateResearchDocument(1);
   }, true),
   closeReader: closeResearchReader,
+  expandNavigation: () => sidebarRail.setExpanded(true),
   openProject: path => openResearchProject(path),
   notify,
 });
 new DocumentMenu({ current: () => current, document: id => documents.tabs.find(tab => tab.id === id)?.document,
   platform: () => platform, blocked: () => !ready || busy || Boolean(document.querySelector('dialog[open]')), notify });
 const snapshotDialog = new SnapshotDialog({ documents, platform: () => platform, settings: () => settings, run: action => perform(action, true, true), notify });
+const sidebarRail = new SidebarRail(sidebar => changeSettings({ sidebar }));
 const sidebarSettings = new SidebarSettings({
   blocked: () => !ready || busy,
   closeOthers: () => { closePopovers(); el('#lifecycle-settings').hidden = true; el('#window-panel').hidden = true; },
@@ -441,7 +444,7 @@ function applySettings() {
   document.documentElement.style.setProperty('--line-width', `${settings.lineWidth}px`);
   document.body.classList.toggle('unlimited-width', settings.unlimitedWidth);
   document.body.classList.toggle('focus-mode', settings.focus && !researchUI.visible);
-  document.body.classList.toggle('sidebar-hidden', !settings.sidebar);
+  sidebarRail.apply(settings.sidebar);
   fontPicker.apply(settings);
   el<HTMLSelectElement>('#math-numbering').value = settings.mathNumbering;
   el<HTMLInputElement>('#math-physics').checked = settings.mathPhysics;
@@ -681,7 +684,7 @@ async function dispatch(action: string, payload?: unknown, origin?: HTMLElement)
     await closeResearchReader();
     if (researchUI.readerOpen) return;
     hideResearch();
-    if (action === 'research-files') { setSidebarTab('files'); el('#file-filter').focus(); }
+    if (action === 'research-files') { sidebarRail.setExpanded(true); setSidebarTab('files'); el('#file-filter').focus(); }
     else editor.focus();
     return;
   }
@@ -713,7 +716,7 @@ async function dispatch(action: string, payload?: unknown, origin?: HTMLElement)
   closePopovers();
   if (action === 'export-options') { exportDialog.open(); return; }
   if (action === 'export-html' || action === 'export-pdf') { await runExport({ kind: action === 'export-html' ? 'html' : 'pdf' }); return; }
-  if (action === 'sidebar') return changeSettings({ sidebar: !settings.sidebar });
+  if (action === 'sidebar') return sidebarRail.setExpanded(!sidebarRail.expanded);
   if (action === 'focus') { changeSettings({ focus: !settings.focus }); if (settings.focus) notify(t("专注模式 · Ctrl/⌘ Shift F 返回")); return; }
   if (action === 'typewriter') return changeSettings({ typewriter: !settings.typewriter });
   if (action === 'paragraph-focus') return changeSettings({ paragraphFocus: !settings.paragraphFocus });
@@ -845,7 +848,7 @@ document.addEventListener('click', event => {
   }
   const format = target.closest<HTMLElement>('[data-format]'); if (format && ready && !busy && mayEditDocument()) { editor.format(format.dataset.format!); return; }
   const mode = target.closest<HTMLElement>('[data-mode]'); if (mode && ready && !busy && mayEditDocument()) { switchMode(mode.dataset.mode as 'visual' | 'source'); return; }
-  const tab = target.closest<HTMLElement>('[data-tab]'); if (tab) { setSidebarTab(tab.dataset.tab!); return; }
+  const tab = target.closest<HTMLElement>('[data-tab]'); if (tab) { sidebarRail.setExpanded(true); setSidebarTab(tab.dataset.tab!); return; }
   const theme = target.closest<HTMLButtonElement>('#theme-choices button[data-theme]');
   if (theme) { if (ready && !busy) changeSettings({ theme: theme.dataset.theme! }); return; }
   const file = target.closest<HTMLElement>('[data-file]'); if (file) { void dispatch('open-path', file.dataset.file); return; }

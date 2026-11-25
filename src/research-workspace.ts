@@ -286,7 +286,7 @@ function destinations(project: ResearchSnapshot['project']): Destination[] {
   return [...base, ...project.views.filter(view => !used.has(view.id)).map((view): Destination => ({
     key: `view:${view.id}`, label: view.label, glyph: view.layout === 'timeline' ? 'timeline' : 'list',
     page: view.layout === 'timeline' ? 'timeline' : 'view', view,
-  })), { key: 'rules', label: t("项目设置"), glyph: 'settings', page: 'rules' }];
+  })), { key: 'rules', label: t("项目设置"), glyph: 'sliders', page: 'rules' }];
 }
 
 interface Hooks {
@@ -295,6 +295,7 @@ interface Hooks {
   whenIdle(): Promise<void>;
   open(root: string, id: string, origin?: HTMLButtonElement, edit?: boolean, sourceProjectId?: string): Promise<void>;
   closeReader(): Promise<void>;
+  expandNavigation(): void;
   openProject(root: string): Promise<void>;
   notify(message: string, error?: boolean): void;
 }
@@ -1032,7 +1033,7 @@ export class ResearchWorkspace {
     if (last && last.snapshot === state && last.page === active?.key && last.phase === this.phaseId && last.day === this.renderedDay && last.reading === reading) return;
     this.sidebarState = { snapshot: state, page: active?.key, phase: this.phaseId, day: this.renderedDay, reading };
     const navigation = state ? destinations(state.project) : [];
-    const button = (item: Destination) => `<button type="button" data-research-destination="${escape(item.key)}"
+    const button = (item: Destination) => `<button type="button" data-research-destination="${escape(item.key)}" aria-label="${escape(item.label)}"
       ${item.view ? `data-research-view="${item.view.id}"` : ''} aria-current="${item.key === active?.key && !reading ? 'page' : 'false'}"
       aria-pressed="${item.key === active?.key}">${icon(item.glyph, 17)}<span>${escape(item.label)}</span></button>`;
     const group = (title: string, items: string) => items ? `<section class="research-nav-group" aria-label="${title}">
@@ -1053,15 +1054,15 @@ export class ResearchWorkspace {
       </details>`;
     }).join('');
     const markup = `<button type="button" class="research-project-switch" data-action="research-projects" aria-haspopup="dialog" aria-label="${ht("切换科研项目")}">
-        ${icon('folder', 17)}<span><small>${ht("科研项目")}</small><strong>${escape(state?.project.title || t("选择项目"))}</strong></span>${icon('down', 14)}
+        ${icon('folders', 17)}<span><small>${ht("科研项目")}</small><strong>${escape(state?.project.title || t("选择项目"))}</strong></span>${icon('down', 14)}
       </button>
       <div class="research-nav-scroll">
         ${group(ht("项目页面"), navigation.filter(item => !item.key.startsWith('view:') && item.page !== 'rules').map(button).join(''))}
-        ${group(ht("研究阶段"), shelves)}
+        ${shelves ? group(ht("研究阶段"), `<button type="button" class="research-phase-rail" data-research-expand-phases aria-label="${ht("研究阶段")}"${reading ? ' aria-current="location"' : ''}>${icon('branch', 17)}</button>${shelves}`) : ''}
         ${group(ht("项目视图"), navigation.filter(item => item.key.startsWith('view:')).map(button).join(''))}
       </div>
       <div class="research-nav-bottom">${navigation.length ? button(navigation[navigation.length - 1]) : ''}
-        <button type="button" data-action="research-close">${icon('page', 17)}<span>${ht("文稿编辑器")}</span></button>
+        <button type="button" data-action="research-close" aria-label="${ht("文稿编辑器")}">${icon('page', 17)}<span>${ht("文稿编辑器")}</span></button>
       </div>`;
     const scroll = this.sidebar.querySelector('.research-nav-scroll')?.scrollTop || 0;
     this.sidebar.innerHTML = markup;
@@ -1079,7 +1080,9 @@ export class ResearchWorkspace {
     const today = state ? projectToday(state.project.timezone) : '';
     this.renderedDay = today;
     this.panel.dataset.width = this.widths.workspace;
-    const toggle = document.getElementById('window-caption') ? '' : `<button type="button" class="icon-button" data-action="sidebar" aria-label="${ht("显示或隐藏侧栏")}" title="${ht("显示或隐藏侧栏")}">${icon('layout', 17)}</button>`;
+    const expanded = !document.body.classList.contains('sidebar-hidden');
+    const toggleLabel = expanded ? ht("收起侧栏") : ht("展开侧栏");
+    const toggle = document.getElementById('window-caption') ? '' : `<button type="button" class="icon-button" data-action="sidebar" aria-label="${toggleLabel}" aria-controls="app-sidebar" aria-expanded="${expanded}" title="${toggleLabel}">${icon('layout', 17)}</button>`;
     const phaseCrumb = active?.page === 'timeline' && state?.project.phases.find(phase => phase.id === this.phaseId)?.title;
     this.toolbar.innerHTML = `<div class="research-breadcrumb">${toggle}${state ? `<span title="${escape(state.project.title)}">${escape(state.project.title)}</span><i aria-hidden="true">/</i>` : ''}
       <span>${escape(active?.label || t("科研项目"))}</span>${phaseCrumb ? `<i aria-hidden="true">/</i><span>${escape(phaseCrumb)}</span>` : ''}</div>
@@ -1421,6 +1424,12 @@ export class ResearchWorkspace {
     }
     if (this.hooks.blocked()) return;
     const data = button.dataset;
+    if ('researchExpandPhases' in data) {
+      this.hooks.expandNavigation();
+      const selected = this.sidebar.querySelector<HTMLElement>('.research-phase-shelf[open] [aria-current="location"]');
+      (selected || this.sidebar.querySelector<HTMLElement>('.research-phase-shelf summary'))?.focus();
+      return;
+    }
     if (data.researchField && data.fieldRecord) {
       await this.showFields(data.fieldRecord, state, button, data.researchField);
       return;
