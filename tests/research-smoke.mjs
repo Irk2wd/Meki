@@ -201,12 +201,15 @@ try {
   await optionsToggle.press('Enter');
   assert.equal(await page.locator('.research-chart-guides .research-today-line').count(), 1);
   const retrospective = command('read', ['exploration-review']);
-  command('batch', [], { records: [{ id: retrospective.record.id, ifRevision: retrospective.revision, date: '2026-11-19' }] });
+  const concurrentRun = command('read', ['tile-culling']);
+  command('batch', [], { records: [retrospective, concurrentRun].map(({ record, revision }) =>
+    ({ id: record.id, ifRevision: revision, date: '2026-11-19' })) });
   await refresh.click();
   await phases.filter({ hasText: '方案探索' }).getByText('最近进展 11/19').waitFor();
+  assert.equal(await phases.filter({ hasText: '方案探索' }).locator('.research-phase-progress').textContent(), '保守阈值稳定了遮挡边缘，适合进入复测。');
   assert.deepEqual(await phaseOrder(), ['validation', 'exploration', 'baseline']);
-  const revised = command('read', ['exploration-review']);
-  command('batch', [], { records: [{ id: revised.record.id, ifRevision: revised.revision, date: retrospective.record.date }] });
+  command('batch', [], { records: [retrospective, concurrentRun].map(({ record }) =>
+    ({ id: record.id, ifRevision: command('read', [record.id]).revision, date: record.date })) });
   await refresh.click();
   await phases.filter({ hasText: '方案探索' }).getByText('最近进展 11/16').waitFor();
   assert.equal(await page.locator('.research-timeline [data-research-record]').count(), 0);

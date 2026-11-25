@@ -133,13 +133,21 @@ function experimentEnded({ fields, run }: ResearchEntry['record'], phaseEnded: b
   return phaseEnded;
 }
 
-function rankPhases(phases: ResearchPhase[], entries: ResearchEntry[], today: string, progressByPhase?: Map<string, ResearchEntry[]>) {
+function comparePhaseProgress(a: ResearchEntry, b: ResearchEntry, recordTypes: ResearchType[]) {
+  const byDate = a.record.date.localeCompare(b.record.date);
+  if (byDate) return byDate;
+  const isSummary = ({ record }: ResearchEntry) => Boolean(record.coverage) ||
+    recordTypes.some(type => type.id === record.type && type.kind === 'summary');
+  return Number(isSummary(a)) - Number(isSummary(b)) || a.record.id.localeCompare(b.record.id);
+}
+
+function rankPhases(phases: ResearchPhase[], entries: ResearchEntry[], today: string, recordTypes: ResearchType[], progressByPhase?: Map<string, ResearchEntry[]>) {
   const byPhase = groupByPhase(entries);
   return phases.map(phase => {
     const span = phaseSpan(phase, today);
     const assigned = byPhase.get(phase.id) || [];
     const update = [...assigned, ...(progressByPhase?.get(phase.id) || [])].reduce<ResearchEntry | undefined>(
-      (last, item) => item.record.date <= today && (!last || sortEntries(last, item) < 0) ? item : last, undefined);
+      (last, item) => item.record.date <= today && (!last || comparePhaseProgress(last, item, recordTypes) < 0) ? item : last, undefined);
     const latest = update?.record.date || '';
     const group: keyof typeof phaseGroupOrder = today < span.start ? 'upcoming' : today > span.end ? 'ended' : 'ongoing';
     return { phase, span, group, latest, assigned, update };
@@ -161,7 +169,7 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
   const todayLine = containsDay(range, today) ? `<i class="research-today-line" style="--point:${position(today, 0.5)}%"></i>` : '';
   const ticks = [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(start + (end - start) * i / 4)))];
   const tickPosition = (day: number) => (day - start + .5) * 100 / span;
-  const ordered = rankPhases(phases, entries, today, progressByPhase);
+  const ordered = rankPhases(phases, entries, today, [...types.values()], progressByPhase);
   const selectedIndex = revealPhase ? ordered.findIndex(({ phase }) => phase.id === revealPhase) : -1;
   const limit = pageSize ?? Math.max(1, ordered.length);
   const pageCount = Math.max(1, Math.ceil(ordered.length / limit));
@@ -1022,7 +1030,7 @@ export class ResearchWorkspace {
       aria-pressed="${item.key === active?.key}">${icon(item.glyph, 17)}<span>${escape(item.label)}</span></button>`;
     const group = (title: string, items: string) => items ? `<section class="research-nav-group" aria-label="${title}">
       <h2 class="research-nav-label">${title}</h2><div class="research-nav-list">${items}</div></section>` : '';
-    const phases = state ? rankPhases(state.project.phases, state.records, this.renderedDay) : [];
+    const phases = state ? rankPhases(state.project.phases, state.records, this.renderedDay, state.project.recordTypes) : [];
     const listed = new Set(reading ? [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)].map(item => item.dataset.researchRecord) : []);
     const stageRecords = listed.size && state ? `<div class="research-nav-records">${state.records.filter(item => listed.has(item.record.id))
       .sort((a, b) => sortEntries(b, a)).map(({ record }) => `<button type="button" data-research-stage-record="${escape(record.id)}"
@@ -1206,8 +1214,7 @@ export class ResearchWorkspace {
     if (!entries.length && !experiment) return create ? `<div class="research-actions research-stage-create">${create}</div>` : '';
     const sorted = entries.sort((a, b) => sortEntries(b, a));
     const summary = sorted.find(item => item.record.date <= today);
-    // Prefer the phase summary when both records have the same date.
-    const latest = experiment && (!summary || experiment.record.date > summary.record.date) ? experiment : summary;
+    const latest = experiment && (!summary || comparePhaseProgress(experiment, summary, state.project.recordTypes) > 0) ? experiment : summary;
     const row = (entry: ResearchEntry, featured = false) => {
       const { record, excerpt } = entry;
       const isExperiment = entry === experiment;
