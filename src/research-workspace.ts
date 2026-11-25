@@ -1330,7 +1330,7 @@ export class ResearchWorkspace {
     const titles = new Map(state.documents.map(({ id, title }) => [id, title]));
     return Array.from(byDate, ([date, items]) => `<div class="research-date-group">
       <time datetime="${date}">${escape(date)}</time>
-      <ul>${items.map(({ record, issues, fieldOrigins }) => {
+      <ul>${items.map(({ record, issues, fieldOrigins, excerpt }) => {
         const type = state.project.recordTypes.find(item => item.id === record.type);
         const phase = state.project.phases.find(item => item.id === record.phaseId);
         const current = new Map(type?.fields.map(rule => [rule.id, rule]));
@@ -1343,6 +1343,7 @@ export class ResearchWorkspace {
             <button type="button" data-research-record="${record.id}">${escape(record.title)}</button>
             <button type="button" class="research-edit" data-research-edit="${record.id}" title="${ht("编辑记录属性")}" aria-label="${ht("编辑记录属性")}">${icon('settings', 15)}</button>
           </div>
+          ${type?.kind === 'entry' && excerpt && excerpt !== record.title ? `<p class="research-entry-conclusion">${escape(excerpt)}</p>` : ''}
           ${phase || record.coverage || fields.length ? `<div class="research-entry-meta">
             ${phase ? `<span>${escape(phase.title)}</span>` : ''}
             ${record.coverage ? `<span>${ht("覆盖 {0}", escape(rangeText(record.coverage)))}</span>` : ''}

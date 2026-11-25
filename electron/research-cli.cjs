@@ -5,7 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { parseArgs } = require('node:util');
 const { projectToday, sortEntries, summaryCoversPhase } = require('./research-phases.mjs');
-const { ResearchStore, phaseFilingGuide } = require('./research-store.cjs');
+const { ResearchStore, phaseFilingGuide, reportWritingGuide } = require('./research-store.cjs');
 const { MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, DOCUMENT_SCHEME, RECORDS, FIELD_TYPES, TEMPLATE_KEYS, RELATION_KINDS, RUN_FILTER_FIELDS, assert, date, id, comparisonType } = require('./research-model.cjs');
 const { comparisonLimits } = require('./research-comparison.mjs');
 const { createExampleProject } = require('./research-example.cjs');
@@ -104,8 +104,10 @@ async function main(args) {
         fieldTypes: FIELD_TYPES, templateVariables: [...TEMPLATE_KEYS, 'field.<id>'],
         rules: {
           guide: 'AGENTS.md in the project root, when present',
-          instructions: 'Read project.instructions and the project guide for local conventions.',
+          instructions: 'project.instructions',
           phaseSelection: phaseFilingGuide,
+          experimentReport: reportWritingGuide,
+          excerpt: 'For entry and summary types, list shows the first sentence from the configured text conclusionField, a Conclusion/结论 section, or the opening paragraph, in that order.',
           recordTypes: 'Read project.recordTypes. Match record.type to the record type ID, then read its fields and template.',
           fields: 'Use field IDs as keys. Read each field’s type, description, unit, required, min, max, options and default. Use JSON numbers in the configured unit, JSON booleans, YYYY-MM-DD date strings and exact choice values.',
           fieldOrigins: 'read and list return fieldOrigins keyed by field ID when verified. Each entry contains the definition (rule) and source (record or default) for the saved value. read also returns currentFields for direct comparison. A missing origin means the historical definition is unknown. Project rule changes and unrelated edits preserve existing origins. batch manages record.fieldRules and its immutable snapshot automatically.',

@@ -202,8 +202,8 @@ function validateProject(project) {
     type.fields.forEach(rule => validateField(rule, type.id));
     unique(type.fields.map(rule => rule.id), `recordTypes.${type.id}.fields`);
     if (type.conclusionField !== undefined) {
-      assert(type.kind === 'summary' && type.fields.some(field => field.id === type.conclusionField && field.type === 'text'),
-        `recordTypes.${type.id}.conclusionField must name a text field on a summary type.`);
+      assert(['entry', 'summary'].includes(type.kind) && type.fields.some(field => field.id === type.conclusionField && field.type === 'text'),
+        `recordTypes.${type.id}.conclusionField must name a text field on an entry or summary type.`);
     }
     string(type.template, `recordTypes.${type.id}.template`, { limit: 16000, empty: true });
     const keys = new Set([...TEMPLATE_KEYS, ...type.fields.map(rule => `field.${rule.id}`)]);

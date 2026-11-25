@@ -36,7 +36,7 @@ const exampleProject = {
         { id: 'gpu_ms', label: 'GPU 帧时间', type: 'number', min: 0, unit: 'ms', description: '去掉预热帧后的 GPU 帧时间中位数。' },
         { id: 'outcome', label: '结果状态', type: 'choice', required: true, options: ['有效', '需复测', '无效'], default: '需复测' },
       ],
-      template: '# {{title}}\n\n## 目的\n\n## 设置与变更\n\n- 场景：{{field.scene}}\n- 显卡：{{field.gpu}}\n- 分辨率：{{field.resolution}}\n\n## 观察与结果\n\n## 结论与下一步\n',
+      template: '# {{title}}\n\n## 结论\n\n<!-- 写下本轮能回答的问题，再交代对照与适用条件。缺少基线时，说明还需补哪一轮。 -->\n\n## 对照与依据\n\n{{sources}}\n\n## 实验设置\n\n- 场景：{{field.scene}}\n- 显卡：{{field.gpu}}\n- 分辨率：{{field.resolution}}\n',
     },
     {
       id: 'stage-summary', label: '阶段总结', kind: 'summary', description: '汇总一段时间内的研究进展，引用支持判断的记录。',
@@ -57,12 +57,12 @@ const exampleRecords = [
   {
     id: 'baseline-city', type: 'experiment', title: '城市街区基线', date: '2026-11-04', phaseId: 'baseline',
     fields: { scene: 'City Block', gpu_ms: 12.8, outcome: '有效' },
-    body: '# 城市街区基线\n\n固定相机轨迹和画质，用 600 帧建立无剔除基线。去预热后 GPU 帧时间中位数为 **12.8 ms**。后续尝试沿用这一轨迹，并比对相同帧的可见性。\n',
+    body: '# 城市街区基线\n\n城市街区这条轨迹的无剔除基线为 **12.8 ms**。固定画质采集 600 帧，按去预热后的 GPU 帧时间中位数比较后续方案。\n',
   },
   {
     id: 'tile-culling', type: 'experiment', title: '测试分块遮挡剔除', date: '2026-11-07', phaseId: 'exploration',
     fields: { scene: 'City Block', gpu_ms: 10.2, outcome: '有效' },
-    body: '# 测试分块遮挡剔除\n\n沿用基线的相机轨迹。分块剔除将 GPU 帧时间降至 **10.2 ms**。遮挡边缘需要逐帧复核。\n',
+    body: '# 测试分块遮挡剔除\n\n城市街区同一轨迹上，分块剔除将 GPU 帧时间从 **12.8 ms** 降至 **10.2 ms**。计时采用去预热后的中位数。遮挡边缘仍需逐帧复核。\n\n[城市街区基线](mekir:baseline-city)\n',
   },
   {
     id: 'conservative-depth', type: 'experiment', title: '验证保守深度阈值', date: '2026-11-11', phaseId: 'exploration',
@@ -72,7 +72,7 @@ const exampleRecords = [
   {
     id: 'forest-validation', type: 'experiment', title: '树林轨迹复测', date: '2026-11-13', phaseId: 'validation',
     fields: { scene: 'Forest Path', gpu_ms: 11.4, outcome: '需复测' },
-    body: '# 树林轨迹复测\n\n新的轨迹覆盖较密集的植被遮挡。测得 **11.4 ms**，还需要补采同视角的基线。\n',
+    body: '# 树林轨迹复测\n\n树林轨迹测得 GPU 帧时间 **11.4 ms**，剔除能节省多少时间仍待同视角的无剔除基线确认。新轨迹覆盖了更密集的植被。\n',
   },
   {
     id: 'exploration-review', type: 'stage-summary', title: '方案探索阶段总结', date: '2026-11-16', phaseId: 'exploration',

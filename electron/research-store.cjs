@@ -47,10 +47,10 @@ function firstSentence(value) {
   return start.split(/(?<=[。！？])|(?<=[.!?])\s/, 1)[0].trimEnd();
 }
 
-function progressExcerpt(body, summary = false) {
+function progressExcerpt(body, preferConclusion = false) {
   let fence = '';
   let first = '', conclusionDepth = 0;
-  const text = summary ? body : body.slice(0, 8192);
+  const text = preferConclusion ? body : body.slice(0, 8192);
   for (const [raw] of text.matchAll(/[^\n]+/g)) {
     const line = raw.trim();
     const marker = line.match(/^(`{3,}|~{3,})/);
@@ -73,7 +73,7 @@ function progressExcerpt(body, summary = false) {
     const plain = prose.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
       .replace(/(\*\*|__|`)(.+?)\1/g, '$2').trim();
     if (plain) {
-      if (!summary || conclusionDepth) return firstSentence(plain);
+      if (!preferConclusion || conclusionDepth) return firstSentence(plain);
       first = firstSentence(plain);
     }
   }
@@ -241,7 +241,7 @@ class ResearchStore {
           if (excerptTypes) {
             const type = excerptTypes.get(item.record.type);
             const field = type?.conclusionField && item.record.fields[type.conclusionField];
-            item.excerpt = (typeof field === 'string' && firstSentence(field)) || progressExcerpt(item.body, type?.kind === 'summary');
+            item.excerpt = (typeof field === 'string' && firstSentence(field)) || progressExcerpt(item.body, type?.kind === 'entry' || type?.kind === 'summary');
           }
           if (!bodyIds.has(recordId)) delete item.body;
           items.set(recordId, item);
@@ -682,6 +682,8 @@ function encodeJson(value, limit = MAX_JSON_BYTES) {
 
 const phaseFilingGuide = '归档前先看 describe.phaseContext，按本轮要回答的问题选择已有阶段。调参、换机位、补基线或重跑仍服务于同一项判断时，沿用阶段 ID，为每轮实验单独记一条。研究要作的决定改变时再建阶段，在阶段说明中写明这次要判断什么。普通实验暂时找不到归属时，可先按日期记录，留待归类。';
 
+const reportWritingGuide = '给了解项目、没参与本轮实验的同事写。首句直接回答本轮研究疑问，再用两三句解释对照、关键观察和适用条件。数字写明测量对象、单位和比较条件，并引用原始证据。缺少对照时，说明目前测到了什么、还需补哪项测量。参数和逐轮数据放在后面。';
+
 const projectGuide = `# mekiR 研究项目的 Agent 指引
 
 ## 读取当前项目
@@ -701,6 +703,12 @@ ${phaseFilingGuide}
 1. 用 \`list\` 查找同一轮运行，复用稳定记录 ID。用 \`read <目录> <ID>\` 获取已有的字段、正文和 \`revision\`。发生日期采用项目时区的实际日期。
 2. 用 \`batch <目录> --input <文件或 ->\` 提交 \`ifProjectRevision\` 和 \`records\`。前者取自 \`describe.revision\`。新记录提交 \`id\`、\`ifRevision: null\`、\`type\`、\`title\`、\`date\` 及所需属性。已有记录提交 \`id\`、\`read.revision\` 作为 \`ifRevision\`，以及要修改的内容。
 3. 新建时，省略已配置默认值的字段会使用默认值，省略 \`body\` 会套用模板。更新时，省略的字段和正文保留原值。要主动清除可选字段，在 \`fields\` 中把该字段设为 \`null\`。收到 \`RESEARCH_CONFLICT\` 后重新读取规则和相关记录，再合并重试。
+
+## 实验报告的开头
+
+${reportWritingGuide}
+
+例如，“这条树林轨迹测得 GPU 帧时间 11.4 ms。判断遮挡剔除能节省多少时间，还需补测同轨迹的无剔除基线。”按本项目的字段和证据替换示例。写完用 \`list\` 检查记录的 \`excerpt\`，确认只读这一句也能看出本轮进展。
 
 ## 引用依据和撰写总结
 
@@ -729,4 +737,4 @@ ${phaseFilingGuide}
 调整显示名称时沿用原 ID。字段的含义或单位变化时使用新 ID，并同步更新模板里的 \`{{field.<ID>}}\` 和视图的 \`fieldIds\`。配置保存后重新 \`describe\`，用 \`list\` 的 \`issues\` 检查历史记录，再按需用 \`batch\` 补录。项目规则放在配置的 \`instructions\`，项目协作流程可在这份 \`AGENTS.md\` 中维护。
 `;
 
-module.exports = { ResearchStore, phaseFilingGuide };
+module.exports = { ResearchStore, phaseFilingGuide, reportWritingGuide };

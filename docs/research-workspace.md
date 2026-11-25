@@ -121,6 +121,8 @@ node electron/research-cli.cjs batch /path/to/project --input batch.json
 
 从 `describe.project.recordTypes` 按 ID 选择 `record.type`。`fields` 以所选类型的字段 ID 为键。按每个字段的说明、单位、类型、取值范围和枚举从实际产物提取值。`project.instructions` 说明本项目的记录口径。各项目可以定义自己的类型、字段和正文模板。例如，渲染实验记录场景和帧时间，论文分析记录章节和稿件版本。
 
+实验报告的首句写本轮能下的判断，接着交代对照、依据和适用条件。证据不足时写明还需补哪次测量。实验列表在标题下显示一句结论。实验和总结类型可以用 `conclusionField` 指定项目自己的文本字段。选取顺序为该字段、「结论」小节、正文首句。`list` 的 `excerpt` 与界面显示一致。
+
 新记录使用同一轮实验的稳定 ID，并在 `date` 写项目时区的实际发生日期。总结用 `date` 写撰写日期，用 `coverage` 写覆盖区间。下例使用渲染研究样例的类型和字段。执行前将 `ifProjectRevision` 替换为 `describe` 返回的 `revision`。
 
 ```json

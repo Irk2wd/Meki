@@ -87,6 +87,26 @@ test('summary excerpts prefer the project’s conclusion field, then a conclusio
   assert.throws(() => validateProject(project), /conclusionField/);
 });
 
+test('experiment previews use the project conclusion or find it in older reports', async t => {
+  const project = structuredClone(exampleProject);
+  const type = project.recordTypes.find(type => type.kind === 'entry');
+  type.fields.push({ id: 'reading', label: '研究判断', type: 'text' });
+  type.conclusionField = 'reading';
+  const store = await ResearchStore.initialize(await projectFolder(t), project);
+  const item = { id: 'rerun', type: type.id, title: '复核', date: '2000-01-01', fields: { scene: '树林' } };
+  const excerpt = async () => (await store.snapshot()).records[0].excerpt;
+  await store.writeBatch({ records: [item] });
+  assert.equal(await excerpt(), undefined);
+  const body = '# 复核\n\n使用第二个机位。\n\n## 结论与下一步\n\n需要补测同机位的基线。';
+  const update = async change => store.writeBatch({ records: [{ id: item.id, ifRevision: (await store.read(item.id)).revision, ...change }] });
+  await update({ body });
+  assert.equal(await excerpt(), '需要补测同机位的基线。');
+  await update({ fields: { reading: '已取得同机位对照。测量如下。' } });
+  assert.equal(await excerpt(), '已取得同机位对照。');
+  await update({ fields: { reading: null }, body: '# 复核\n\n林间步道测得 11.4 ms。稍后补对照。' });
+  assert.equal(await excerpt(), '林间步道测得 11.4 ms。');
+});
+
 test('a legacy project keeps its records and sibling Markdown links', async t => {
   const root = await projectFolder(t);
   await fs.mkdir(path.join(root, 'records'), { recursive: true });

@@ -423,12 +423,15 @@ try {
 
   const tile = command('read', ['tile-culling']);
   const filler = Array.from({ length: 14 }, (_, i) => `第 ${i + 1} 次记录依次检查相机轨迹、可见性与帧时间。`).join('\n\n');
-  command('batch', [], { records: [{ id: tile.record.id, ifRevision: tile.revision, body: `${tile.body}\n${filler}\n\n[城市街区基线](mekir:baseline-city)\n` }] });
+  command('batch', [], { records: [{ id: tile.record.id, ifRevision: tile.revision, body: tile.body.replace('[城市街区基线]', `${filler}\n\n[城市街区基线]`) }] });
   await refresh.click();
   await idle();
   await page.locator('[data-research-phase="exploration"]').click();
   assert.equal(await page.locator('.research-entry').count(), 2);
   const phaseSummary = page.locator('.research-phase-summaries [data-research-record=exploration-review]');
+  const experimentRow = page.locator('.research-entry').filter({ has: page.locator('.research-entry-title [data-research-record=tile-culling]') });
+  const tilePreview = command('list', ['--phase', 'exploration']).records.find(item => item.record.id === 'tile-culling');
+  assert.equal(await experimentRow.locator('.research-entry-conclusion').textContent(), tilePreview.excerpt);
   await phaseSummary.locator('.research-progress-conclusion').getByText('保守阈值稳定了遮挡边缘，适合进入复测。').waitFor();
   const progressSource = page.locator('[data-research-progress-link=tile-culling]');
   await progressSource.click();

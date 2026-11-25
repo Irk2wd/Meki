@@ -442,6 +442,7 @@ body:not(.window-fitted) #window-caption + .research-shell > .research-column-di
 .research-entry-type { flex-shrink: 0; padding: 2px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); font-size: 10px; }
 .research-entry-type.summary { color: var(--research-summary); background: color-mix(in srgb, var(--research-summary) 13%, var(--bg)); }
 .research-entry-meta, .research-sources { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 12px; color: var(--soft); font-size: 12px; overflow-wrap: anywhere; }
+.research-entry-conclusion { margin: 2px 0 6px; max-inline-size: 76ch; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .research-entry-meta { margin-top: 3px; }
 .research-entry-meta strong { font-weight: 650; color: var(--text); }
 .research-entry-meta [data-research-field] { padding: 1px 0; color: inherit; text-align: start; font: inherit; overflow-wrap: anywhere; }
