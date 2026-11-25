@@ -5,6 +5,20 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { ResearchStore } = require('./research-store.cjs');
 
+const pendingSection = '## 待验证\n\n<!-- 在这里写尚未证实的解释、缺少的对照及验证方法。没有待验证事项时删去本节。 -->\n';
+
+function forestValidationReport(evidence = []) {
+  const sections = [
+    '# 树林轨迹复测', '## 结论',
+    '开启遮挡剔除后，树林轨迹的 GPU 帧时间中位数为 **11.4 ms**。这条轨迹覆盖了更密集的植被。',
+  ];
+  if (evidence.length) sections.push('## 四视角合成场景',
+    '11 月 20 日补充。固定四个机位比较树冠几何，下列计时包含单次 CPU 绘制与 PNG 编码。',
+    evidence.map(file => `- [${file.title}](mekir:${file.id})`).join('\n'));
+  sections.push('## 待验证', '沿同一轨迹关闭遮挡剔除再测一次，比较两种设置的 GPU 帧时间。');
+  return sections.join('\n\n') + '\n';
+}
+
 const exampleProject = {
   version: 1,
   id: 'render-benchmark',
@@ -36,12 +50,12 @@ const exampleProject = {
         { id: 'gpu_ms', label: 'GPU 帧时间', type: 'number', min: 0, unit: 'ms', description: '去掉预热帧后的 GPU 帧时间中位数。' },
         { id: 'outcome', label: '结果状态', type: 'choice', required: true, options: ['有效', '需复测', '无效'], default: '需复测' },
       ],
-      template: '# {{title}}\n\n## 结论\n\n<!-- 同一问题的调参、换机位和补基线沿用原阶段。首句写出本轮能下的判断，再交代对照和适用条件。缺少基线时，写明还需补哪一轮。 -->\n\n## 对照与依据\n\n{{sources}}\n\n## 实验设置\n\n- 场景：{{field.scene}}\n- 显卡：{{field.gpu}}\n- 分辨率：{{field.resolution}}\n',
+      template: '# {{title}}\n\n## 结论\n\n<!-- 同一问题的调参、换机位和补基线沿用原阶段。先写证据已支持的发现，写清比较条件和单位。缺少对照时写本轮实测值。 -->\n\n## 对照与依据\n\n{{sources}}\n\n## 实验设置\n\n- 场景：{{field.scene}}\n- 显卡：{{field.gpu}}\n- 分辨率：{{field.resolution}}\n\n' + pendingSection,
     },
     {
       id: 'stage-summary', label: '阶段总结', kind: 'summary', description: '汇总一段时间内的研究进展，引用支持判断的记录。',
       fields: [],
-      template: '# {{title}}\n\n## 结论\n\n## 依据\n\n{{sources}}\n\n## 下一步\n',
+      template: '# {{title}}\n\n## 结论\n\n<!-- 先回答阶段研究问题，再按重要性写出实验已经支持的其他结论，注明适用范围。 -->\n\n## 依据\n\n{{sources}}\n\n' + pendingSection,
     },
     { id: 'group-meeting', label: '组会汇报', kind: 'event', icon: 'presentation', fields: [], template: '# {{title}}\n\n## 汇报要点\n\n## 后续事项\n' },
   ],
@@ -62,22 +76,22 @@ const exampleRecords = [
   {
     id: 'tile-culling', type: 'experiment', title: '测试分块遮挡剔除', date: '2026-11-07', phaseId: 'exploration',
     fields: { scene: 'City Block', gpu_ms: 10.2, outcome: '有效' },
-    body: '# 测试分块遮挡剔除\n\n城市街区同一轨迹上，分块剔除将 GPU 帧时间从 **12.8 ms** 降至 **10.2 ms**。计时采用去预热后的中位数。遮挡边缘仍需逐帧复核。\n\n[城市街区基线](mekir:baseline-city)\n',
+    body: '# 测试分块遮挡剔除\n\n城市街区同一轨迹上，分块剔除将 GPU 帧时间从 **12.8 ms** 降至 **10.2 ms**。计时采用去预热后的中位数。\n\n[城市街区基线](mekir:baseline-city)\n\n## 待验证\n\n逐帧核对遮挡边缘，检查是否出现闪烁。\n',
   },
   {
     id: 'conservative-depth', type: 'experiment', title: '验证保守深度阈值', date: '2026-11-11', phaseId: 'exploration',
     fields: { scene: 'City Block', gpu_ms: 10.7, outcome: '有效' },
-    body: '# 验证保守深度阈值\n\n提高可见性阈值后，边缘闪烁在本次轨迹上消失。GPU 帧时间为 **10.7 ms**。继续检验不同镜头速度下的稳定性。\n',
+    body: '# 验证保守深度阈值\n\n提高可见性阈值后，边缘闪烁在本次轨迹上消失。GPU 帧时间为 **10.7 ms**。\n\n## 待验证\n\n改变镜头速度重走同一轨迹，检查遮挡边缘是否仍然稳定。\n',
   },
   {
     id: 'forest-validation', type: 'experiment', title: '树林轨迹复测', date: '2026-11-13', phaseId: 'validation',
     fields: { scene: 'Forest Path', gpu_ms: 11.4, outcome: '需复测' },
-    body: '# 树林轨迹复测\n\n树林轨迹测得 GPU 帧时间 **11.4 ms**，剔除能节省多少时间仍待同视角的无剔除基线确认。新轨迹覆盖了更密集的植被。\n',
+    body: forestValidationReport(),
   },
   {
     id: 'exploration-review', type: 'stage-summary', title: '方案探索阶段总结', date: '2026-11-16', phaseId: 'exploration',
     coverage: { start: '2026-11-05', end: '2026-11-13' }, sources: ['tile-culling', 'conservative-depth'],
-    body: '# 方案探索阶段总结\n\n## 结论\n\n保守阈值稳定了遮挡边缘，适合进入复测。\n\n## 依据\n\n- [测试分块遮挡剔除](mekir:tile-culling)\n- [验证保守深度阈值](mekir:conservative-depth)\n\n## 下一步\n\n补采树林场景基线，确认加速在不同场景下的稳定性。\n',
+    body: '# 方案探索阶段总结\n\n## 结论\n\n在城市街区的同一轨迹上，保守阈值下未见遮挡边缘闪烁，GPU 帧时间中位数从无剔除时的 12.8 ms 降到 10.7 ms。据此选用保守阈值进入树林复测。\n\n## 依据\n\n- [测试分块遮挡剔除](mekir:tile-culling)\n- [验证保守深度阈值](mekir:conservative-depth)\n\n## 待验证\n\n在树林场景沿同一轨迹分别测量无剔除基线和保守阈值方案，检查加速能否复现。\n',
   },
 ];
 
@@ -103,10 +117,9 @@ async function createExampleProject(root) {
   await store.bindEvidenceSource(sourceId, directory, '林地渲染样例');
   for (const { id, relativePath, title } of exampleEvidence) await store.indexEvidence(id, { sourceId, relativePath, title });
   const record = await store.read('forest-validation');
-  const links = exampleEvidence.map(file => `- [${file.title}](mekir:${file.id})`);
   await store.writeBatch({ records: [{
     id: record.record.id, ifRevision: record.revision, evidence: exampleEvidence.map(file => file.id),
-    body: [record.body.trimEnd(), '', '## 四视角合成场景', '', '11 月 20 日补充。固定四个机位比较树冠几何，下列计时包含单次 CPU 绘制与 PNG 编码。', '', ...links, ''].join('\n'),
+    body: forestValidationReport(exampleEvidence),
   }] });
   return store;
 }

@@ -59,7 +59,14 @@ test('describe gives a fresh agent the stage decision, latest summary and three 
   assert.equal(phase.description, project.phases[0].description);
   assert.equal(phase.latestSummary.excerpt, '两轮使用相同机位。');
   assert.deepEqual(phase.recentExperiments.map(item => item.id), ['d', 'c', 'b']);
-  assert.ok((await fs.readFile(path.join(root, 'AGENTS.md'), 'utf8')).includes(describe.format.rules.phaseSelection));
+  const guide = await fs.readFile(path.join(root, 'AGENTS.md'), 'utf8');
+  assert.ok(guide.includes(describe.format.rules.phaseSelection));
+  assert.ok(guide.includes(describe.format.rules.experimentReport));
+  for (const type of describe.project.recordTypes.filter(type => type.kind === 'entry' || type.kind === 'summary')) {
+    const headings = type.template.split('\n').filter(line => line.startsWith('## '));
+    assert.equal(headings[0], '## 结论');
+    assert.equal(headings.at(-1), '## 待验证');
+  }
 });
 
 test('summary excerpts prefer the project’s conclusion field, then a conclusion section, then the first prose sentence', async t => {
@@ -100,11 +107,24 @@ test('experiment previews use the project conclusion or find it in older reports
   const body = '# 复核\n\n使用第二个机位。\n\n## 结论与下一步\n\n需要补测同机位的基线。';
   const update = async change => store.writeBatch({ records: [{ id: item.id, ifRevision: (await store.read(item.id)).revision, ...change }] });
   await update({ body });
-  assert.equal(await excerpt(), '需要补测同机位的基线。');
+  assert.equal(await excerpt(), '使用第二个机位。');
   await update({ fields: { reading: '已取得同机位对照。测量如下。' } });
   assert.equal(await excerpt(), '已取得同机位对照。');
   await update({ fields: { reading: null }, body: '# 复核\n\n林间步道测得 11.4 ms。稍后补对照。' });
   assert.equal(await excerpt(), '林间步道测得 11.4 ms。');
+});
+
+test('phase and record previews omit open questions and keep confirmed findings across nested headings', async t => {
+  const { store } = await archiveProject(t);
+  const record = await store.read('exploration-review');
+  const preview = async body => {
+    const current = await store.read(record.record.id);
+    await store.writeBatch({ records: [{ id: current.record.id, ifRevision: current.revision, body }] });
+    return (await store.snapshot()).records.find(item => item.record.id === current.record.id).excerpt;
+  };
+  assert.equal(await preview('# 复核\n\n## 结论\n\n### 待验证\n\n补测另一机位。\n\n#### 结论\n\n可能仍然省时。'), undefined);
+  assert.equal(await preview('## Open questions\n\n### Findings\n\nThe camera might matter.\n\n## Measurements\n\nThe median was 11 ms.'), 'The median was 11 ms.');
+  assert.equal(await preview('## 结论与下一步\n\n再跑一次。\n\n## 已确认的结论\n\n### 测量\n\n- 同机位用时缩短 12%。\n\n## 待验证\n\n换机位复核。'), '同机位用时缩短 12%。');
 });
 
 test('a legacy project keeps its records and sibling Markdown links', async t => {

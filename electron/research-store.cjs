@@ -47,9 +47,13 @@ function firstSentence(value) {
   return start.split(/(?<=[。！？])|(?<=[.!?])\s/, 1)[0].trimEnd();
 }
 
+const findingHeading = /^(?:结论|主要结论|已确认|(?:已确认|已验证|确定性)(?:的)?(?:结论|结果|发现)|conclusions?|(?:(?:confirmed|verified|key) )?findings|(?:confirmed|verified) results)$/i;
+const pendingHeading = /^(?:待(?:验证|确认)(?:事项|问题)?|未决问题|下一步|不确定性|open questions?|next steps?|to verify|uncertainties)$/i;
+
 function progressExcerpt(body, preferConclusion = false) {
   let fence = '';
-  let first = '', conclusionDepth = 0;
+  let first = '';
+  const sections = [];
   const text = preferConclusion ? body : body.slice(0, 8192);
   for (const [raw] of text.matchAll(/[^\n]+/g)) {
     const line = raw.trim();
@@ -62,18 +66,24 @@ function progressExcerpt(body, preferConclusion = false) {
     if (fence || !line) continue;
     const heading = /^(#{1,6})(?:\s+(.*)|$)/.exec(line);
     if (heading) {
+      const depth = heading[1].length;
       const title = (heading[2] || '').replace(/\s+#+$/, '');
-      if (/^(?:结论(?:与下一步)?|主要结论|conclusions?|findings|key findings)$/i.test(title)) conclusionDepth = heading[1].length;
-      else if (heading[1].length <= conclusionDepth) conclusionDepth = 0;
+      while (sections.length && sections.at(-1).depth >= depth) sections.pop();
+      let kind = sections.at(-1)?.kind || 'prose';
+      if (preferConclusion && (kind === 'pending' || pendingHeading.test(title))) kind = 'pending';
+      else if (findingHeading.test(title)) kind = 'finding';
+      else if (/^(?:结论与下一步|conclusions? and next steps)$/i.test(title)) kind = 'mixed';
+      sections.push({ depth, kind });
       continue;
     }
-    if (first && !conclusionDepth) continue;
-    const prose = conclusionDepth ? line.replace(/^(?:[-+*]|\d+[.)])\s+/, '') : line;
+    const kind = sections.at(-1)?.kind;
+    if (kind === 'pending' || (first && kind !== 'finding')) continue;
+    const prose = kind === 'finding' || kind === 'mixed' ? line.replace(/^(?:[-+*]|\d+[.)])\s+/, '') : line;
     if (/^(?:[|<>!]|[-+*]\s|[-=_*]{3,}$|\d+[.)]\s)/.test(prose)) continue;
     const plain = prose.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
       .replace(/(\*\*|__|`)(.+?)\1/g, '$2').trim();
     if (plain) {
-      if (!preferConclusion || conclusionDepth) return firstSentence(plain);
+      if (!preferConclusion || kind === 'finding') return firstSentence(plain);
       first = firstSentence(plain);
     }
   }
@@ -682,7 +692,7 @@ function encodeJson(value, limit = MAX_JSON_BYTES) {
 
 const phaseFilingGuide = '归档前先看 describe.phaseContext，按本轮要回答的问题选择已有阶段。调参、换机位、补基线或重跑仍服务于同一项判断时，沿用阶段 ID，为每轮实验单独记一条。研究要作的决定改变时再建阶段，在阶段说明中写明这次要判断什么。普通实验暂时找不到归属时，可先按日期记录，留待归类。';
 
-const reportWritingGuide = '给了解项目、没参与本轮实验的同事写。首句直接回答本轮研究疑问，再用两三句解释对照、关键观察和适用条件。数字写明测量对象、单位和比较条件，并引用原始证据。缺少对照时，说明目前测到了什么、还需补哪项测量。参数和逐轮数据放在后面。';
+const reportWritingGuide = '实验记录和阶段总结都从证据已支持的结论写起。首句回答本轮研究疑问，再按重要性写出其他已确认的发现。交代测量对象、对照和适用范围，给出关键数值、单位和原始证据。缺少对照时先写本轮实测值或直接观察。把推测、待补的对照和下一次要做的验证集中放在文末「待验证」。没有遗留问题时可以省略这一节。';
 
 const projectGuide = `# mekiR 研究项目的 Agent 指引
 
@@ -704,11 +714,11 @@ ${phaseFilingGuide}
 2. 用 \`batch <目录> --input <文件或 ->\` 提交 \`ifProjectRevision\` 和 \`records\`。前者取自 \`describe.revision\`。新记录提交 \`id\`、\`ifRevision: null\`、\`type\`、\`title\`、\`date\` 及所需属性。已有记录提交 \`id\`、\`read.revision\` 作为 \`ifRevision\`，以及要修改的内容。
 3. 新建时，省略已配置默认值的字段会使用默认值，省略 \`body\` 会套用模板。更新时，省略的字段和正文保留原值。要主动清除可选字段，在 \`fields\` 中把该字段设为 \`null\`。收到 \`RESEARCH_CONFLICT\` 后重新读取规则和相关记录，再合并重试。
 
-## 实验报告的开头
+## 实验报告和阶段总结怎么写
 
 ${reportWritingGuide}
 
-例如，“这条树林轨迹测得 GPU 帧时间 11.4 ms。判断遮挡剔除能节省多少时间，还需补测同轨迹的无剔除基线。”按本项目的字段和证据替换示例。写完用 \`list\` 检查记录的 \`excerpt\`，确认只读这一句也能看出本轮进展。
+例如，开头写“开启遮挡剔除后，这条树林轨迹的 GPU 帧时间中位数为 11.4 ms。”文末「待验证」写“沿同一轨迹关闭遮挡剔除再测一次，比较两种设置的帧时间。”如果项目指定了结论字段，把首句写入该字段。写完用 \`list\` 核对 \`excerpt\` 是否准确传达本轮发现。
 
 ## 引用依据和撰写总结
 

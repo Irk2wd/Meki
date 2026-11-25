@@ -107,7 +107,7 @@ async function main(args) {
           instructions: 'project.instructions',
           phaseSelection: phaseFilingGuide,
           experimentReport: reportWritingGuide,
-          excerpt: 'For entry and summary types, list shows the first sentence from the configured text conclusionField, a Conclusion/结论 section, or the opening paragraph, in that order.',
+          excerpt: 'For entries and summaries, put a supported finding in the configured text conclusionField or the Conclusion/结论 section. list uses the first sentence of that field, then the conclusion, then the first available prose outside pending sections. Put open questions and missing comparisons under 待验证 or Open questions at the end.',
           recordTypes: 'Read project.recordTypes. Match record.type to the record type ID, then read its fields and template.',
           fields: 'Use field IDs as keys. Read each field’s type, description, unit, required, min, max, options and default. Use JSON numbers in the configured unit, JSON booleans, YYYY-MM-DD date strings and exact choice values.',
           fieldOrigins: 'read and list return fieldOrigins keyed by field ID when verified. Each entry contains the definition (rule) and source (record or default) for the saved value. read also returns currentFields for direct comparison. A missing origin means the historical definition is unknown. Project rule changes and unrelated edits preserve existing origins. batch manages record.fieldRules and its immutable snapshot automatically.',

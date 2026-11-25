@@ -192,7 +192,8 @@ try {
   await idle();
   assert.deepEqual(await phaseOrder(), ['validation', 'exploration', 'baseline']);
   assert.match(await phases.filter({ hasText: '方案探索' }).innerText(), /最近进展 11\/16/);
-  assert.equal(await phases.filter({ hasText: '方案探索' }).locator('.research-phase-progress').textContent(), '保守阈值稳定了遮挡边缘，适合进入复测。');
+  const explorationFinding = '在城市街区的同一轨迹上，保守阈值下未见遮挡边缘闪烁，GPU 帧时间中位数从无剔除时的 12.8 ms 降到 10.7 ms。';
+  assert.equal(await phases.filter({ hasText: '方案探索' }).locator('.research-phase-progress').textContent(), explorationFinding);
   const eventTypes = page.locator('.research-timeline-footer [data-research-event-types]');
   assert.ok(await eventTypes.isHidden());
   await optionsToggle.focus();
@@ -206,7 +207,7 @@ try {
     ({ id: record.id, ifRevision: revision, date: '2026-11-19' })) });
   await refresh.click();
   await phases.filter({ hasText: '方案探索' }).getByText('最近进展 11/19').waitFor();
-  assert.equal(await phases.filter({ hasText: '方案探索' }).locator('.research-phase-progress').textContent(), '保守阈值稳定了遮挡边缘，适合进入复测。');
+  assert.equal(await phases.filter({ hasText: '方案探索' }).locator('.research-phase-progress').textContent(), explorationFinding);
   assert.deepEqual(await phaseOrder(), ['validation', 'exploration', 'baseline']);
   command('batch', [], { records: [retrospective, concurrentRun].map(({ record }) =>
     ({ id: record.id, ifRevision: command('read', [record.id]).revision, date: record.date })) });
@@ -272,9 +273,12 @@ try {
   assert.match(await focus.innerText(), /本阶段要判断什么[\s\S]*同轨迹/);
   assert.equal(await focus.evaluate(el => el.nextElementSibling.matches('.research-progress')), true);
   const recentExperiment = page.locator('.research-progress-latest [data-research-progress-link=forest-validation]');
+  assert.equal(await page.locator('.research-entry-conclusion').textContent(), '开启遮挡剔除后，树林轨迹的 GPU 帧时间中位数为 11.4 ms。');
   assert.equal(await recentExperiment.locator('.research-progress-conclusion').textContent(),
     await page.locator('.research-entry-conclusion').textContent());
   await page.locator('.research-entry [data-research-record=forest-validation]').click();
+  await page.locator('#visual-editor').getByRole('heading', { name: '待验证', exact: true }).waitFor();
+  assert.equal(await page.locator('#visual-editor h2').last().textContent(), '待验证');
   const sampleLinks = page.locator('#research-reader-related');
   assert.equal(await sampleLinks.isVisible(), false);
   await showReaderReferences();
@@ -441,7 +445,7 @@ try {
   const experimentRow = page.locator('.research-entry').filter({ has: page.locator('.research-entry-title [data-research-record=tile-culling]') });
   const tilePreview = command('list', ['--phase', 'exploration']).records.find(item => item.record.id === 'tile-culling');
   assert.equal(await experimentRow.locator('.research-entry-conclusion').textContent(), tilePreview.excerpt);
-  await phaseSummary.locator('.research-progress-conclusion').getByText('保守阈值稳定了遮挡边缘，适合进入复测。').waitFor();
+  await phaseSummary.locator('.research-progress-conclusion').getByText(explorationFinding).waitFor();
   const progressSource = page.locator('[data-research-progress-link=tile-culling]');
   await progressSource.click();
   await page.locator('#research-reader-title').getByText('测试分块遮挡剔除').waitFor();
