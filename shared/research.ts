@@ -1,6 +1,26 @@
 export type ResearchValue = string | number | boolean;
 
 export interface ResearchRange { start: string; end: string }
+export type ResearchSearchFormat = 'markdown' | 'pptx' | 'pdf' | 'file';
+export type ResearchSearchMode = 'keyword' | 'concept';
+export interface ResearchSearchQuery {
+  query: string;
+  mode: ResearchSearchMode;
+  format?: ResearchSearchFormat | 'all';
+  phase?: string;
+  from?: string;
+  to?: string;
+}
+export type ResearchSearchLocator = { kind: 'document' } | { kind: 'page'; page: number } |
+  { kind: 'paragraph' | 'trial'; line: number; heading: string; anchor: string; occurrence: number; trialId?: string; date?: string };
+export interface ResearchSearchHit { locator: ResearchSearchLocator; snippet: string; dataTable: boolean }
+export interface ResearchSearchDocument { id: string; title: string; format: ResearchSearchFormat; hits: ResearchSearchHit[] }
+export interface ResearchSearchResponse {
+  mode: ResearchSearchMode;
+  warning?: string;
+  problems: Array<{ id: string; message: string }>;
+  results: ResearchSearchDocument[];
+}
 export interface ResearchGoal { text: string; done?: boolean }
 export interface ResearchPhase {
   id: string;

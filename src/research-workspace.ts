@@ -2,9 +2,10 @@ import { getLocale, ht, t } from '../electron/i18n.mjs';
 import { activityDates, latestActivity, monthFilter, overlaps, phaseSpan, projectToday, sortEntries, summaryCoversPhase } from '../electron/research-phases.mjs';
 import { comparisonImages } from '../electron/research-comparison.mjs';
 import { researchReportFormat } from '../electron/research-report-format.mjs';
-import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSnapshot, ResearchType, ResearchValue, ResearchView } from '../shared/research';
+import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSearchLocator, ResearchSnapshot, ResearchType, ResearchValue, ResearchView } from '../shared/research';
 import { icon } from './icons';
 import { ComparisonGridEditor, ComparisonViewer } from './research-comparison';
+import { ResearchSearchDialog } from './research-search-dialog';
 import { ResearchColumns } from './research-columns';
 import { evidenceWipe, placeReaderFigure, supportsWipe, type WipePosition } from './research-wipe';
 import type { EditorView } from '@milkdown/kit/prose/view';
@@ -312,7 +313,7 @@ interface Hooks {
   root(): string | undefined;
   blocked(): boolean;
   whenIdle(): Promise<void>;
-  open(root: string, id: string, origin?: HTMLButtonElement, edit?: boolean, sourceProjectId?: string): Promise<void>;
+  open(root: string, id: string, origin?: HTMLButtonElement, edit?: boolean, sourceProjectId?: string, locator?: ResearchSearchLocator): Promise<void>;
   closeReader(): Promise<void>;
   expandNavigation(): void;
   openProject(root: string): Promise<void>;
@@ -339,6 +340,7 @@ export class ResearchWorkspace {
   private projectPicker = document.createElement('dialog');
   private rangePicker = document.createElement('dialog');
   private tools: ResearchTools;
+  private projectSearch: ResearchSearchDialog;
   private comparisonViewer = new ComparisonViewer();
   private comparisonGrid?: ComparisonGridEditor;
   private snapshot: ResearchSnapshot | null = null;
@@ -387,6 +389,7 @@ export class ResearchWorkspace {
 
   constructor(private host: HTMLElement, private sidebar: HTMLElement, private hooks: Hooks) {
     this.tools = new ResearchTools(this.host.querySelector<HTMLElement>('#document-surface')!, () => this.refresh(), hooks.notify);
+    this.projectSearch = new ResearchSearchDialog(hooks.notify);
     this.panel.id = 'research-workspace';
     this.panel.hidden = true;
     this.toolbar.className = 'research-toolbar';
@@ -1111,7 +1114,7 @@ export class ResearchWorkspace {
     const phaseCrumb = active?.page === 'timeline' && state?.project.phases.find(phase => phase.id === this.phaseId)?.title;
     this.toolbar.innerHTML = `<div class="research-breadcrumb">${toggle}${state ? `<span title="${escape(state.project.title)}">${escape(state.project.title)}</span><i aria-hidden="true">/</i>` : ''}
       <span>${escape(active?.label || t("科研项目"))}</span>${phaseCrumb ? `<i aria-hidden="true">/</i><span>${escape(phaseCrumb)}</span>` : ''}</div>
-      ${state ? `<button type="button" class="icon-button" data-action="refresh" aria-label="${ht("刷新项目")}" title="${ht("刷新项目")}">${icon('refresh', 17)}</button>` : ''}`;
+      ${state ? `<div class="research-toolbar-actions"><button type="button" class="secondary-button research-toolbar-search" data-research-search aria-haspopup="dialog" aria-label="${ht("搜索项目")}">${icon('search', 15)}<span>${ht("搜索项目")}</span></button><button type="button" class="icon-button" data-action="refresh" aria-label="${ht("刷新项目")}" title="${ht("刷新项目")}">${icon('refresh', 17)}</button></div>` : ''}`;
     if (!state || !active || !today) {
       this.samples.show();
       this.renderSidebar(state, active || undefined);
@@ -1506,6 +1509,18 @@ export class ResearchWorkspace {
       return;
     }
     const data = button.dataset;
+    if ('researchSearch' in data) {
+      if (this.hooks.blocked()) await this.hooks.whenIdle();
+      if (!this.visible || this.snapshot?.root !== state.root) return;
+      const origin = this.toolbar.querySelector<HTMLButtonElement>('[data-research-search]') || button;
+      this.projectSearch.show(state.root, state.project.phases, async (doc, hit) => {
+        if (this.snapshot?.root !== state.root) return;
+        const source = state.documents.find(item => item.id === doc.id);
+        if (source?.sourceId) await this.tools.evidence(state.root, doc.id, undefined, undefined, origin, false, hit.locator);
+        else await this.hooks.open(state.root, doc.id, origin, false, undefined, hit.locator);
+      });
+      return;
+    }
     if (this.hooks.blocked() && (data.researchProgressLink || data.researchTrialRecords || data.researchTimelineEvents)) {
       await this.hooks.whenIdle();
       if (!this.visible || !button.isConnected || this.snapshot !== state) return;

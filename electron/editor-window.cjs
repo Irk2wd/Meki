@@ -696,6 +696,7 @@ function registerIpc() {
   });
   register('refresh-workspace', refreshWorkspace);
   register('research-snapshot', researchSnapshot);
+  register('search-research', async (root, input) => require('./research-search-service.cjs').search((await requireResearch(root)).root, input));
   register('list-research-projects', listResearchProjects);
   register('open-research-project', openResearchProject);
   register('create-research-demo', createResearchDemo);

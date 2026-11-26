@@ -1,8 +1,9 @@
 import { ht, t } from '../electron/i18n.mjs';
 import eventIcons from '../electron/research-event-icons.json';
-import type { ResearchDocument, ResearchEntry, ResearchEvidenceFile, ResearchField, ResearchFilter, ResearchGoalMode, ResearchImportPreview, ResearchPhase, ResearchReference, ResearchRelationKind, ResearchSnapshot, ResearchType, ResearchValue, ResearchWidth } from '../shared/research';
+import type { ResearchDocument, ResearchEntry, ResearchEvidenceFile, ResearchField, ResearchFilter, ResearchGoalMode, ResearchImportPreview, ResearchPhase, ResearchReference, ResearchRelationKind, ResearchSearchLocator, ResearchSnapshot, ResearchType, ResearchValue, ResearchWidth } from '../shared/research';
 import { icon } from './icons';
 import { recordKind, recordMark } from './research-record-mark';
+import { revealEvidenceLine } from './research-search-location';
 import { ResearchReportPreview } from './research-report-preview';
 import { showEvidenceTable } from './research-evidence-table';
 
@@ -458,7 +459,7 @@ export class ResearchTools {
     if (focusTab) selected?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   }
 
-  async evidence(root: string, id: string, sourceDocument?: string, returnLabel = t("返回正文"), origin?: HTMLElement, besideReader = false) {
+  async evidence(root: string, id: string, sourceDocument?: string, returnLabel = t("返回正文"), origin?: HTMLElement, besideReader = false, locator?: ResearchSearchLocator) {
     const request = ++this.evidenceRequest;
     const existing = besideReader && this.evidenceTabs.get(id);
     if (existing) { existing.origin = origin; this.selectEvidenceTab(existing, true); return; }
@@ -468,7 +469,7 @@ export class ResearchTools {
       this.report.show([file], {
         read: async () => file,
         reveal: () => window.meki.revealResearchEvidence(root, id, sourceDocument),
-        notify: this.notify, origin,
+        notify: this.notify, origin, initialPage: locator?.kind === 'page' ? locator.page : undefined,
       });
       return;
     }
@@ -493,7 +494,9 @@ export class ResearchTools {
       this.selectEvidenceTab(tab, false);
     } else {
       this.show(markup, 'research-evidence-preview');
-      this.dialog.querySelector('.research-evidence-content')!.replaceWith(evidenceContent(file));
+      const body = evidenceContent(file);
+      this.dialog.querySelector('.research-evidence-content')!.replaceWith(body);
+      if (locator?.kind === 'paragraph' || locator?.kind === 'trial') revealEvidenceLine(body, locator);
       this.dialog.querySelector('[data-evidence-reveal]')!.addEventListener('click', reveal);
       if (origin) this.dialog.addEventListener('close', () => {
         if (!this.dialog.open && origin.isConnected) origin.focus({ preventScroll: true });

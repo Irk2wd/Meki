@@ -138,6 +138,7 @@ export interface MekiAPI {
   changeRecentFolders(input: RecentFolderChange): Promise<RecentFolder[]>;
   refreshWorkspace(): Promise<Workspace | null>;
   researchSnapshot(filter?: ResearchFilter, includeLinked?: boolean): Promise<ResearchSnapshot | null>;
+  searchResearch(root: string, input: import('./research').ResearchSearchQuery): Promise<import('./research').ResearchSearchResponse>;
   listResearchProjects(): Promise<RecentResearchProject[]>;
   openResearchProject(root?: string): Promise<Workspace | null>;
   createResearchDemo(): Promise<Workspace | null>;

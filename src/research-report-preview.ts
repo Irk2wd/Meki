@@ -8,6 +8,7 @@ interface ReportActions {
   read(id: string): Promise<ResearchEvidenceFile>;
   reveal(id: string): Promise<void>;
   viewBody?: () => Promise<void>;
+  initialPage?: number;
   origin?: HTMLElement;
   notify(message: string, error?: boolean): void;
 }
@@ -110,7 +111,7 @@ export class ResearchReportPreview {
         if (isActive(controller)) { painting = false; controls(); }
       }
     }
-    async function load() {
+    async function load(initialPage = 1) {
       request?.abort();
       const controller = new AbortController();
       request = controller;
@@ -137,7 +138,8 @@ export class ResearchReportPreview {
         if (!loaded.count) throw new Error(t("此文件没有可预览的页面。"));
         pages = loaded;
         painting = false;
-        await render(1);
+        await render(Math.min(Math.max(1, initialPage), loaded.count));
+        if (initialPage > loaded.count && isActive(controller)) actions.notify(t("报告页数已变化，已打开最后一页。"));
       } catch (error) {
         if (!isActive(controller)) return;
         controller.abort();
@@ -169,6 +171,6 @@ export class ResearchReportPreview {
       if (!leavingForBody && actions.origin?.isConnected) actions.origin.focus({ preventScroll: true });
     };
     dialog.showModal();
-    void load();
+    void load(actions.initialPage);
   }
 }

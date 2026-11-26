@@ -2,6 +2,7 @@ import { t, ht, getLocale, isLocale } from '../electron/i18n.mjs';
 import { productName } from '../package.json';
 import type { BootState, DocumentFile, Settings, Workspace, RecentFile, WorkspaceRequest, DocumentStatus } from '../shared/meki';
 import { WorkspaceUI, type OpenLocation } from './workspace-ui';
+import { revealResearchPassage } from './research-search-location';
 import { ResearchWorkspace } from './research-workspace';
 import { WritingEditor } from './editor';
 import { WritingTools } from './writing-tools';
@@ -204,7 +205,7 @@ const documents = new DocumentTabs({ editor: () => editor, settings: () => setti
   dispatch: (command, payload) => { void dispatch(command, payload); }, notify });
 const researchUI = new ResearchWorkspace(el('.main-area'), el('#research-sidebar'), {
   root: () => workspace?.root, blocked: () => !ready || busy, whenIdle,
-  open: (root, id, origin, edit, sourceProjectId) => perform(async () => {
+  open: (root, id, origin, edit, sourceProjectId, locator) => perform(async () => {
     const previous = captureResearchStep();
     if (previous && dirty()) await persistDraft();
     const linked = sourceProjectId ? await window.meki.openLinkedResearchSummary(root, sourceProjectId, id) : null;
@@ -220,6 +221,9 @@ const researchUI = new ResearchWorkspace(el('.main-area'), el('#research-sidebar
     if (edit) editor.focus();
     else el('#research-reader-title').focus({ preventScroll: true });
     if (switched) animateResearchDocument(1);
+    if (locator?.kind === 'paragraph' || locator?.kind === 'trial') {
+      if (!revealResearchPassage(el('#visual-editor .ProseMirror'), locator, current.content)) notify(t("原段落已变化，请重新搜索。"));
+    }
   }, true),
   closeReader: closeResearchReader,
   expandNavigation: () => sidebarRail.setExpanded(true),
@@ -624,6 +628,7 @@ async function closeResearchReader() {
   await perform(async () => {
     if (dirty()) await persistDraft();
     await researchUI.dismissReader();
+    el('#visual-editor').querySelector('[data-research-search-target]')?.removeAttribute('data-research-search-target');
     researchReaderHistory.length = 0;
     setResearchEditing(false);
   }, true);

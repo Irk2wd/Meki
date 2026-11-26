@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('meki', Object.freeze({
   changeRecentFolders: (input) => invoke('change-recent-folders', input),
   refreshWorkspace: () => invoke('refresh-workspace'),
   researchSnapshot: (filter, includeLinked) => invoke('research-snapshot', filter, includeLinked),
+  searchResearch: (root, input) => invoke('search-research', root, input),
   listResearchProjects: () => invoke('list-research-projects'),
   openResearchProject: root => invoke('open-research-project', root),
   createResearchDemo: () => invoke('create-research-demo'),
