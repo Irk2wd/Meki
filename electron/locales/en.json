@@ -1628,6 +1628,8 @@
   "正在读取原图…": "Loading source image…",
   "未选择原图": "No image selected",
   "原图暂无法预览。": "The source image cannot be previewed.",
+  "暂无预览": "Preview unavailable",
+  "表格摘录": "Table excerpt",
   "打开原图": "Open source image",
   "返回对比": "Back to comparison",
   "最近进展 {0}": "Latest activity {0}",

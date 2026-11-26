@@ -326,6 +326,14 @@ try {
   assert.equal(await page.locator('.research-entry-conclusion').textContent(), '开启遮挡剔除后，树林轨迹的 GPU 帧时间中位数为 11.4 ms。');
   assert.equal(await recentExperiment.locator('.research-progress-conclusion').textContent(),
     await page.locator('.research-entry-conclusion').textContent());
+  const timingSample = page.locator('.research-sample-table[data-research-sample="forest-timings"]');
+  await timingSample.scrollIntoViewIfNeeded();
+  await timingSample.getByRole('columnheader', { name: 'cpu_render_and_png_ms' }).waitFor();
+  assert.equal(await timingSample.locator('tbody tr').count(), 4);
+  assert.ok((await timingSample.locator('tbody').innerText()).includes('171.12'));
+  await page.locator('.research-proof-open[data-research-progress-link="forest-timings"]').click();
+  await page.locator('#research-tools-dialog .research-table-scroll table').waitFor();
+  await page.keyboard.press('Escape');
   await page.locator('.research-entry [data-research-record=forest-validation]').click();
   await page.locator('#visual-editor').getByRole('heading', { name: '待验证', exact: true }).waitFor();
   assert.equal(await page.locator('#visual-editor h2').last().textContent(), '待验证');
@@ -1366,6 +1374,13 @@ try {
   await comparison.getByRole('button', { name: '关闭可视化展示' }).click();
   const saved = command('list', ['--phase', futureId, '--type', command('describe').format.comparison.type]).records[0].record;
   assert.deepEqual(saved.comparison.rows.flatMap(row => row.images), imageIds);
+  const pair = page.locator('.research-comparison-entry').filter({ has: page.locator(`[data-research-record="${saved.id}"]`) }).locator('.research-sample-pair');
+  await pair.scrollIntoViewIfNeeded();
+  await pair.locator('img').nth(1).waitFor();
+  assert.deepEqual(await pair.locator('figcaption').allTextContents(), ['普通 Mesh', 'Ours']);
+  await pair.locator('img').first().click({ force: true });
+  await comparison.getByRole('heading', { name: '双机位 Mesh 对比' }).waitFor();
+  await comparison.getByRole('button', { name: '关闭可视化展示' }).click();
   await futureRow.getByRole('button', { name: '打开可视化展示 双机位 Mesh 对比', exact: true }).click();
   await comparison.locator('.research-comparison-caption strong').getByText('同一机位').waitFor();
   await comparison.getByRole('button', { name: '编辑图注', exact: true }).click();

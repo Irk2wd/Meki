@@ -12,6 +12,7 @@ import { TimelineEventLayout, timelineEventButton, type TimelineEventDay } from 
 import { adjustDays, brushDays, datesForDays, dayNumber, isoDay, shiftRange, timelineOverview, type RangeHandle, type TimelineWindow } from './research-timeline-range';
 import { reportReferences } from './research-report-links';
 import { recordKind, recordMark } from './research-record-mark';
+import { comparisonSample, EvidenceSamples } from './research-evidence-samples';
 import { escapeResearch as escape, fieldRuleDetails, fieldValue, relationLabels, researchOption as option, ResearchTools, runFields, type ResearchWidths } from './research-tools';
 import './research-workspace.css';
 
@@ -353,6 +354,7 @@ export class ResearchWorkspace {
   private controlsIdle = Promise.resolve();
   private widths = savedWidths();
   private timelineEvents = new TimelineEventLayout(this.content);
+  private samples = new EvidenceSamples(this.content);
   private columns: ResearchColumns;
   private eventLayout = new ResizeObserver(() => {
     this.columns.update();
@@ -1107,6 +1109,7 @@ export class ResearchWorkspace {
       <span>${escape(active?.label || t("科研项目"))}</span>${phaseCrumb ? `<i aria-hidden="true">/</i><span>${escape(phaseCrumb)}</span>` : ''}</div>
       ${state ? `<button type="button" class="icon-button" data-action="refresh" aria-label="${ht("刷新项目")}" title="${ht("刷新项目")}">${icon('refresh', 17)}</button>` : ''}`;
     if (!state || !active || !today) {
+      this.samples.show();
       this.renderSidebar(state, active || undefined);
       this.timelineEvents.show();
       const message = error || (this.loading ? t("正在读取研究项目…") : t("打开项目后即可查看研究阶段、实验记录和阶段总结。"));
@@ -1173,6 +1176,7 @@ export class ResearchWorkspace {
     const newSummary = summaryTypes.size ? `<button type="button" class="secondary-button" data-research-new="summary">${icon('plus', 14)}${ht("插入阶段总结")}</button>` : '';
     const previousMarkers = timelineView && !this.axisDrag?.moving ? this.timelineEvents.capture() : undefined;
     const optionsOpen = this.content.querySelector<HTMLDetailsElement>('.research-timeline-options')?.open;
+    const featuredComparisons = new Set<string>();
     this.content.innerHTML = `
       <header class="research-overview"><div><h1 tabindex="-1">${escape(projectPage ? project.title : active.label)}</h1>
         ${projectPage && project.description ? `<p>${escape(project.description)}</p>` : ''}
@@ -1191,9 +1195,9 @@ export class ResearchWorkspace {
               ${phase || this.date || this.recordFilter ? `<button type="button" class="secondary-button" data-research-clear>${ht("清除筛选")}</button>` : ''}</div>
           </div>
           ${phase?.description && projectPage ? `<div class="research-phase-focus"><h3>${ht("本阶段要判断什么")}</h3><p>${escape(phase.description)}</p></div>` : ''}
-          ${phase && projectPage ? this.renderStageSummaries((summariesByPhase.get(phase.id) || []).filter(matches), latestExperiment, newSummary, state, today) : ''}
+          ${phase && projectPage ? this.renderStageSummaries((summariesByPhase.get(phase.id) || []).filter(matches), latestExperiment, newSummary, state, today, featuredComparisons) : ''}
           ${phase && projectPage ? this.renderPhaseGoals(phase, project.phaseGoals) : ''}
-          ${phase && projectPage ? this.renderPhaseComparisons((eventsByPhase.get(phase.id) || []).filter(entry => entry.record.comparison && matches(entry))) : ''}
+          ${phase && projectPage ? this.renderPhaseComparisons((eventsByPhase.get(phase.id) || []).filter(entry => entry.record.comparison && matches(entry)), types, featuredComparisons) : ''}
           ${phase && projectPage ? this.renderPhaseEvents((eventsByPhase.get(phase.id) || []).filter(entry => !entry.record.comparison && matches(entry)), types) : ''}
           <div class="research-record-filters">
             ${phase && projectPage ? `<h3>${ht("实验记录")} <span>${entries.length}</span></h3>` : ''}
@@ -1211,6 +1215,7 @@ export class ResearchWorkspace {
     this.renderSidebar(state, active);
     if (optionsOpen) this.content.querySelector('.research-timeline-options')?.setAttribute('open', '');
     this.timelineEvents.show(timelineView?.eventDays, types, previousMarkers);
+    this.samples.show(state);
     if (this.readerItem) {
       const [linkedProject, id] = this.readerItem.split('/');
       this.selectReaderItem(id, linkedProject, true);
@@ -1244,7 +1249,7 @@ export class ResearchWorkspace {
       <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button></li>`).join('')}</ul></section>`;
   }
 
-  private renderStageSummaries(entries: ResearchEntry[], experiment: ResearchEntry | undefined, create: string, state: ResearchSnapshot, today: string) {
+  private renderStageSummaries(entries: ResearchEntry[], experiment: ResearchEntry | undefined, create: string, state: ResearchSnapshot, today: string, featuredComparisons: Set<string>) {
     if (!entries.length && !experiment) return create ? `<div class="research-actions research-stage-create">${create}</div>` : '';
     const sorted = entries.sort((a, b) => sortEntries(b, a));
     const summary = sorted.find(item => item.record.date <= today && item.excerpt);
@@ -1266,35 +1271,67 @@ export class ResearchWorkspace {
     const others = sorted.filter(entry => entry !== latest);
     return `<section class="research-phase-summaries research-progress" aria-labelledby="research-phase-summaries-title">
       <div class="research-section-heading"><h3 id="research-phase-summaries-title">${latest ? ht("最新进展") : ht("阶段总结")}</h3>${create}</div>
-      ${latest ? `<ul class="research-progress-latest">${row(latest, true)}</ul>${this.progressLinks(latest.record, state)}` : ''}
+      ${latest ? `<ul class="research-progress-latest">${row(latest, true)}</ul>${this.progressLinks(latest.record, state, featuredComparisons)}` : ''}
       ${others.length ? `${latest ? `<h3 class="research-progress-other">${latest === experiment ? ht("阶段总结") : ht("其他阶段总结")}</h3>` : ''}<ul>${others.map(entry => row(entry)).join('')}</ul>` : ''}
     </section>`;
   }
 
-  private progressLinks(record: ResearchEntry['record'], state: ResearchSnapshot) {
+  private progressLinks(record: ResearchEntry['record'], state: ResearchSnapshot, featuredComparisons: Set<string>) {
     const files = new Map(state.documents.map(file => [file.id, file]));
-    const comparisons = new Set(state.records.filter(item => item.record.comparison).map(item => item.record.id));
-    const ids = [...new Set([...(record.sources || []), ...(record.evidence || [])])].filter(id => files.has(id));
-    const ordered = [...ids.filter(id => comparisons.has(id)), ...ids.filter(id => !comparisons.has(id))];
-    if (!ordered.length) return '';
-    const links = ordered.map(id => {
-      const file = files.get(id)!;
-      return `<button type="button" data-research-progress-link="${escape(id)}" title="${escape(file.relativePath)}">${icon(comparisons.has(id) ? 'image' : file.sourceId ? 'link' : 'page', 14)}<span>${escape(file.title)}</span></button>`;
+    const entries = new Map(state.records.map(item => [item.record.id, item]));
+    const types = new Map(state.project.recordTypes.map(type => [type.id, type]));
+    const refs = [...new Set([...(record.sources || []), ...(record.evidence || [])])].flatMap(id => files.get(id) || []);
+    if (!refs.length) return '';
+    const figure = refs.map(file => entries.get(file.id)?.record).find(item => item?.comparison);
+    const trial = refs.map(file => entries.get(file.id)).find(item => item && recordKind(types.get(item.record.type), item.record) === 'entry');
+    const table = refs.find(file => file.sourceId && /\.(?:csv|tsv)$/i.test(file.relativePath));
+    const cards: string[] = [];
+    if (figure) {
+      const sample = comparisonSample(figure.comparison!);
+      if (sample) {
+        featuredComparisons.add(figure.id);
+        const type = types.get(figure.type);
+        cards.push(`<article class="research-proof-card" data-record-kind="comparison"><button type="button" class="research-proof-open" data-research-progress-link="${escape(figure.id)}">
+          ${recordMark('comparison', 16, type?.icon)}<strong>${escape(figure.title)}</strong>${icon('chevron', 14)}</button>${sample}</article>`);
+      }
+    }
+    if (table) cards.push(`<article class="research-proof-card research-proof-table" data-record-kind="file">
+      <button type="button" class="research-proof-open" data-research-progress-link="${escape(table.id)}">${icon('table', 16)}<strong>${escape(table.title)}</strong>${icon('chevron', 14)}</button>
+      <div class="research-sample-table" data-research-sample="${escape(table.id)}"></div></article>`);
+    const links = refs.filter(file => !featuredComparisons.has(file.id) && file !== table && file.id !== trial?.record.id).map(file => {
+      const item = entries.get(file.id)?.record;
+      const type = item && types.get(item.type);
+      const basename = file.relativePath.split('/').pop()!;
+      const config = file.sourceId && /\.json$/i.test(basename);
+      const glyph = config ? 'braces' : file.sourceId ? (researchReportFormat(file.relativePath) === 'pptx' ? 'presentation' : 'page') : type?.icon;
+      return `<button type="button" data-research-progress-link="${escape(file.id)}" title="${escape(file.relativePath)}">${recordMark(recordKind(type, item), 14, glyph)}<span>${escape(file.title)}</span>${config && file.title !== basename ? `<code>${escape(basename)}</code>` : ''}</button>`;
     });
-    return `<div class="research-progress-links" role="group" aria-label="${ht("结论依据")}">${links.slice(0, 3).join('')}
-      ${links.length > 3 ? `<details><summary>${ht("其余 {0} 项", links.length - 3)}</summary><div>${links.slice(3).join('')}</div></details>` : ''}</div>`;
+    return `<div class="research-progress-links" role="group" aria-label="${ht("结论依据")}">
+      ${cards.length ? `<div class="research-proof-gallery">${cards.join('')}</div>` : ''}
+      ${trial ? this.linkedExperiment(trial, types.get(trial.record.type), this.destination(state).view?.fieldIds) : ''}
+      ${links.slice(0, 3).join('')}${links.length > 3 ? `<details><summary>${ht("其余 {0} 项", links.length - 3)}</summary><div>${links.slice(3).join('')}</div></details>` : ''}</div>`;
   }
 
-  private renderPhaseComparisons(entries: ResearchEntry[]) {
+  private linkedExperiment({ record, fieldOrigins }: ResearchEntry, type?: ResearchType, fieldIds?: string[]) {
+    const measure = (fieldIds ?? Object.keys(record.fields)).find(id =>
+      typeof record.fields[id] === 'number' && fieldOrigins?.[id]?.rule.type === 'number' && fieldOrigins[id].rule.unit);
+    const rule = measure && fieldOrigins?.[measure]?.rule;
+    return `<button type="button" class="research-proof-trial" data-record-kind="entry" data-research-progress-link="${escape(record.id)}">
+      ${recordMark('entry', 15, type?.icon)}<span>${escape(type?.label || record.type)}</span> <time>${escape(record.date)}</time>
+      <strong>${escape(record.title)}</strong>${measure && rule ? `<span class="research-proof-measure">${escape(rule.label)} <b>${escape(fieldValue(rule, record.fields[measure]))}</b></span>` : ''}${icon('chevron', 13)}</button>`;
+  }
+
+  private renderPhaseComparisons(entries: ResearchEntry[], types: Map<string, ResearchType>, featured: Set<string>) {
     const create = `<button type="button" class="secondary-button" data-research-new="comparison">${icon('plus', 14)}${ht("新建可视化展示")}</button>`;
     if (!entries.length) return `<div class="research-actions research-stage-create">${create}</div>`;
     return `<section class="research-phase-summaries" aria-labelledby="research-phase-comparisons-title">
       <div class="research-section-heading"><h3 id="research-phase-comparisons-title">${ht("可视化展示")}</h3>
         ${create}</div>
-      ${entries.length ? `<ul>${entries.sort((a, b) => sortEntries(b, a)).map(({ record }) => `<li class="research-summary-item">
-        <button type="button" data-research-record="${record.id}">${icon('image', 18)}<span><strong>${escape(record.title)}</strong>
+      <ul>${entries.sort((a, b) => sortEntries(b, a)).map(({ record }) => `<li class="research-summary-item research-comparison-entry">
+        <button type="button" data-research-record="${record.id}">${recordMark('comparison', 17, types.get(record.type)?.icon)}<span><strong>${escape(record.title)}</strong>
           <small>${escape(record.date)} · ${ht("{0} 行 × {1} 列", record.comparison!.rows.length, record.comparison!.columns.length)}</small></span>${icon('chevron', 14)}</button>
-        <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button></li>`).join('')}</ul>` : ''}
+        <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button>
+        ${featured.has(record.id) ? '' : comparisonSample(record.comparison!)}</li>`).join('')}</ul>
     </section>`;
   }
 
@@ -1441,6 +1478,7 @@ export class ResearchWorkspace {
       ? target.closest('.research-timeline-row')?.querySelector<HTMLButtonElement>('[data-research-phase]') : null);
     const state = this.snapshot;
     if (!button || !state) return;
+    if (button.dataset.action === 'refresh') this.samples.show(state, true);
     if (button.dataset.researchStageRecord) {
       const item = [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)].find(el => el.dataset.researchRecord === button.dataset.researchStageRecord);
       if (item) await this.openListRecord(item, state.root);
@@ -1450,8 +1488,12 @@ export class ResearchWorkspace {
       await this.openListRecord(button, state.root);
       return;
     }
-    if (this.hooks.blocked()) return;
     const data = button.dataset;
+    if (this.hooks.blocked() && (data.researchProgressLink || data.researchTrialRecords || data.researchTimelineEvents)) {
+      await this.hooks.whenIdle();
+      if (!this.visible || !button.isConnected || this.snapshot !== state) return;
+    }
+    if (this.hooks.blocked()) return;
     if ('researchExpandPhases' in data) {
       this.hooks.expandNavigation();
       const selected = this.sidebar.querySelector<HTMLElement>('.research-phase-shelf[open] [aria-current="location"]');

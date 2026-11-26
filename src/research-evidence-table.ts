@@ -29,6 +29,25 @@ function scanRows(text: string, delimiter: string, start: number,
   }
 }
 
+function readRows(text: string, delimiter: string, offset: number, skip: number, count: number, startColumn: number, columns: number) {
+  let cells: string[] = [];
+  const rows: string[][] = [];
+  scanRows(text, delimiter, offset, () => {
+    if (skip > 0) skip--;
+    else { rows.push(cells); cells = []; }
+    return rows.length < count;
+  }, (column, start, end) => {
+    if (skip || column < startColumn || column >= startColumn + columns) return;
+    const field = text.slice(start, end);
+    cells.push(field.startsWith('"') && field.endsWith('"') ? field.slice(1, -1).replace(/""/g, '"') : field);
+  });
+  return rows;
+}
+
+export function sampleTable(text: string, delimiter: string) {
+  return readRows(text, delimiter, 0, 0, 5, 0, 4);
+}
+
 function indexTable(text: string, delimiter: string) {
   const offsets = [0];
   let height = 0, width = 0;
@@ -40,18 +59,7 @@ function indexTable(text: string, delimiter: string) {
 
   function read(startRow: number, count: number, startColumn: number) {
     const block = Math.floor(startRow / pageSize);
-    let row = block * pageSize, cells: string[] = [];
-    const rows: string[][] = [];
-    if (startRow >= height) return rows;
-    scanRows(text, delimiter, offsets[block], () => {
-      if (row++ >= startRow) { rows.push(cells); cells = []; }
-      return rows.length < count;
-    }, (column, start, end) => {
-      if (row < startRow || column < startColumn || column >= startColumn + columnPageSize) return;
-      const field = text.slice(start, end);
-      cells.push(field.startsWith('"') && field.endsWith('"') ? field.slice(1, -1).replace(/""/g, '"') : field);
-    });
-    return rows;
+    return startRow < height ? readRows(text, delimiter, offsets[block], startRow - block * pageSize, count, startColumn, columnPageSize) : [];
   }
   return { height, width, read };
 }

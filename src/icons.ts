@@ -1,6 +1,8 @@
 import brandMark from './brand-mark.svg?raw';
 
 const paths: Record<string, string> = {
+  table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M10 10v10"/>',
+  braces: '<path d="M9 3H8a2 2 0 0 0-2 2v4c0 2-1 3-3 3 2 0 3 1 3 3v4a2 2 0 0 0 2 2h1m6-18h1a2 2 0 0 1 2 2v4c0 2 1 3 3 3-2 0-3 1-3 3v4a2 2 0 0 1-2 2h-1"/>',
   page: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
   folder: '<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   folders: '<path d="M5 8V5a2 2 0 0 1 2-2h4l2 3h6a2 2 0 0 1 2 2v2"/><path d="M3 9h6l2 3h9l-2 7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
