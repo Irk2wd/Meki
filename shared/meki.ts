@@ -25,6 +25,9 @@ export interface Settings {
   sidebar: boolean;
   customCss: string;
   fontFamily: string;
+  uiFont: keyof typeof writingFonts;
+  uiFontFamily: string;
+  uiFontSize: number;
   mathNumbering: 'none' | 'ams' | 'all';
   mathPhysics: boolean;
   typewriter: boolean;

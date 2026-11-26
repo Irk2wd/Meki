@@ -5,8 +5,8 @@
 .milkdown .ProseMirror .milkdown-code-block:has(.meki-math) mjx-container[display="true"] { margin:.8em 0; }
 @media print { .milkdown .ProseMirror .milkdown-code-block:has(.meki-math) { border:0!important; background:transparent!important; } }
 .math-copy-menu { position:fixed; z-index:120; width:245px; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--surface); box-shadow:var(--shadow) }
-.math-copy-menu button { display:block; width:100%; padding:9px 10px; text-align:left; font-size:12px; border-radius:4px }
+.math-copy-menu button { display:block; width:100%; padding:9px 10px; text-align:left; font-size:var(--ui-small-size); border-radius:4px }
 .math-copy-menu button:disabled { opacity:.45; cursor:default }
 .math-copy-controls { display:flex; justify-content:flex-end; gap:8px; margin:-12px 0 20px }
-.math-copy-controls button { border:1px solid var(--border); border-radius:5px; padding:5px 9px; font-size:11px }
+.math-copy-controls button { border:1px solid var(--border); border-radius:5px; padding:5px 9px; font-size:var(--ui-caption-size) }
 @media print { .math-copy-menu,.math-copy-controls { display:none!important } }

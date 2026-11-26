@@ -27,13 +27,13 @@
 .meki-block-menu {
   position: fixed; visibility: hidden; z-index: 120; width: 260px; max-width: calc(100vw - 16px);
   display: flex; flex-direction: column; padding: 7px; border: 1px solid var(--border); border-radius: 9px;
-  background: var(--surface); color: var(--text); box-shadow: var(--shadow); font: 13px/1.45 var(--ui);
+  background: var(--surface); color: var(--text); box-shadow: var(--shadow); font: var(--ui-text-size)/1.45 var(--ui);
 }
 .meki-block-menu input {
   width: 100%; flex-shrink: 0; min-height: 32px; padding: 5px 8px; border: 1px solid var(--border);
   border-radius: 5px; background: var(--bg); outline-offset: 0;
 }
-.meki-block-menu-title { color: var(--soft); padding: 9px 8px 5px; font-size: 11px; flex-shrink: 0; }
+.meki-block-menu-title { color: var(--soft); padding: 9px 8px 5px; font-size: var(--ui-caption-size); flex-shrink: 0; }
 .meki-block-menu-items { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .meki-block-menu button {
   display: flex; align-items: center; gap: 9px; text-align: left; width: 100%; min-height: 32px; padding: 6px 8px;
@@ -48,7 +48,7 @@
 .meki-block-menu button[data-block-action="copy-markdown"], .meki-block-menu button[data-block-action="delete"] {
   border-top: 1px solid var(--border); border-radius: 0; margin-top: 4px; padding-top: 9px;
 }
-.meki-block-menu-footer { flex-shrink: 0; margin: 5px 1px 0; border-top: 1px solid var(--border); padding: 8px 7px 3px; color: var(--soft); font-size: 11px; }
+.meki-block-menu-footer { flex-shrink: 0; margin: 5px 1px 0; border-top: 1px solid var(--border); padding: 8px 7px 3px; color: var(--soft); font-size: var(--ui-caption-size); }
 .meki-block-menu-empty { padding: 7px 8px; color: var(--soft); }
 .meki-block-submenu { width: 230px; overflow-y: auto; overscroll-behavior: contain; }
 .meki-block-submenu .meki-block-menu-title { padding-top: 3px; }

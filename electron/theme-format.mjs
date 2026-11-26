@@ -3,6 +3,7 @@ import kraft from './themes/kraft.meki-theme.json' with { type: 'json' };
 
 export const MAX_THEME_PACKAGE_BYTES = 256 * 1024;
 export const MAX_THEME_LIBRARY_BYTES = 1536 * 1024;
+export const uiFontSizes = Object.freeze({ min: 12, standard: 13, max: 18 });
 const maxInstalledThemes = 24;
 
 // Custom typefaces are single local family names, never CSS declarations or fallback lists.

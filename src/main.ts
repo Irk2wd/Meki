@@ -31,6 +31,7 @@ import { renderMath } from './math-engine';
 import { installMathCopyActions } from './math-copy';
 import { normalizeCustomCss, writingAppearance, writingFont } from './appearance';
 import { FontPicker } from './font-picker';
+import { uiFontSizes } from '../electron/theme-format.mjs';
 import { ThemePicker } from './theme-picker';
 import { editorViewCtx } from '@milkdown/kit/core';
 import './style.css';
@@ -106,17 +107,18 @@ document.querySelector('#app')!.innerHTML = `
   <div id="theme-choices" class="theme-choices" role="group" aria-label="${ht("主题")}"></div>
   <div class="theme-tools"><button type="button" data-action="install-theme-package">${icon('plus', 14)} ${ht("导入主题")}</button><button type="button" data-action="remove-theme-package" hidden>${ht("移除当前主题")}</button></div>
   <div id="font-picker"></div>
-  <div class="setting-row"><label for="font-size">${ht("正文字号")}</label><input id="font-size" type="range" min="14" max="24" step="1"><output id="font-size-value">18</output></div>
-  <label class="setting-row">${ht("正文宽度")}<select id="line-width"><option value="640">${ht("紧凑 · 640")}</option><option value="760">${ht("适中 · 760")}</option><option value="900">${ht("舒展 · 900")}</option><option value="1040">${ht("宽版 · 1040")}</option><option value="1200">${ht("超宽 · 1200")}</option></select></label>
-  <label class="setting-row">${ht("公式编号")}<select id="math-numbering"><option value="none">${ht("仅手动编号")}</option><option value="ams">${ht("AMS 环境自动编号")}</option><option value="all">${ht("所有独立公式自动编号")}</option></select></label>
-  <label class="setting-row">${ht("物理公式宏")}<input id="math-physics" type="checkbox" aria-label="${ht("启用物理公式宏")}"></label>
-  <button class="theme-edit-button" data-action="custom-theme">${ht("自定义正文 CSS")} <span>${ht("编辑或导入 →")}</span></button>
-  <details class="layout-settings">
-    <summary>${ht("高级布局")}</summary>
-    <label class="setting-row"><span>${ht("取消正文宽度上限")}</span><input id="unlimited-width" type="checkbox" aria-describedby="unlimited-width-note"></label>
-    <p class="setting-note" id="unlimited-width-note">${ht("使用窗口可用宽度并保留留白。仅影响编辑区域，不改变导出宽度。")}</p>
-  </details>
-  <p class="setting-note">${ht("排版设置同时用于编辑与导出。自定义字体需在阅读设备上安装。")}</p>
+  <div class="document-typesetting">
+    <label class="setting-row">${ht("正文宽度")}<select id="line-width"><option value="640">${ht("紧凑 · 640")}</option><option value="760">${ht("适中 · 760")}</option><option value="900">${ht("舒展 · 900")}</option><option value="1040">${ht("宽版 · 1040")}</option><option value="1200">${ht("超宽 · 1200")}</option></select></label>
+    <label class="setting-row">${ht("公式编号")}<select id="math-numbering"><option value="none">${ht("仅手动编号")}</option><option value="ams">${ht("AMS 环境自动编号")}</option><option value="all">${ht("所有独立公式自动编号")}</option></select></label>
+    <label class="setting-row">${ht("物理公式宏")}<input id="math-physics" type="checkbox" aria-label="${ht("启用物理公式宏")}"></label>
+    <button class="theme-edit-button" data-action="custom-theme">${ht("自定义正文 CSS")} <span>${ht("编辑或导入 →")}</span></button>
+    <details class="layout-settings">
+      <summary>${ht("高级布局")}</summary>
+      <label class="setting-row"><span>${ht("取消正文宽度上限")}</span><input id="unlimited-width" type="checkbox" aria-describedby="unlimited-width-note"></label>
+      <p class="setting-note" id="unlimited-width-note">${ht("使用窗口可用宽度并保留留白。仅影响编辑区域，不改变导出宽度。")}</p>
+    </details>
+    <p class="setting-note">${ht("正文排版用于编辑和导出。自定义字体需在阅读设备上安装。")}</p>
+  </div>
 </div>
 <div class="popover export-panel" id="export-panel" hidden><span class="menu-label">${ht("导出当前文稿")}</span><button data-action="export-options">${icon('export')}<span>${ht("格式与导出设置…")}<small>${ht("PDF 纸张、PNG、Word、EPUB、无样式 HTML")}</small></span></button><button data-action="export-html">${icon('source')}<span>${ht("快速导出 HTML")}<small>${ht("包含排版、公式、图表与本地图片")}</small></span></button><button data-action="export-pdf">${icon('page')}<span>${ht("快速导出 PDF")}<small>${ht("A4 纵向 · 默认边距")}</small></span></button><button data-action="import-document">${icon('open')}<span>${ht("导入 Word / HTML…")}<small>${ht("转换为新 Markdown 文稿，原文件保留")}</small></span></button><button data-action="saveAs">${icon('save')}<span>${ht("Markdown 另存为")}<small>${ht("可在任何文本编辑器中打开")}</small></span></button></div>
 <dialog id="math-dialog"><form method="dialog"><div class="dialog-heading"><div><span class="eyebrow">MATHEMATICS</span><h2>${ht("让公式清晰呈现")}</h2></div><button value="cancel" class="icon-button" aria-label="${ht("关闭公式窗口")}">${icon('close')}</button></div><label class="field-label" for="math-input">${ht("LaTeX 公式")}</label><textarea id="math-input" rows="3" spellcheck="false" placeholder="${ht("例如：\\frac{a}{b} 或 E = mc^2")}"></textarea><div class="math-examples"><button type="button" data-math-example="E = mc^2">${ht("能量")}</button><button type="button" data-math-example="\\frac{a}{b}">${ht("分式")}</button><button type="button" data-math-example="\\int_0^1 x^2\\,dx = \\frac{1}{3}">${ht("积分")}</button></div><div class="math-preview" id="math-preview"></div><div class="dialog-actions"><select id="math-kind" aria-label="${ht("公式显示方式")}"><option value="block">${ht("独立公式块")}</option><option value="inline">${ht("行内公式")}</option></select><button class="primary-button" type="button" data-action="insert-math">${ht("插入公式")}</button></div></form></dialog>
@@ -438,6 +440,12 @@ async function workspaceOperation(request: WorkspaceRequest) {
   if (result.action === 'create-file' && result.path) { const doc = await window.meki.openDocument(result.path); if (doc) await loadDocument(doc); }
   notify(result.warning || (result.action === 'trash' ? t("已移入系统回收站，当前文稿内容仍保留") : t("文件操作已完成")), Boolean(result.warning));
 }
+function applyInterfaceTypography() {
+  const style = document.documentElement.style;
+  style.setProperty('--ui', writingFont({ font: settings.uiFont, fontFamily: settings.uiFontFamily }));
+  style.setProperty('--ui-scale', String(settings.uiFontSize / uiFontSizes.standard));
+  fontPicker.apply(settings);
+}
 function applySettings() {
   el<HTMLSelectElement>('#ui-language').value = settings.locale;
   el('#language-restart-note').hidden = settings.locale === getLocale();
@@ -449,11 +457,9 @@ function applySettings() {
   document.body.classList.toggle('unlimited-width', settings.unlimitedWidth);
   document.body.classList.toggle('focus-mode', settings.focus && !researchUI.visible);
   sidebarRail.apply(settings.sidebar);
-  fontPicker.apply(settings);
+  applyInterfaceTypography();
   el<HTMLSelectElement>('#math-numbering').value = settings.mathNumbering;
   el<HTMLInputElement>('#math-physics').checked = settings.mathPhysics;
-  el<HTMLInputElement>('#font-size').value = String(settings.fontSize);
-  el('#font-size-value').textContent = String(settings.fontSize);
   el<HTMLSelectElement>('#line-width').value = String(settings.lineWidth);
   el<HTMLSelectElement>('#line-width').disabled = settings.unlimitedWidth;
   el<HTMLInputElement>('#unlimited-width').checked = settings.unlimitedWidth;
@@ -466,8 +472,13 @@ function applySettings() {
   outline?.apply(settings);
   shortcuts?.apply();
 }
+function applySettingsPatch(patch: Partial<Settings>) {
+  settings = { ...settings, ...patch };
+  if (Object.keys(patch).every(key => ['uiFont', 'uiFontFamily', 'uiFontSize'].includes(key))) applyInterfaceTypography();
+  else applySettings();
+}
 function changeSettings(patch: Partial<Settings>) {
-  settings = { ...settings, ...patch }; applySettings();
+  applySettingsPatch(patch);
   void window.meki.updateSettings(patch).catch(error => notify(String(error), true));
 }
 function closePopovers() { el('#style-panel').hidden = true; el('#export-panel').hidden = true; sidebarSettings.close(); workspaceUI.closeFolderMenu(); }
@@ -638,7 +649,7 @@ async function dispatch(action: string, payload?: unknown, origin?: HTMLElement)
   if (action === 'window-fit') { document.body.classList.toggle('window-fitted', payload === true); return; }
   if (action === 'window-notice') { notify(String(payload)); return; }
   if (action === 'settings-changed' && ready) {
-    settings = { ...settings, ...payload as Partial<Settings> }; applySettings(); updateStatus(); documents.refreshSettings(); return;
+    applySettingsPatch(payload as Partial<Settings>); updateStatus(); documents.refreshSettings(); return;
   }
   if (action === 'close-request' && busy) { closeRequested = true; return; }
   if (action === 'snapshot-warning') { notify(String(payload), true); return; }
@@ -879,7 +890,6 @@ el<HTMLSelectElement>('#ui-language').addEventListener('change', async event => 
   catch (error) { notify(String(error), true); }
   finally { select.disabled = false; applySettings(); }
 });
-el<HTMLInputElement>('#font-size').addEventListener('input', event => changeSettings({ fontSize: Number((event.target as HTMLInputElement).value) }));
 el<HTMLSelectElement>('#math-numbering').addEventListener('change', event => changeSettings({ mathNumbering: (event.target as HTMLSelectElement).value as Settings['mathNumbering'] }));
 el<HTMLInputElement>('#math-physics').addEventListener('change', event => changeSettings({ mathPhysics: (event.target as HTMLInputElement).checked }));
 el<HTMLSelectElement>('#line-width').addEventListener('change', event => changeSettings({ lineWidth: Number((event.target as HTMLSelectElement).value) }));

@@ -100,7 +100,7 @@
     background: var(--surface);
     box-shadow: var(--shadow);
     color: var(--text);
-    font: 12px/1.5 var(--ui);
+    font: var(--ui-small-size)/1.5 var(--ui);
     text-align: start;
     overflow-wrap: anywhere;
     pointer-events: none;

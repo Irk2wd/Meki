@@ -1,7 +1,7 @@
 .research-comparison-editor { margin-block: 12px; }
 .research-comparison-editor-grid { overflow-x: auto; margin-bottom: 8px; }
 .research-comparison-editor-grid table { width: 100%; border-collapse: separate; border-spacing: 6px; }
-.research-comparison-editor-grid th { color: var(--soft); text-align: left; font-size: 11px; font-weight: 500; }
+.research-comparison-editor-grid th { color: var(--soft); text-align: left; font-size: var(--ui-caption-size); font-weight: 500; }
 .research-comparison-editor-grid input, .research-comparison-editor textarea {
   min-width: 122px;
   width: 100%;
@@ -10,11 +10,11 @@
   border-radius: 6px;
   background: var(--bg);
   color: var(--text);
-  font: 12px var(--ui);
+  font: var(--ui-small-size) var(--ui);
 }
 .research-comparison-axis-field { display: flex; align-items: center; gap: 3px; }
 .research-comparison-editor textarea { display: block; margin-block: 4px 0; min-height: 85px; resize: vertical; }
-.research-comparison-caption-field { display: block; margin-top: 12px; color: var(--soft); font-size: 12px; }
+.research-comparison-caption-field { display: block; margin-top: 12px; color: var(--soft); font-size: var(--ui-small-size); }
 
 #research-comparison-dialog {
   width: min(1140px, calc(100vw - clamp(32px, 10vw, 140px)));
@@ -31,10 +31,10 @@
 .research-comparison-heading button { flex: none; }
 #research-comparison-dialog .dialog-heading { margin-bottom: 12px; }
 #research-comparison-dialog .dialog-heading h2 { margin: 0; overflow-wrap: anywhere; }
-#research-comparison-dialog .dialog-heading time { display: block; margin-top: 4px; font: 11px var(--mono); color: var(--soft); }
+#research-comparison-dialog .dialog-heading time { display: block; margin-top: 4px; font: var(--ui-caption-size) var(--ui); font-variant-numeric: tabular-nums; color: var(--soft); }
 .research-comparison-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .research-comparison-toolbar [data-comparison-edit] { margin-inline-start: auto; }
-.research-comparison-toolbar small { flex: 1; color: var(--soft); font-size: 11px; }
+.research-comparison-toolbar small { flex: 1; color: var(--soft); font-size: var(--ui-caption-size); }
 .research-comparison-toolbar [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .research-comparison-toolbar [data-grid-controls] .secondary-button { margin: 0; }
 .research-comparison-toolbar [data-comparison-zoom] { width: clamp(96px, 14vw, 192px); margin: 0; cursor: pointer; }
@@ -49,9 +49,10 @@
 }
 .research-comparison-scroll > .research-wipe { --wipe-max-height: max(96px, calc(100cqh - 38px)); }
 .research-comparison-scroll > .research-wipe figcaption { display: none; }
+.research-comparison-scroll .research-wipe-labels { font-size: var(--ui-caption-size); }
 .research-comparison-grid { width: 100%; min-width: calc(98px + 191px * var(--comparison-columns)); table-layout: fixed; border-collapse: separate; border-spacing: 7px; }
 .research-comparison-grid thead td { width: 96px; }
-.research-comparison-grid th { color: var(--soft); font-size: 12px; text-align: start; overflow-wrap: anywhere; }
+.research-comparison-grid th { color: var(--soft); font-size: var(--ui-small-size); text-align: start; overflow-wrap: anywhere; }
 .research-comparison-grid thead th { padding-bottom: 3px; }
 .research-comparison-grid tbody th { vertical-align: top; padding-block: 10px; }
 .research-comparison-grid tbody td { vertical-align: top; }
@@ -60,7 +61,7 @@
   width: min(100%, calc(max(96px, 100cqh - 64px) * var(--comparison-aspect)));
   margin-inline: auto;
 }
-.research-comparison-tile > button { margin-top: 2px; padding-inline: 0; font-size: 11px; }
+.research-comparison-tile > button { margin-top: 2px; padding-inline: 0; font-size: var(--ui-caption-size); }
 .research-comparison-image {
   position: relative;
   display: grid;
@@ -70,12 +71,12 @@
   border-radius: 7px;
   background: var(--side);
   color: var(--soft);
-  font-size: 12px;
+  font-size: var(--ui-small-size);
 }
 .research-comparison-image[data-image-evidence] { cursor: grab; touch-action: none; }
 .research-comparison-image[data-image-evidence]:active { cursor: grabbing; }
 .research-comparison-image img { display: block; position: absolute; inset: 0 auto auto 0; min-width: 0; max-width: none; min-height: 0; max-height: none; pointer-events: none; user-select: none; }
 .research-comparison-caption { position: sticky; inset-inline-start: 0; border-top: 1px solid var(--border); margin-top: 12px; padding-top: 9px; overflow-wrap: anywhere; }
-.research-comparison-caption h3 { margin: 0 0 6px; color: var(--soft); font: 600 11px var(--ui); }
+.research-comparison-caption h3 { margin: 0 0 6px; color: var(--soft); font: 600 var(--ui-caption-size) var(--ui); }
 .research-comparison-caption p { margin: 0 0 6px; }
 .research-comparison-caption img { max-width: 100%; }

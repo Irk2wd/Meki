@@ -124,6 +124,9 @@ try {
   assert.equal(await page.locator('#language-restart-note').isVisible(), false);
   await page.screenshot({ path: path.join(run, 'english-settings.png') });
   await (await app.browserWindow(page)).evaluate(win => win.setSize(680, 650));
+  await page.getByRole('radio', {name:'App interface'}).check();
+  await page.getByRole('combobox', {name:'Interface font',exact:true}).selectOption('sans');
+  await page.getByRole('slider', {name:'Base interface size'}).fill('18');
   const fit = await page.locator('#style-panel').evaluate(node => { const r = node.getBoundingClientRect(); return { fits: r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, overflow: node.scrollWidth > node.clientWidth }; });
   assert.deepEqual(fit, { fits: true, overflow: false });
   await page.screenshot({ path: path.join(run, 'english-narrow.png') });

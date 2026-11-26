@@ -251,6 +251,7 @@ try {
     { id: 'tile-culling', ifRevision: command('read', ['tile-culling']).revision, date: '2026-11-18' },
   ] });
   await refresh.click();
+  await idle();
   const exploring = phases.locator('[data-research-phase=exploration]');
   const tileFinding = '在城市街区的同一条相机轨迹上，开启分块遮挡剔除后，GPU 帧时间缩短了。';
   await exploring.getByText(tileFinding, { exact: true }).waitFor();
@@ -395,7 +396,8 @@ try {
   const zoom = page.getByRole('button', { name: '放大时间轴', exact: true });
   await zoom.click();
   async function pan(from, to) {
-    await ruler.scrollIntoViewIfNeeded();
+    await idle();
+    await ruler.hover();
     const bounds = await ruler.boundingBox();
     const x = fraction => bounds.x + bounds.width * fraction;
     const y = bounds.y + bounds.height / 2;
@@ -1813,15 +1815,35 @@ try {
   await navDivider().press('Enter');
   assert.equal(await pageHeading.evaluate(el => parseFloat(getComputedStyle(el).fontSize)), wideTitle);
   pass('research headings adapt to the column and navigation and date controls leave room around their labels');
+  const typePhase = page.locator('.research-timeline-row [data-research-phase="validation"]');
+  if (await typePhase.getAttribute('aria-pressed') !== 'true') await typePhase.click();
   await openAppearance();
   await page.locator('#theme-choices button[data-theme="kraft"]').click();
-  const font = page.locator('#font-family');
+  await page.getByRole('radio', { name:'应用界面' }).check();
+  const font = page.getByRole('combobox', { name:'界面字体', exact:true });
   const previousFont = await font.inputValue();
+  const uiSize = page.getByLabel('界面基准字号', {exact:true});
+  const previousUiSize = await uiSize.inputValue();
+  const typography = selector => page.locator(selector).first().evaluate(node => {
+    const {fontFamily, fontSize} = getComputedStyle(node);
+    return {family:fontFamily, size:parseFloat(fontSize)};
+  });
+  const interfaceLabels = ['.research-overview h1', '[data-research-destination="timeline"] span', '.research-timeline-label strong',
+    '.research-phase-range', '.research-stage-detail .research-progress-conclusion', '#research-experiments-title'];
+  const originalTypography = await Promise.all(interfaceLabels.map(typography));
+  const documentText = await typography('#visual-editor .ProseMirror');
   await font.selectOption('kai');
-  for (const selector of ['.research-overview h1', '[data-research-destination] span', '.research-timeline-label']) {
-    assert.match(await page.locator(selector).first().evaluate(node => getComputedStyle(node).fontFamily), /Kaiti SC/, selector);
+  await uiSize.fill('18');
+  for (const [index, selector] of interfaceLabels.entries()) {
+    const {family, size} = await typography(selector);
+    assert.match(family, /Kaiti SC/, selector);
+    assert.ok(Math.abs(size - originalTypography[index].size * 18 / Number(previousUiSize)) < .15, selector);
   }
+  assert.deepEqual(await typography('#visual-editor .ProseMirror'), documentText);
+  await uiSize.fill(previousUiSize);
   await font.selectOption(previousFont);
+  await page.getByRole('radio', {name:'文档正文'}).check();
+  pass('interface type scales the sidebar, timeline dates, phase conclusion and experiment list independently of the report');
   await page.locator('.research-toolbar').evaluate(toolbar => toolbar.click());
   await openColumns();
   for (const selector of ['.research-content', '#document-scroll']) {

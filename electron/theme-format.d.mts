@@ -13,6 +13,7 @@ export interface ThemeManifest {
 export type ResolvedTheme = Omit<ThemeManifest, 'palette'> & { palette: Record<PaletteToken, string> };
 export const MAX_THEME_PACKAGE_BYTES: number;
 export const MAX_THEME_LIBRARY_BYTES: number;
+export const uiFontSizes: Readonly<{ min: number; standard: number; max: number }>;
 export const builtinThemes: readonly ThemeManifest[];
 export const themeRoles: Record<ThemeRole, string>;
 export const pngDataPrefix: string;

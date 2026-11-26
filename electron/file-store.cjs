@@ -9,7 +9,7 @@ const { fileURLToPath } = require('node:url');
 const { MAX_IMAGE_COUNT, MAX_BATCH_BYTES } = require('./image-input.cjs');
 const { normalizeDestinationSettings, resolveImageDestination, ensureImageDestination, rollbackImageDirectories } = require('./image-destination.cjs');
 const { validateBindings } = require('./shortcuts.mjs');
-const { MAX_THEME_PACKAGE_BYTES, MAX_THEME_LIBRARY_BYTES, hasTheme, isLocalFontName, validateThemePackage, validateThemeLibrary } = require('./theme-format.mjs');
+const { MAX_THEME_PACKAGE_BYTES, MAX_THEME_LIBRARY_BYTES, hasTheme, isLocalFontName, uiFontSizes, validateThemePackage, validateThemeLibrary } = require('./theme-format.mjs');
 const writingFonts = require('./writing-fonts.json');
 
 const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   shortcuts: Object.freeze({}),
   theme: 'paper', installedThemes: Object.freeze([]), font: 'serif', fontSize: 18, lineWidth: 1040, unlimitedWidth: false, focus: false, sidebar: true,
   customCss: '', fontFamily: '', mathNumbering: 'none', mathPhysics: false,
+  uiFont: 'sans', uiFontFamily: '', uiFontSize: uiFontSizes.standard,
   typewriter: false, paragraphFocus: false, spellcheck: false,
   typingAutoPair: 'default', typingMarkdownPairs: false, typingSmartQuotes: false, typingSmartDashes: false,
   autoSave: false, autoSaveInterval: 30, reopenSession: true,
@@ -106,11 +107,12 @@ function validateSettings(patch, base = DEFAULT_SETTINGS) {
     if (key === 'shortcuts') { next.shortcuts = validateBindings(value, process.platform); continue; }
     const valid = key === 'locale' ? isLocale(value)
       : key === 'theme' ? hasTheme(value, next.installedThemes)
-      : key === 'font' ? typeof value === 'string' && Object.hasOwn(writingFonts, value)
+      : key === 'font' || key === 'uiFont' ? typeof value === 'string' && Object.hasOwn(writingFonts, value)
       : key === 'fontSize' ? Number.isFinite(value) && value >= 12 && value <= 32
+      : key === 'uiFontSize' ? Number.isInteger(value) && value >= uiFontSizes.min && value <= uiFontSizes.max
       : key === 'lineWidth' ? Number.isFinite(value) && value >= 480 && value <= 1200
       : key === 'customCss' ? typeof value === 'string' && Buffer.byteLength(value, 'utf8') <= MAX_THEME_BYTES && !value.includes('\0')
-      : key === 'fontFamily' ? isLocalFontName(value)
+      : key === 'fontFamily' || key === 'uiFontFamily' ? isLocalFontName(value)
       : key === 'mathNumbering' ? ['none', 'ams', 'all'].includes(value)
       : key === 'typingAutoPair' ? ['default', 'on', 'off'].includes(value)
       : ['typingMarkdownPairs', 'typingSmartQuotes', 'typingSmartDashes'].includes(key) ? typeof value === 'boolean'
@@ -126,7 +128,7 @@ function validateSettings(patch, base = DEFAULT_SETTINGS) {
       : ['codeIndentSize', 'codeTabSize'].includes(key) ? Number.isInteger(value) && value >= 1 && value <= 8
       : ['focus', 'sidebar', 'mathPhysics', 'typewriter', 'paragraphFocus', 'spellcheck', 'autoSave', 'reopenSession', 'codeLineNumbers', 'headingNumbering', 'codeWrap', 'codeUseTabs', 'codeAutoIndent'].includes(key) ? typeof value === 'boolean' : false;
     if (!valid) throw new TypeError(`Invalid setting: ${key}`);
-    next[key] = key === 'fontFamily' ? value.trim() : value;
+    next[key] = key === 'fontFamily' || key === 'uiFontFamily' ? value.trim() : value;
   }
   return next;
 }
@@ -139,6 +141,11 @@ function restoreSettings(input) {
     if (key === 'installedThemes' || !Object.hasOwn(input, key)) continue;
     try { settings = validateSettings({ [key]: input[key] }, settings); }
     catch { /* Preserve valid old preferences when an individual stored value is invalid. */ }
+  }
+  if (!Object.hasOwn(input, 'uiFont') && !Object.hasOwn(input, 'uiFontFamily')) {
+    // Earlier profiles used the document family for both surfaces, at a fixed UI size.
+    settings.uiFont = settings.font;
+    settings.uiFontFamily = settings.fontFamily;
   }
   return settings;
 }

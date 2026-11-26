@@ -16,7 +16,7 @@
 .pane-merge { margin-left:auto; padding:3px 8px; color:var(--muted); flex-shrink:0; }
 .document-tab [role=tab] { cursor:grab; touch-action:none; user-select:none; }
 .pane-drop-preview { position:fixed; z-index:180; pointer-events:none; border:2px solid var(--accent); border-radius:5px; background:color-mix(in srgb,var(--accent) 15%,transparent); }
-.pane-drag-label { position:fixed; pointer-events:none; z-index:181; border:1px solid var(--border); border-radius:6px; padding:8px 12px; background:var(--surface); color:var(--text); box-shadow:var(--shadow); font:12px var(--ui); }
+.pane-drag-label { position:fixed; pointer-events:none; z-index:181; border:1px solid var(--border); border-radius:6px; padding:8px 12px; background:var(--surface); color:var(--text); box-shadow:var(--shadow); font:var(--ui-small-size) var(--ui); }
 .dragging-tab,.resizing-panes { user-select:none; }
 .dragging-tab * { cursor:grabbing!important; }
 /* Size gutters per pane, retaining room for the plus and drag controls. */

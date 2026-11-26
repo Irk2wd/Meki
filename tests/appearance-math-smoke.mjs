@@ -99,10 +99,10 @@ try {
   const monoFonts = await page.locator('#installed-fonts option').count();
   assert.ok(monoFonts > 0 && monoFonts < totalFonts);
   const familyOf = selector => page.locator(selector).evaluate(node => getComputedStyle(node).fontFamily);
+  let interfaceFamily = await familyOf('#sidebar-settings-button');
   async function checkInterfaceFont() {
-    const expected = await familyOf('.ProseMirror');
     for (const selector of ['#sidebar-settings-button', '[data-sidebar-setting="style"]', '#font-family', '[data-mode="visual"]']) {
-      assert.equal(await familyOf(selector), expected, selector);
+      assert.equal(await familyOf(selector), interfaceFamily, selector);
     }
   }
   const local = await page.locator('#installed-fonts option').first().getAttribute('value');
@@ -121,6 +121,21 @@ try {
   assert.match(await familyOf('.font-specimen'), /Kaiti SC/);
   assert.equal(await familyOf('.font-specimen'), await familyOf('.ProseMirror'));
   await page.locator('.font-filters select').selectOption('');
+  const bodyFamily = await familyOf('.ProseMirror');
+  const scope = name => page.getByRole('radio', { name, exact: true });
+  await scope('应用界面').check();
+  await page.locator('#installed-fonts').selectOption(local);
+  assert.equal(await page.locator('#font-family option:checked').innerText(), local);
+  assert.equal(await familyOf('.font-specimen'), await familyOf('#sidebar-settings-button'));
+  await page.locator('#font-family').selectOption('rounded');
+  await page.getByLabel('界面基准字号', {exact:true}).fill('17');
+  interfaceFamily = await familyOf('.font-specimen');
+  assert.match(interfaceFamily, /Yuanti SC/);
+  await checkInterfaceFont();
+  assert.equal(await familyOf('.ProseMirror'), bodyFamily);
+  await scope('文档正文').check();
+  assert.equal(await page.locator('#font-family').inputValue(), 'kai');
+  assert.equal(await page.getByLabel('正文字号', {exact:true}).inputValue(), '18');
   pass('installed font list filters with a blank search, combines category and name, and previews the selection in the document');
   await page.locator('#custom-font').fill('Consolas');
   await page.locator('#custom-font').press('Enter');
@@ -184,6 +199,10 @@ try {
   assert.equal(await page.locator('#math-physics').isChecked(),true);
   assert.equal(await page.locator('#font-family option:checked').innerText(),'Consolas');
   await checkInterfaceFont();
+  await scope('应用界面').check();
+  assert.equal(await page.locator('#font-family').inputValue(), 'rounded');
+  assert.equal(await page.locator('#font-size').inputValue(), '17');
+  await scope('文档正文').check();
   assert.equal(await page.locator('.ProseMirror h1').evaluate(node=>getComputedStyle(node).color),'rgb(116, 61, 143)');
   await action('custom-theme');
   await page.locator('#custom-css').fill('h1 { color: blue'); await action('apply-theme');

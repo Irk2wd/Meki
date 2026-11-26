@@ -1,26 +1,26 @@
 #update-dialog{width:min(540px,92vw);max-height:88vh;overflow:auto}
-#update-version{color:var(--soft);font-size:12px}
-#update-message{min-height:3em;font-size:13px;line-height:1.7}
+#update-version{color:var(--soft);font-size:var(--ui-small-size)}
+#update-message{min-height:3em;font-size:var(--ui-text-size);line-height:1.7}
 #update-message.error{color:#b34e3e}
-#update-release-notes{border-top:1px solid var(--border);padding:13px 0;font-size:12px}
+#update-release-notes{border-top:1px solid var(--border);padding:13px 0;font-size:var(--ui-small-size)}
 #update-dialog summary{cursor:pointer;color:var(--soft)}
-#update-dialog details p,.update-note{font-size:11px;line-height:1.8;color:var(--muted)}
+#update-dialog details p,.update-note{font-size:var(--ui-caption-size);line-height:1.8;color:var(--muted)}
 .update-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0}
-.update-actions button{border:1px solid var(--border);padding:7px 11px;border-radius:6px;font-size:12px}
+.update-actions button{border:1px solid var(--border);padding:7px 11px;border-radius:6px;font-size:var(--ui-small-size)}
 .update-actions{justify-content:flex-end;margin:18px 0 0;flex-wrap:wrap}
 #update-progress{width:100%;height:8px;accent-color:var(--accent)}
-#update-progress-text{font-size:11px;color:var(--soft)}
-#update-notes{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.8 var(--ui);max-height:190px;overflow:auto}
-.sidebar-bottom .update-entry{font-size:10px;color:var(--soft);margin-left:auto;white-space:nowrap}
+#update-progress-text{font-size:var(--ui-caption-size);color:var(--soft)}
+#update-notes{white-space:pre-wrap;overflow-wrap:anywhere;font:var(--ui-small-size)/1.8 var(--ui);max-height:190px;overflow:auto}
+.sidebar-bottom .update-entry{font-size:var(--ui-micro-size);color:var(--soft);margin-left:auto;white-space:nowrap}
 .sidebar-bottom .update-entry+.icon-button{margin-left:0}
-.update-automatic { display:flex; align-items:center; gap:8px; margin:18px 0 0; color:var(--soft); font-size:12px }
+.update-automatic { display:flex; align-items:center; gap:8px; margin:18px 0 0; color:var(--soft); font-size:var(--ui-small-size) }
 .update-automatic input { margin:0 }
-#update-notice { position:fixed; z-index:90; right:18px; bottom:48px; width:300px; max-width:calc(100vw - 32px); padding:14px 16px; border:1px solid var(--border); border-radius:11px; background:var(--surface); color:var(--text); box-shadow:var(--shadow); font:12px/1.6 var(--ui); animation:update-notice-enter .18s ease-out both }
+#update-notice { position:fixed; z-index:90; right:18px; bottom:48px; width:300px; max-width:calc(100vw - 32px); padding:14px 16px; border:1px solid var(--border); border-radius:11px; background:var(--surface); color:var(--text); box-shadow:var(--shadow); font:var(--ui-small-size)/1.6 var(--ui); animation:update-notice-enter .18s ease-out both }
 .update-notice-heading { display:flex; align-items:flex-start; gap:12px; justify-content:space-between }
-.update-notice-heading strong { min-width:0; font-size:13px; font-weight:600; overflow-wrap:anywhere }
-.update-notice-heading button { flex-shrink:0; width:24px; height:24px; margin:-4px -7px 0 0; padding:0; border-radius:5px; font-size:18px; color:var(--soft); line-height:24px }
-#update-notice p { margin:6px 0 12px; color:var(--soft); font-size:11px }
-#update-notice > button { padding:6px 12px; font-size:11px }
+.update-notice-heading strong { min-width:0; font-size:var(--ui-text-size); font-weight:600; overflow-wrap:anywhere }
+.update-notice-heading button { flex-shrink:0; width:24px; height:24px; margin:-4px -7px 0 0; padding:0; border-radius:5px; font-size:calc(18px * var(--ui-scale)); color:var(--soft); line-height:24px }
+#update-notice p { margin:6px 0 12px; color:var(--soft); font-size:var(--ui-caption-size) }
+#update-notice > button { padding:6px 12px; font-size:var(--ui-caption-size) }
 @keyframes update-notice-enter { from { opacity:0; transform:translateY(5px) } to { opacity:1; transform:translateY(0) } }
 @media (prefers-reduced-motion:reduce) { #update-notice { animation:none } }
 @media print { #update-notice { display:none!important } }

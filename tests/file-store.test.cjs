@@ -216,13 +216,19 @@ test('unlimited editor width defaults off, persists, and retains the limited wid
   for (const value of [1, 'true', null]) assert.throws(() => validateSettings({ unlimitedWidth: value }), /Invalid setting/);
 });
 
-test('0.1 profiles receive new defaults without changing their existing appearance', async (t) => {
+test('legacy profiles keep their shared face and can then change interface and document typography independently', async (t) => {
   const { userData } = await fixture(t);
-  const legacySettings = { theme: 'linen', font: 'sans', fontSize: 22, lineWidth: 900, focus: true, sidebar: false };
+  const legacySettings = { theme: 'linen', font: 'kai', fontFamily: '华文楷体', fontSize: 22, lineWidth: 900, focus: true, sidebar: false };
   await fs.writeFile(path.join(userData, 'state.json'), JSON.stringify({ settings: legacySettings }));
   const reopened = new FileStore(userData);
   await reopened.init();
-  assert.deepEqual(reopened.metadata.settings, { ...DEFAULT_SETTINGS, ...legacySettings });
+  assert.deepEqual(reopened.metadata.settings, { ...DEFAULT_SETTINGS, ...legacySettings, uiFont: 'kai', uiFontFamily: '华文楷体' });
+  await Promise.all([reopened.updateSettings({ uiFont: 'rounded', uiFontFamily: '  Yuanti SC  ', uiFontSize: 17 }),
+    reopened.updateSettings({ font: 'song', fontFamily: '', fontSize: 20 })]);
+  const next = new FileStore(userData);
+  await next.init();
+  assert.deepEqual(next.metadata.settings, { ...DEFAULT_SETTINGS, ...legacySettings, uiFont: 'rounded', uiFontFamily: 'Yuanti SC', uiFontSize: 17,
+    font: 'song', fontFamily: '', fontSize: 20 });
 });
 
 test('invalid saved theme options fall back independently while valid preferences survive', async (t) => {
@@ -233,7 +239,7 @@ test('invalid saved theme options fall back independently while valid preference
   } }));
   const reopened = new FileStore(userData);
   await reopened.init();
-  assert.deepEqual(reopened.metadata.settings, { ...DEFAULT_SETTINGS, theme: 'night', fontSize: 21 });
+  assert.deepEqual(reopened.metadata.settings, { ...DEFAULT_SETTINGS, theme: 'night', fontSize: 21, uiFont: 'serif' });
 });
 
 test('custom theme, local font and math settings persist with independent concurrent updates', async (t) => {
@@ -259,6 +265,7 @@ test('theme and font bounds reject oversize UTF-8, CSS injection and invalid mat
   assert.equal(validateSettings({ fontFamily: '  华文宋体  ' }).fontFamily, '华文宋体');
   assert.equal(validateSettings({ fontFamily: 'M+ 1m' }).fontFamily, 'M+ 1m');
   for (const invalid of [
+    { uiFont: 'missing' }, { uiFontSize: 11 }, { uiFontSize: 19 }, { uiFontSize: 13.5 }, { uiFontFamily: 'Arial; color:red' },
     { customCss: 'x'.repeat(MAX_THEME_BYTES + 1) }, { customCss: '中'.repeat(Math.floor(MAX_THEME_BYTES / 3) + 1) },
     { customCss: 'a\0b' }, { customCss: null }, { fontFamily: 'A'.repeat(129) },
     { fontFamily: 'Arial, sans-serif' }, { fontFamily: 'Arial; color: red' },

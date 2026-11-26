@@ -1,6 +1,6 @@
 #document-name { -webkit-app-region:no-drag; }
 .document-menu { position:fixed; z-index:150; width:210px; max-width:calc(100vw - 16px); padding:5px; border:1px solid var(--border); border-radius:7px; background:var(--surface); box-shadow:var(--shadow); }
-.document-menu button { display:block; width:100%; padding:8px 10px; border-radius:4px; text-align:left; font-size:12px; }
+.document-menu button { display:block; width:100%; padding:8px 10px; border-radius:4px; text-align:left; font-size:var(--ui-small-size); }
 .document-menu button:focus-visible { outline-offset:-2px; background:var(--hover); }
-.document-menu-note { padding:8px 10px; font-size:11px; line-height:1.7; color:var(--muted); }
+.document-menu-note { padding:8px 10px; font-size:var(--ui-caption-size); line-height:1.7; color:var(--muted); }
 @media print { .document-menu { display:none!important; } }

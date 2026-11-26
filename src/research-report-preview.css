@@ -8,7 +8,7 @@
 #research-report-dialog .dialog-heading { flex: none; margin: 0; min-width: 0; }
 #research-report-dialog .dialog-heading > div { min-width: 0; }
 #research-report-title, #research-report-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#research-report-path { margin: 3px 0 0; color: var(--soft); font-size: 12px; }
+#research-report-path { margin: 3px 0 0; color: var(--soft); font-size: var(--ui-small-size); }
 .research-report-tools { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
 .research-report-tools select { min-width: 0; max-width: min(100%, 320px); border: 1px solid var(--border); border-radius: 5px; background: var(--bg); padding: 5px; }
 .research-report-tools .secondary-button, .research-report-pager .secondary-button { margin: 0; }
@@ -36,11 +36,11 @@
   border-radius: 6px;
   background: var(--surface);
   color: var(--soft);
-  font-size: 12px;
+  font-size: var(--ui-small-size);
   overflow-wrap: anywhere;
 }
 .research-report-pager { display: flex; justify-content: center; align-items: center; gap: 12px; flex-wrap: wrap; }
-#research-report-page { min-width: 95px; text-align: center; color: var(--soft); font-size: 12px; font-variant-numeric: tabular-nums; }
+#research-report-page { min-width: 95px; text-align: center; color: var(--soft); font-size: var(--ui-small-size); font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: no-preference) {
   #research-report-dialog[open] { animation: research-dialog-in 165ms cubic-bezier(.22,.75,.25,1); }
 }
