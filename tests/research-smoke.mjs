@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { _electron as electron } from 'playwright';
 import { writeReportPdf, writeReportPptx } from './research-report-fixtures.mjs';
+import { checkStagePages } from './research-stage-pages.mjs';
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -1986,6 +1987,19 @@ try {
   assert.ok(await timingLink.evaluate(link => document.activeElement === link));
   await page.locator('#research-reader-title').getByText('树林轨迹复测').waitFor();
   pass('stage navigation resumes the last record and narrow evidence returns to its link');
+  await closeReader();
+  await sizeWindow(1180);
+  const pagedProject = path.join(folder, 'stage-archive');
+  await checkStagePages({
+    page, command: (...args) => commandAt(pagedProject, ...args), closeReader, archive, image: canopy,
+    open: async () => {
+      await app.evaluate((_electron, target) => { process.env.MEKI_TEST_FOLDER_PATH = target; }, pagedProject);
+      await page.locator('#research-sidebar [data-action=research-projects]').click();
+      await page.locator('#research-project-picker [data-action=research-open-project]').click();
+      await page.getByRole('heading', { name: '阶段分页验证', exact: true }).waitFor();
+    },
+  });
+  pass('phase record lists page independently, retain reading position and clamp after external changes');
   assert.deepEqual(errors, []);
 
   await fs.writeFile(path.join(folder, 'results.json'), JSON.stringify({ results, errors }, null, 2) + '\n');

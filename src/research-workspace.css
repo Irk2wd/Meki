@@ -505,7 +505,29 @@ button.research-timeline-event[data-latest-event] {
 }
 .research-stage-section h3 { font-size: calc(15px * var(--ui-scale)); line-height: 1.45; }
 .research-stage-section > .research-record-filters { margin-top: 0; }
-.research-stage-section > ul { margin-top: 10px; }
+.research-stage-section > ul, .research-stage-section > [data-stage-list] > ul { margin-top: 10px; }
+.research-stage-section h3[tabindex] { scroll-margin-block-start: 16px; }
+.research-record-pages {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; margin-block-start: 10px;
+  padding-block-start: 8px; border-block-start: 1px solid var(--research-rule); color: var(--soft);
+  font: var(--ui-caption-size)/1.4 var(--ui); font-variant-numeric: tabular-nums;
+}
+.research-record-count { margin-inline-end: auto; }
+.research-record-pages label, .research-record-page-links { display: flex; align-items: center; gap: 4px; }
+.research-record-pages select {
+  border: 1px solid var(--border); border-radius: 6px; padding: 3px 4px;
+  color: var(--text); background: var(--surface); font: inherit;
+}
+.research-record-page-links { flex-wrap: wrap; gap: 2px; }
+.research-record-page-links button {
+  display: inline-grid; place-items: center; min-width: 26px; min-height: 26px; padding: 2px 4px;
+  border: 0; border-radius: 6px; color: var(--soft); background: transparent; font: inherit;
+}
+.research-record-page-links button:enabled:hover { color: var(--text); background: var(--hover); }
+.research-record-page-links button[aria-current="page"] {
+  color: var(--record-ink, var(--accent)); background: color-mix(in srgb, currentColor 11%, var(--bg)); font-weight: 650;
+}
+.research-record-page-links button:disabled { opacity: .4; }
 .research-stage-section:not(.research-progress) .research-summary-item > button[data-research-record] { border-color: transparent; background: transparent; }
 .research-stage-section:not(.research-progress) .research-summary-item > button[data-research-record]:is(:hover, :focus-visible) { background: var(--hover); }
 .research-stage-section .research-summary-item + .research-summary-item { padding-top: 5px; border-top: 1px solid var(--research-rule); }

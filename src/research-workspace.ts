@@ -13,6 +13,7 @@ import { TimelineEventLayout, timelineEventButton, type TimelineEventDay } from 
 import { adjustDays, brushDays, datesForDays, dayNumber, isoDay, shiftRange, timelineOverview, type RangeHandle, type TimelineWindow } from './research-timeline-range';
 import { reportReferences } from './research-report-links';
 import { recordKind, recordMark } from './research-record-mark';
+import { StageRecordPages } from './research-stage-pages';
 import { comparisonSample, EvidenceSamples } from './research-evidence-samples';
 import { escapeResearch as escape, fieldRuleDetails, fieldValue, relationLabels, researchOption as option, ResearchTools, runFields, type ResearchWidths } from './research-tools';
 import './research-workspace.css';
@@ -33,6 +34,7 @@ const pageSizeKey = 'mekir.research.phasesPerPage';
 const widthsKey = 'mekir.research.widths';
 const defaultPageSize = 10;
 const peekItems = '.research-entry-title > [data-research-record], .research-summary-list li > [data-research-record]';
+const peekKey = (button: HTMLButtonElement) => `${button.dataset.researchLinkedProject || ''}/${button.dataset.researchRecord}`;
 const validPageSize = (size: number) => Number.isSafeInteger(size) && size > 0;
 
 function savedPageSize() {
@@ -353,6 +355,8 @@ export class ResearchWorkspace {
   private timelineRange?: TimelineRange;
   private phasePage = 1;
   private phasePageSize = savedPageSize();
+  private stagePages = new StageRecordPages();
+  private stageReaderIds?: string[];
   private recordFilter?: ResearchFilter;
   private axisDrag?: AxisDrag;
   private axisFrame = 0;
@@ -428,8 +432,11 @@ export class ResearchWorkspace {
       const target = event.target as HTMLInputElement;
       if (target.id === 'research-date') {
         this.date = target.value;
+        this.stagePages.reset('entry');
         this.render();
         this.content.querySelector<HTMLInputElement>('#research-date')?.focus({ preventScroll: true });
+      } else if (event.target instanceof HTMLSelectElement && event.target.hasAttribute('data-research-record-size')) {
+        this.changeStagePage(event.target);
       } else if (target.id === 'research-phase-page-size') {
         if (target.validity.badInput || (target.value && !validPageSize(target.valueAsNumber))) {
           target.value = this.phasePageSize === null ? '' : String(this.phasePageSize);
@@ -552,12 +559,13 @@ export class ResearchWorkspace {
     if (!force && id && !linkedProject && this.snapshot) {
       const phase = this.snapshot.records.find(item => item.record.id === id)?.record.phaseId;
       if (phase) this.phaseReading.set(phase, id);
-      if (this.phaseId && this.content.querySelector(`.research-journal [data-research-record="${CSS.escape(id)}"]`)) this.phaseReading.set(this.phaseId, id);
+      if (this.phaseId && (this.stageReaderIds?.includes(id) || this.content.querySelector(`.research-journal [data-research-record="${CSS.escape(id)}"]`))) this.phaseReading.set(this.phaseId, id);
     }
     const items = [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)];
-    const index = items.findIndex(button => key === `${button.dataset.researchLinkedProject || ''}/${button.dataset.researchRecord}`);
+    const sequence = this.readerSequence(items);
+    const index = sequence.indexOf(key);
     const previous = items.find(button => button.hasAttribute('aria-current'));
-    const active = items[index];
+    const active = items.find(button => peekKey(button) === key);
     if (previous !== active) {
       let dy = 0;
       if (previous && active && !this.panel.inert && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -566,19 +574,28 @@ export class ResearchWorkspace {
       }
       previous?.removeAttribute('aria-current');
       active?.setAttribute('aria-current', 'true');
-      if (dy && Math.abs(dy) < 260) active.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }],
+      if (active && dy && Math.abs(dy) < 260) active.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }],
         { pseudoElement: '::before', duration: 160, easing: 'cubic-bezier(.2,.75,.25,1)' });
     }
     for (const button of this.host.querySelectorAll<HTMLButtonElement>('[data-peek-step]')) {
-      button.hidden = index < 0 || items.length < 2;
-      button.disabled = !items[index + Number(button.dataset.peekStep)];
+      button.hidden = index < 0 || sequence.length < 2;
+      button.disabled = !sequence[index + Number(button.dataset.peekStep)];
     }
   }
 
   stepReader(direction: number) {
     const items = [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)];
-    const index = items.findIndex(button => button.hasAttribute('aria-current'));
-    if (index >= 0) items[index + direction]?.click();
+    const sequence = this.readerSequence(items);
+    const index = sequence.indexOf(this.readerItem);
+    const next = index >= 0 && sequence[index + direction];
+    if (!next) return;
+    const visible = items.find(button => peekKey(button) === next);
+    if (visible) visible.click();
+    else void this.openReference(next.slice(1)).catch(error => this.hooks.notify(errorText(error), true));
+  }
+
+  private readerSequence(items: HTMLButtonElement[]) {
+    return this.stageReaderIds?.map(id => `/${id}`) ?? items.map(peekKey);
   }
 
   async dismissReader() {
@@ -812,6 +829,7 @@ export class ResearchWorkspace {
       this.recordFilter = undefined;
       this.clearAxisDrag();
       this.positions.clear();
+      this.stagePages.reset();
       this.phaseReading.clear();
       this.stageNavigation = false;
       this.tools.closeEvidence(false);
@@ -898,7 +916,12 @@ export class ResearchWorkspace {
     this.content.querySelector<HTMLInputElement>('#research-phase-page-size')?.focus({ preventScroll: true });
   }
 
+  private changeStagePage(control: HTMLButtonElement | HTMLSelectElement) {
+    if (this.stagePages.change(control) === 'comparison' && this.snapshot) this.samples.show(this.snapshot);
+  }
+
   private async setRecordFilter(filter?: ResearchFilter) {
+    if (JSON.stringify(filter) !== JSON.stringify(this.recordFilter)) this.stagePages.reset();
     this.recordFilter = filter;
     await this.refresh();
     this.content.querySelector<HTMLButtonElement>('[data-research-filter]')?.focus({ preventScroll: true });
@@ -1064,7 +1087,7 @@ export class ResearchWorkspace {
     const group = (title: string, items: string) => items ? `<section class="research-nav-group" aria-label="${title}">
       <h2 class="research-nav-label">${title}</h2><div class="research-nav-list">${items}</div></section>` : '';
     const phases = state ? rankPhases(state.project.phases, state.records, this.renderedDay, state.project.recordTypes) : [];
-    const listed = new Set(reading ? [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)].map(item => item.dataset.researchRecord) : []);
+    const listed = new Set(reading ? this.stageReaderIds : []);
     const stageRecords = listed.size && state ? `<div class="research-nav-records">${state.records.filter(item => listed.has(item.record.id))
       .sort((a, b) => sortEntries(b, a)).map(({ record }) => {
         const type = state.project.recordTypes.find(item => item.id === record.type);
@@ -1102,7 +1125,7 @@ export class ResearchWorkspace {
     const focused = document.activeElement;
     const focusRoot = this.panel.contains(focused) ? this.panel : this.sidebar.contains(focused) ? this.sidebar : undefined;
     const focusKey = focusRoot && focused instanceof HTMLElement &&
-      (focused instanceof HTMLButtonElement || focused.matches('summary[data-research-settings-section], summary[data-research-timeline-options], [data-research-overview-handle]')) && [...focused.attributes]
+      (focused instanceof HTMLButtonElement || focused.matches('summary[data-research-settings-section], summary[data-research-timeline-options], [data-research-overview-handle], [data-research-record-size]')) && [...focused.attributes]
       .find(({ name }) => name.startsWith('data-research-') || name === 'data-action');
     const scroll = this.content.scrollTop;
     const today = state ? projectToday(state.project.timezone) : '';
@@ -1116,6 +1139,8 @@ export class ResearchWorkspace {
       <span>${escape(active?.label || t("科研项目"))}</span>${phaseCrumb ? `<i aria-hidden="true">/</i><span>${escape(phaseCrumb)}</span>` : ''}</div>
       ${state ? `<div class="research-toolbar-actions"><button type="button" class="secondary-button research-toolbar-search" data-research-search aria-haspopup="dialog" aria-label="${ht("搜索项目")}">${icon('search', 15)}<span>${ht("搜索项目")}</span></button><button type="button" class="icon-button" data-action="refresh" aria-label="${ht("刷新项目")}" title="${ht("刷新项目")}">${icon('refresh', 17)}</button></div>` : ''}`;
     if (!state || !active || !today) {
+      this.stageReaderIds = undefined;
+      this.stagePages.begin('');
       this.samples.show();
       this.renderSidebar(state, active || undefined);
       this.timelineEvents.show();
@@ -1184,7 +1209,15 @@ export class ResearchWorkspace {
     const previousMarkers = timelineView && !this.axisDrag?.moving ? this.timelineEvents.capture() : undefined;
     const optionsOpen = this.content.querySelector<HTMLDetailsElement>('.research-timeline-options')?.open;
     const stage = projectPage ? phase : undefined;
-    const stageSummaries = stage ? (summariesByPhase.get(stage.id) || []).filter(matches) : [];
+    const stageSummaries = stage ? (summariesByPhase.get(stage.id) || []).filter(matches).sort((a, b) => sortEntries(b, a)) : [];
+    const summary = stageSummaries.find(item => item.record.date <= today && item.excerpt);
+    const latest = latestExperiment && (!summary || comparePhaseProgress(latestExperiment, summary, project.recordTypes, today) > 0) ? latestExperiment : summary;
+    const otherSummaries = stageSummaries.filter(item => item !== latest);
+    this.stagePages.begin(stage ? `${active.key}/${stage.id}` : '');
+    this.stageReaderIds = stage ? [
+      ...(latest && latest !== latestExperiment ? [latest.record.id] : []),
+      ...otherSummaries.map(item => item.record.id), ...entries.map(item => item.record.id),
+    ] : undefined;
     const stageEvents = stage ? (eventsByPhase.get(stage.id) || []).filter(matches) : [];
     const comparisons = stageEvents.filter(entry => entry.record.comparison);
     const newComparison = stage ? `<button type="button" class="secondary-button" data-research-new="comparison">${icon('plus', 14)}${ht("新建可视化展示")}</button>` : '';
@@ -1211,19 +1244,20 @@ export class ResearchWorkspace {
           ${stage?.description || goals ? `<div class="research-stage-context">
             ${stage?.description ? `<div class="research-phase-focus"><h3>${ht("本阶段要判断什么")}</h3><p>${escape(stage.description)}</p></div>` : ''}
             ${goals}</div>` : ''}</header>
-          ${stage ? this.renderStageSummaries(stageSummaries, latestExperiment, newSummary, state, today, featuredComparisons) : ''}
+          ${stage ? this.renderStageSummaries(otherSummaries, latest, newSummary, state, today, featuredComparisons) : ''}
           ${comparisons.length ? this.renderPhaseComparisons(comparisons, types, featuredComparisons, newComparison) : ''}
           ${this.renderPhaseEvents(stageEvents.filter(entry => !entry.record.comparison), types)}
           ${stage ? '<section class="research-stage-section" data-record-kind="entry" aria-labelledby="research-experiments-title">' : ''}
           <div class="research-record-filters">
-            ${stage ? `<h3 id="research-experiments-title">${ht("实验记录")} <span>${entries.length}</span></h3>` : ''}
+            ${stage ? `<h3 id="research-experiments-title" tabindex="-1">${ht("实验记录")} <span>${entries.length}</span></h3>` : ''}
             <div class="research-filters"><button type="button" class="secondary-button" data-research-filter aria-haspopup="dialog" aria-pressed="${Boolean(this.recordFilter)}">${icon('search', 14)} ${ht("研究筛选")}</button>
               <label for="research-date">${ht("按日期筛选")}</label><input id="research-date" type="date" value="${escape(this.date)}"${dateRange ? ` min="${dateRange.start}" max="${dateRange.end}"` : ''}></div>
           </div>
           ${this.recordFilter ? `<p class="research-active-filter">${escape([
             this.recordFilter.query, this.recordFilter.month, ...(this.recordFilter.fields || []).map(({ field, value }) => `${this.filterFieldName(field, state)} = ${value}`),
           ].filter(Boolean).join(' · '))}</p>` : ''}
-          ${entries.length ? this.renderEntries(entries, view, state, dayInView) : ''}
+          ${stage ? this.stagePages.list('entry', 'research-experiments-title', entries, rows => this.renderEntries(rows, view, state, dayInView))
+            : entries.length ? this.renderEntries(entries, view, state, dayInView) : ''}
           ${linkedSummaries.length ? this.renderLinkedSummaries(linkedSummaries) : ''}
           ${entries.length || linkedSummaries.length ? '' : `<p class="research-empty-list">${ht("这个视图中没有符合条件的记录。")}</p>`}
           ${stage ? '</section>' : ''}
@@ -1239,7 +1273,7 @@ export class ResearchWorkspace {
     }
     this.content.scrollTop = scroll;
     if (focusKey) {
-      const selector = focused instanceof HTMLButtonElement ? 'button:enabled' : 'summary, [data-research-overview-handle]';
+      const selector = focused instanceof HTMLButtonElement ? 'button:enabled' : 'summary, select, [data-research-overview-handle]';
       const replacement = focusKey.name === 'data-research-timeline-events' ? timelineEventButton(this.content, focusKey.value) :
         focusRoot?.querySelector<HTMLElement>(`:is(${selector})[${focusKey.name}="${CSS.escape(focusKey.value)}"]`);
       replacement?.focus({ preventScroll: true });
@@ -1261,22 +1295,21 @@ export class ResearchWorkspace {
   private renderPhaseEvents(entries: ResearchEntry[], types: Map<string, ResearchType>) {
     if (!entries.length) return '';
     return `<section class="research-stage-section research-phase-summaries" data-record-kind="event" aria-labelledby="research-phase-events-title">
-      <h3 id="research-phase-events-title">${ht("阶段事件")}</h3><ul>${entries.map(({ record }) =>
+      <h3 id="research-phase-events-title" tabindex="-1">${ht("阶段事件")}</h3>
+      ${this.stagePages.list('event', 'research-phase-events-title', entries, rows => `<ul>${rows.map(({ record }) =>
       `<li class="research-summary-item"><button type="button" data-research-record="${record.id}">${recordMark('event', 17, types.get(record.type)?.icon)}
       <span><strong>${escape(record.title)}</strong><small>${record.date} · ${escape(types.get(record.type)?.label || record.type)}</small></span>${icon('chevron', 14)}</button>
-      <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button></li>`).join('')}</ul></section>`;
+      <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button></li>`).join('')}</ul>`)}</section>`;
   }
 
-  private renderStageSummaries(entries: ResearchEntry[], experiment: ResearchEntry | undefined, create: string, state: ResearchSnapshot, today: string, featuredComparisons: Set<string>) {
-    if (!entries.length && !experiment) return '';
-    const sorted = entries.sort((a, b) => sortEntries(b, a));
-    const summary = sorted.find(item => item.record.date <= today && item.excerpt);
-    const latest = experiment && (!summary || comparePhaseProgress(experiment, summary, state.project.recordTypes, today) > 0) ? experiment : summary;
+  private renderStageSummaries(others: ResearchEntry[], latest: ResearchEntry | undefined, create: string, state: ResearchSnapshot, today: string, featuredComparisons: Set<string>) {
+    if (!others.length && !latest) return '';
+    const latestKind = latest && recordKind(state.project.recordTypes.find(type => type.id === latest.record.type), latest.record);
     const row = (entry: ResearchEntry, featured = false) => {
       const { record, excerpt } = entry;
-      const isExperiment = entry === experiment;
       const type = state.project.recordTypes.find(type => type.id === record.type);
       const kind = recordKind(type, record);
+      const isExperiment = kind === 'entry';
       return `<li class="research-summary-item" data-record-kind="${kind}">
       <button type="button" ${isExperiment ? 'data-research-progress-link' : 'data-research-record'}="${record.id}">
         ${featured ? '' : recordMark(kind, 17, type?.icon)}<span>${featured ? `<span class="research-finding-kind">${recordMark(kind, 15, type?.icon)}${escape(type?.label || record.type)}</span>` : ''}
@@ -1286,14 +1319,13 @@ export class ResearchWorkspace {
           <small class="research-summary-dates">${record.coverage ? `<span>${ht("覆盖 {0}", escape(rangeText(record.coverage)))}</span>` : ''}<span>${isExperiment ? ht("实验日期 {0}", latestActivity(entry, '', today)) : ht("撰写于 {0}", escape(record.date))}</span></small></span>${icon('chevron', 14)}</button>
       ${isExperiment ? '' : `<button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button>`}</li>`;
     };
-    const others = sorted.filter(entry => entry !== latest);
-    const progress = latest ? `<section class="research-stage-section research-phase-summaries research-progress" data-record-kind="${latest === experiment ? 'entry' : 'summary'}" aria-labelledby="research-progress-title">
+    const progress = latest ? `<section class="research-stage-section research-phase-summaries research-progress" data-record-kind="${latestKind}" aria-labelledby="research-progress-title">
       <div class="research-section-heading"><h3 id="research-progress-title">${ht("最新进展")}</h3>${create}</div>
       <ul class="research-progress-latest research-summary-list">${row(latest, true)}</ul>
     </section>${this.progressLinks(latest.record, state, featuredComparisons)}` : '';
     const archive = others.length ? `<section class="research-stage-section research-phase-summaries" data-record-kind="summary" aria-labelledby="research-phase-summaries-title">
-      <div class="research-section-heading"><h3 id="research-phase-summaries-title">${latest && latest !== experiment ? ht("其他阶段总结") : ht("阶段总结")}</h3>${latest ? '' : create}</div>
-      <ul class="research-summary-list">${others.map(entry => row(entry)).join('')}</ul></section>` : '';
+      <div class="research-section-heading"><h3 id="research-phase-summaries-title" tabindex="-1">${latestKind === 'summary' ? ht("其他阶段总结") : ht("阶段总结")}</h3>${latest ? '' : create}</div>
+      ${this.stagePages.list('summary', 'research-phase-summaries-title', others, rows => `<ul class="research-summary-list">${rows.map(entry => row(entry)).join('')}</ul>`)}</section>` : '';
     return progress + archive;
   }
 
@@ -1345,13 +1377,13 @@ export class ResearchWorkspace {
 
   private renderPhaseComparisons(entries: ResearchEntry[], types: Map<string, ResearchType>, featured: Set<string>, create: string) {
     return `<section class="research-stage-section research-phase-summaries" data-record-kind="comparison" aria-labelledby="research-phase-comparisons-title">
-      <div class="research-section-heading"><h3 id="research-phase-comparisons-title">${ht("可视化展示")}</h3>
+      <div class="research-section-heading"><h3 id="research-phase-comparisons-title" tabindex="-1">${ht("可视化展示")}</h3>
         ${create}</div>
-      <ul>${entries.sort((a, b) => sortEntries(b, a)).map(({ record }) => `<li class="research-summary-item research-comparison-entry">
+      ${this.stagePages.list('comparison', 'research-phase-comparisons-title', entries.sort((a, b) => sortEntries(b, a)), rows => `<ul>${rows.map(({ record }) => `<li class="research-summary-item research-comparison-entry">
         <button type="button" data-research-record="${record.id}">${recordMark('comparison', 17, types.get(record.type)?.icon)}<span><strong>${escape(record.title)}</strong>
           <small>${escape(record.date)} · ${ht("{0} 行 × {1} 列", record.comparison!.rows.length, record.comparison!.columns.length)}</small></span>${icon('chevron', 14)}</button>
         <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button>
-        ${featured.has(record.id) ? '' : comparisonSample(record.comparison!)}</li>`).join('')}</ul>
+        ${featured.has(record.id) ? '' : comparisonSample(record.comparison!)}</li>`).join('')}</ul>`)}
     </section>`;
   }
 
@@ -1481,9 +1513,11 @@ export class ResearchWorkspace {
         }
         const next: HTMLButtonElement = this.pendingListRecord;
         this.pendingListRecord = undefined;
-        const { researchRecord: id, researchLinkedProject: linked } = next.dataset;
-        const origin = next.isConnected ? next : [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)]
-          .find(item => item.dataset.researchRecord === id && item.dataset.researchLinkedProject === linked);
+        const { researchRecord, researchStageRecord, researchLinkedProject: linked } = next.dataset;
+        const id = researchRecord || researchStageRecord;
+        const origin = next.isConnected ? next : researchStageRecord
+          ? this.sidebar.querySelector<HTMLButtonElement>(`[data-research-stage-record="${CSS.escape(researchStageRecord)}"]`)
+          : [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)].find(item => item.dataset.researchRecord === id && item.dataset.researchLinkedProject === linked);
         if (!id || !origin) continue;
         if (linked) await this.hooks.open(root, id, origin, false, linked);
         else await this.openReference(id, origin);
@@ -1501,7 +1535,7 @@ export class ResearchWorkspace {
     if (button.dataset.action === 'refresh') this.samples.show(state, true);
     if (button.dataset.researchStageRecord) {
       const item = [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)].find(el => el.dataset.researchRecord === button.dataset.researchStageRecord);
-      if (item) await this.openListRecord(item, state.root);
+      if (item || this.stageReaderIds?.includes(button.dataset.researchStageRecord)) await this.openListRecord(item || button, state.root);
       return;
     }
     if (button.matches(peekItems)) {
@@ -1526,6 +1560,10 @@ export class ResearchWorkspace {
       if (!this.visible || !button.isConnected || this.snapshot !== state) return;
     }
     if (this.hooks.blocked()) return;
+    if (data.researchRecordPage) {
+      this.changeStagePage(button);
+      return;
+    }
     if ('researchExpandPhases' in data) {
       this.hooks.expandNavigation();
       const selected = this.sidebar.querySelector<HTMLElement>('.research-phase-shelf[open] [aria-current="location"]');
@@ -1643,7 +1681,7 @@ export class ResearchWorkspace {
       if (stage) {
         const shortcut = this.sidebar.querySelector<HTMLButtonElement>(`[data-research-stage-link="${CSS.escape(stage)}"]`);
         const last = this.phaseReading.get(stage);
-        if (!returnToList && last && this.content.querySelector(`.research-journal [data-research-record="${CSS.escape(last)}"]`)) {
+        if (!returnToList && last && (this.stageReaderIds?.includes(last) || this.content.querySelector(`.research-journal [data-research-record="${CSS.escape(last)}"]`))) {
           await this.hooks.open(state.root, last, shortcut || undefined);
         } else {
           this.content.querySelector('.research-journal')?.scrollIntoView({ block: 'nearest' });
