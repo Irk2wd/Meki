@@ -31,6 +31,15 @@ export async function checkStagePages({ page, command, open, closeReader, archiv
   const turn = (kind, name) => list(kind).getByRole('button', { name, exact: true }).click();
   const size = (kind, value) => list(kind).getByRole('combobox').selectOption(value);
   const current = kind => list(kind).locator('[aria-current=page]').innerText();
+  async function checkOnlyPage(kind) {
+    const nav = list(kind).getByRole('navigation');
+    assert.equal(await nav.getByRole('button').count(), 3);
+    const onlyPage = nav.getByRole('button', { name: '第 1 页', exact: true });
+    assert.ok(await onlyPage.isVisible());
+    assert.equal(await onlyPage.getAttribute('aria-current'), 'page');
+    assert.ok(await nav.getByRole('button', { name: '上一页', exact: true }).isDisabled());
+    assert.ok(await nav.getByRole('button', { name: '下一页', exact: true }).isDisabled());
+  }
   for (const kind of Object.keys(types)) {
     assert.equal(await rows(kind).count(), 10);
     assert.equal(await list(kind).getByRole('combobox').inputValue(), '10');
@@ -74,6 +83,7 @@ export async function checkStagePages({ page, command, open, closeReader, archiv
   assert.equal(await page.locator('.research-content').evaluate(el => el.scrollTop), scroll);
   await page.locator('#research-date').fill('2026-11-17');
   assert.equal(await rows('entry').count(), 1);
+  await checkOnlyPage('entry');
   assert.equal(await rows('entry').first().getAttribute('data-research-record'), 'entry-01');
   assert.equal(await current('summary'), '2');
   await page.locator('#research-date').fill('');
@@ -85,7 +95,12 @@ export async function checkStagePages({ page, command, open, closeReader, archiv
   assert.equal(await current('summary'), '2');
   await page.locator('[data-research-phase=control]').click();
   assert.equal(await rows('entry').count(), 2);
+  await checkOnlyPage('entry');
   await phase.click();
   assert.equal(await current('entry'), '8');
   assert.equal(await current('summary'), '2');
+  for (const kind of Object.keys(types)) {
+    await size(kind, 'all');
+    await checkOnlyPage(kind);
+  }
 }

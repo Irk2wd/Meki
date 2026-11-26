@@ -16,6 +16,7 @@ function savedSize(category: Category) {
 }
 
 function pageNumbers(page: number, count: number) {
+  if (count === 1) return [1];
   const first = Math.max(2, Math.min(page - 1, count - 4));
   const last = Math.min(count - 1, Math.max(page + 1, 5));
   const numbers: (number | '…')[] = [1];
@@ -92,11 +93,11 @@ export class StageRecordPages {
     const end = Math.min(start + limit, total);
     const button = (number: number, action: string, label: string, content: string, state: string) =>
       `<button type="button" data-research-record-page="${category}-${action}" value="${number}" aria-label="${label}"${state}>${content}</button>`;
-    const links = count > 1 ? `<div class="research-record-page-links">
+    const links = `<div class="research-record-page-links">
       ${button(page - 1, 'prev', ht("上一页"), icon('back', 14), page === 1 ? ' disabled' : '')}
       ${pageNumbers(page, count).map(n => n === '…' ? '<span aria-hidden="true">…</span>' :
         button(n, String(n), ht("第 {0} 页", n), String(n), n === page ? ' aria-current="page"' : '')).join('')}
-      ${button(page + 1, 'next', ht("下一页"), icon('chevron', 14), page === count ? ' disabled' : '')}</div>` : '';
+      ${button(page + 1, 'next', ht("下一页"), icon('chevron', 14), page === count ? ' disabled' : '')}</div>`;
     const range = count === 1 ? ht("共 {0} 条", total) : ht("第 {0}–{1} 条，共 {2} 条", start + 1, end, total);
     return `${rows(entries.slice(start, end))}<nav class="research-record-pages" aria-labelledby="${heading}">
       <span class="research-record-count" id="${heading}-range">${range}</span>

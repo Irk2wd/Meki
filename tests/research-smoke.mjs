@@ -955,8 +955,9 @@ try {
   const pageSize = page.getByRole('spinbutton', { name: '每页阶段数' });
   await openTimelineOptions();
   const pageNumber = page.locator('#research-phase-page-number');
-  const nextPage = page.getByRole('button', { name: '下一页', exact: true });
-  const previousPage = page.getByRole('button', { name: '上一页', exact: true });
+  const phasePager = page.getByRole('navigation', { name: '研究阶段分页' });
+  const nextPage = phasePager.getByRole('button', { name: '下一页', exact: true });
+  const previousPage = phasePager.getByRole('button', { name: '上一页', exact: true });
   assert.equal(await pageSize.inputValue(), '10');
   assert.equal(await phases.count(), 10);
   assert.equal(await previousPage.isDisabled(), true);
