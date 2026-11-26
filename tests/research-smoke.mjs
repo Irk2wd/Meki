@@ -1217,6 +1217,11 @@ try {
   await comparison.locator('.research-comparison-caption strong').getByText('同一机位').waitFor();
   const imagesInView = comparison.locator('.research-comparison-image img');
   await imagesInView.nth(3).waitFor();
+  const fitButton = comparison.getByRole('button', { name: '适应视口', exact: true });
+  const zoomSlider = comparison.getByRole('slider', { name: '缩放所有对比图' });
+  const zoomPresets = comparison.getByRole('combobox', { name: '缩放倍率预设' });
+  assert.equal(await fitButton.getAttribute('aria-pressed'), 'true');
+  assert.equal(await zoomPresets.inputValue(), '');
   const fitFrames = await imagesInView.evaluateAll(images => images.map(image => {
     const frame = image.parentElement.getBoundingClientRect();
     const column = image.closest('td').clientWidth;
@@ -1282,8 +1287,49 @@ try {
   assert.notEqual(panned[0].x, zoomed[0].x);
   for (const axis of ['x', 'y']) assert.ok(Math.abs((panned[0][axis] - zoomed[0][axis]) - (panned[1][axis] - zoomed[1][axis])) < 0.001);
   assert.deepEqual(panned.slice(2), fit.slice(2));
-  await comparison.getByRole('button', { name: '1:1 原像素' }).click();
-  assert.ok(await imagesInView.evaluateAll(elements => elements.every(image => Math.abs(parseFloat(image.style.width) * devicePixelRatio - image.naturalWidth) < 0.01)));
+  const verifyPixelZoom = async level => {
+    const results = await imagesInView.evaluateAll((images, level) => images.map(image => {
+      const bounds = image.getBoundingClientRect();
+      const near = (a, b) => Math.abs(a - b) < 0.04;
+      const onPixel = value => near(value * devicePixelRatio, Math.round(value * devicePixelRatio));
+      return near(parseFloat(image.style.width) * devicePixelRatio, image.naturalWidth * level)
+        && near(parseFloat(image.style.height) * devicePixelRatio, image.naturalHeight * level)
+        && (!Number.isInteger(level) || (image.style.imageRendering === 'pixelated' && onPixel(bounds.left) && onPixel(bounds.top)));
+    }), level);
+    assert.deepEqual(results, [true, true, true, true], `Images at ${level * 100}% on this display`);
+  };
+  for (const level of [1, 2, 4]) {
+    await zoomPresets.selectOption(String(level));
+    await verifyPixelZoom(level);
+    assert.equal(await zoomSlider.getAttribute('aria-valuetext'), `${level * 100}%`);
+    assert.equal(await zoomSlider.evaluate(input => 2 ** input.valueAsNumber), level);
+    assert.equal(await fitButton.getAttribute('aria-pressed'), 'false');
+  }
+  const at400 = await imageState();
+  await firstTile.press('=');
+  const beyond400 = await imageState();
+  assert.ok(beyond400[0].width > at400[0].width);
+  assert.equal(beyond400[0].width, beyond400[1].width);
+  assert.deepEqual(beyond400.slice(2), at400.slice(2));
+  assert.equal(await zoomSlider.getAttribute('aria-valuetext'), '500%');
+  assert.equal(await zoomPresets.inputValue(), '');
+  const sliderBox = await zoomSlider.boundingBox();
+  const sliderY = sliderBox.y + sliderBox.height / 2;
+  await page.mouse.move(sliderBox.x + sliderBox.width * 0.4, sliderY);
+  await page.mouse.down();
+  await page.mouse.move(sliderBox.x + sliderBox.width * 0.6, sliderY, { steps: 5 });
+  await page.mouse.up();
+  const draggedZoom = await zoomSlider.evaluate(input => 2 ** input.valueAsNumber);
+  assert.ok(draggedZoom > 2 && draggedZoom < 8);
+  await verifyPixelZoom(draggedZoom);
+  await zoomSlider.press('ArrowLeft');
+  const keyboardZoom = await zoomSlider.evaluate(input => 2 ** input.valueAsNumber);
+  assert.ok(keyboardZoom < draggedZoom);
+  await verifyPixelZoom(keyboardZoom);
+  await fitButton.click();
+  assert.deepEqual(await imageState(), fit);
+  assert.equal(await fitButton.getAttribute('aria-pressed'), 'true');
+  await zoomPresets.selectOption('1');
   await comparison.screenshot({ path: path.join(folder, 'image-comparison.png'), animations: 'disabled' });
   await comparison.getByRole('button', { name: '打开原图' }).first().click();
   await tools.locator('img[alt="mesh-canopy.png"]').waitFor();

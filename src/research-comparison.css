@@ -36,6 +36,9 @@
 .research-comparison-toolbar [data-comparison-edit] { margin-inline-start: auto; }
 .research-comparison-toolbar small { flex: 1; color: var(--soft); font-size: 11px; }
 .research-comparison-toolbar [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.research-comparison-toolbar [data-grid-controls] .secondary-button { margin: 0; }
+.research-comparison-toolbar [data-comparison-zoom] { width: clamp(96px, 14vw, 192px); margin: 0; cursor: pointer; }
+.research-comparison-toolbar [data-comparison-preset] { background-color: var(--bg); cursor: pointer; font-variant-numeric: tabular-nums; }
 .research-comparison-scroll {
   flex: 1;
   min-height: min(128px, 30dvh);

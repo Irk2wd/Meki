@@ -64,6 +64,9 @@ export class ComparisonGridEditor {
 }
 
 type ZoomMode = 'fit' | 'pixels';
+const pixelPresets = [1, 2, 4];
+const minZoom = 0.25;
+const maxZoom = 32;
 interface ImageRow { mode: ZoomMode; zoom: number; x: number; y: number; tiles: ImageTile[] }
 interface ImageTile { viewport: HTMLElement; row: ImageRow; evidence: string; image?: HTMLImageElement }
 
@@ -71,18 +74,27 @@ export class ComparisonViewer {
   private dialog = document.createElement('dialog');
   private tiles = new Map<HTMLElement, ImageTile>();
   private rows: ImageRow[] = [];
+  private zoomReference?: ImageTile;
+  private zoomSlider!: HTMLInputElement;
+  private zoomPresets!: HTMLSelectElement;
   private visibility?: IntersectionObserver;
   private drag?: { tile: ImageTile; pointer: number; x: number; y: number };
-  private resize = new ResizeObserver(entries => entries.forEach(({ target }) => {
-    const tile = this.tiles.get(target as HTMLElement);
-    if (tile) this.paint(tile);
-  }));
+  private resize = new ResizeObserver(entries => {
+    for (const { target } of entries) {
+      const tile = this.tiles.get(target as HTMLElement);
+      if (tile) this.paint(tile);
+    }
+    this.updateZoomControls();
+  });
 
   constructor() {
     this.dialog.id = 'research-comparison-dialog';
     this.dialog.setAttribute('aria-labelledby', 'research-comparison-title');
     document.body.append(this.dialog);
-    window.addEventListener('resize', () => this.tiles.forEach(tile => this.paint(tile)));
+    window.addEventListener('resize', () => {
+      this.tiles.forEach(tile => this.paint(tile));
+      this.updateZoomControls();
+    });
     this.dialog.addEventListener('close', () => { if (!this.dialog.open) this.clear(); });
     this.dialog.addEventListener('wheel', event => {
       const tile = this.tileAt(event.target);
@@ -143,8 +155,13 @@ export class ComparisonViewer {
         <button type="button" class="secondary-button" data-comparison-layout="grid" aria-pressed="true">${ht("并排查看")}</button>
         <button type="button" class="secondary-button" data-comparison-layout="wipe" aria-pressed="false">${ht("滑动对比")}</button></div>` : ''}
         <div class="research-actions" data-grid-controls role="group" aria-label="${ht("缩放")}">
-        <button type="button" class="secondary-button" data-comparison-mode="fit">${ht("适应视口")}</button>
-        <button type="button" class="secondary-button" data-comparison-mode="pixels">${ht("1:1 原像素")}</button></div>
+        <button type="button" class="secondary-button" data-comparison-fit>${ht("适应视口")}</button>
+        <input type="range" data-comparison-zoom min="${Math.log2(minZoom)}" max="${Math.log2(maxZoom)}" step="0.01" value="0"
+          aria-label="${ht("缩放所有对比图")}" title="${ht("缩放所有对比图")}">
+        <select class="secondary-button" data-comparison-preset aria-label="${ht("缩放倍率预设")}" title="${ht("缩放倍率预设")}">
+          <option value="" hidden disabled selected>${ht("缩放倍率")}</option>
+          ${pixelPresets.map(level => `<option value="${level}">${level === 1 ? ht("100%（原始像素）") : `${level * 100}%`}</option>`).join('')}
+        </select></div>
         <small data-grid-controls>${ht("滚轮缩放，拖动平移。同一行同步。")}</small>
         <button type="button" class="secondary-button" data-comparison-edit>${ht("编辑图注")}</button></div>
       <div class="research-comparison-scroll"><table class="research-comparison-grid" style="--comparison-columns:${columns.length}"><thead><tr><td></td>${columns.map(label => `<th scope="col">${escape(label)}</th>`).join('')}</tr></thead>
@@ -160,9 +177,11 @@ export class ComparisonViewer {
       actions.back?.();
     });
     this.dialog.querySelector('[data-comparison-edit]')!.addEventListener('click', () => { this.dialog.close(); void actions.edit().catch(actions.error); });
-    for (const button of this.dialog.querySelectorAll<HTMLButtonElement>('[data-comparison-mode]')) {
-      button.addEventListener('click', () => this.reset(button.dataset.comparisonMode as ZoomMode));
-    }
+    this.dialog.querySelector('[data-comparison-fit]')!.addEventListener('click', () => this.setAllRowsZoom('fit'));
+    this.zoomSlider = this.dialog.querySelector<HTMLInputElement>('[data-comparison-zoom]')!;
+    this.zoomPresets = this.dialog.querySelector<HTMLSelectElement>('[data-comparison-preset]')!;
+    this.zoomSlider.addEventListener('input', () => this.setAllRowsZoom('pixels', 2 ** this.zoomSlider.valueAsNumber));
+    this.zoomPresets.addEventListener('change', () => this.setAllRowsZoom('pixels', Number(this.zoomPresets.value)));
     for (const button of this.dialog.querySelectorAll<HTMLButtonElement>('[data-comparison-source]')) {
       button.addEventListener('click', () => { void actions.evidence(button.dataset.comparisonSource!, button).catch(actions.error); });
     }
@@ -213,7 +232,7 @@ export class ComparisonViewer {
       }
       return row;
     });
-    this.updateMode();
+    this.updateZoomControls();
   }
 
   private clear() {
@@ -221,6 +240,7 @@ export class ComparisonViewer {
     this.resize.disconnect();
     this.tiles.clear();
     this.rows = [];
+    this.zoomReference = undefined;
     this.drag = undefined;
     this.dialog.replaceChildren();
   }
@@ -239,6 +259,7 @@ export class ComparisonViewer {
       tile.viewport.parentElement!.style.setProperty('--comparison-aspect', String(image.naturalWidth / image.naturalHeight));
       tile.viewport.replaceChildren(image);
       this.paint(tile);
+      this.updateZoomControls();
     } catch {
       if (this.tiles.get(tile.viewport) === tile) tile.viewport.textContent = t("原图暂无法预览。");
     }
@@ -259,7 +280,7 @@ export class ComparisonViewer {
     const { image, row, viewport } = tile;
     if (!image || !viewport.clientWidth || !viewport.clientHeight) return;
     const scale = this.scale(tile), ratio = window.devicePixelRatio;
-    const exact = row.mode === 'pixels' && row.zoom === 1;
+    const exact = row.mode === 'pixels' && Number.isInteger(row.zoom);
     const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
     let x = viewport.clientWidth / 2 - width * row.x, y = viewport.clientHeight / 2 - height * row.y;
     if (exact) {
@@ -284,28 +305,46 @@ export class ComparisonViewer {
   private zoom(tile: ImageTile, factor: number, x = 0, y = 0) {
     const { row, image } = tile;
     const scale = this.scale(tile);
-    const zoom = clamp(row.zoom * factor, 0.25, 32);
+    const zoom = row.mode === 'pixels'
+      ? clamp(row.zoom * factor, 2 ** Number(this.zoomSlider.min), 2 ** Number(this.zoomSlider.max))
+      : clamp(row.zoom * factor, minZoom, maxZoom);
     const shift = 1 - row.zoom / zoom;
     row.x = clamp(row.x + x / (scale * image!.naturalWidth) * shift, 0, 1);
     row.y = clamp(row.y + y / (scale * image!.naturalHeight) * shift, 0, 1);
     row.zoom = zoom;
+    this.zoomReference = tile;
     row.tiles.forEach(item => this.paint(item));
-    this.updateMode();
+    this.updateZoomControls();
   }
 
-  private reset(mode: ZoomMode) {
+  private setAllRowsZoom(mode: ZoomMode, zoom = 1) {
     for (const row of this.rows) {
       row.mode = mode;
-      row.zoom = 1;
+      row.zoom = zoom;
       if (mode === 'fit') row.x = row.y = 0.5;
       row.tiles.forEach(tile => this.paint(tile));
     }
-    this.updateMode();
+    this.updateZoomControls();
   }
 
-  private updateMode() {
-    for (const button of this.dialog.querySelectorAll<HTMLButtonElement>('[data-comparison-mode]')) {
-      button.setAttribute('aria-pressed', String(this.rows.every(row => row.mode === button.dataset.comparisonMode && row.zoom === 1)));
-    }
+  private updateZoomControls() {
+    if (!this.dialog.open) return;
+    const fitted = this.rows.every(row => row.mode === 'fit' && row.zoom === 1);
+    this.dialog.querySelector('[data-comparison-fit]')!.setAttribute('aria-pressed', String(fitted));
+    const reference = this.zoomReference ?? [...this.tiles.values()].find(tile => tile.image);
+    this.zoomSlider.disabled = this.zoomPresets.disabled = !reference;
+    if (!reference || !reference.viewport.clientWidth || !reference.viewport.clientHeight) return;
+    const zoom = reference.row.mode === 'pixels' ? reference.row.zoom : this.scale(reference) * window.devicePixelRatio;
+    const preset = pixelPresets.includes(zoom) && this.rows.every(row => row.mode === 'pixels' && row.zoom === zoom);
+    const percent = `${Number((zoom * 100).toFixed(1))}%`;
+    this.zoomPresets.options[0].text = percent;
+    this.zoomPresets.value = preset ? String(zoom) : '';
+    // One unit on the slider doubles the image's physical pixel size.
+    const position = Math.log2(zoom);
+    const slider = this.zoomSlider;
+    if (position < Number(slider.min)) slider.min = String(Math.floor(position));
+    if (position > Number(slider.max)) slider.max = String(Math.ceil(position));
+    slider.valueAsNumber = position;
+    slider.setAttribute('aria-valuetext', percent);
   }
 }
