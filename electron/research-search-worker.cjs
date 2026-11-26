@@ -3,7 +3,23 @@
 const { ResearchStore } = require('./research-store.cjs');
 const { searchProject } = require('./research-search.cjs');
 let queue = Promise.resolve();
-process.parentPort.on('message', ({ data: { id, root, input } }) => {
+const active = new Map();
+process.parentPort.on('message', ({ data: { id, root, input, kind, config, key } }) => {
+  if (kind === 'cancel') { active.get(id)?.abort(); return; }
+  if (kind === 'smart') {
+    const controller = new AbortController(); active.set(id,controller);
+    void (async () => {
+      try {
+        const store = await ResearchStore.open(root);
+        if (!store) throw Error('Research project is unavailable.');
+        const result = await require('./research-smart-search.cjs').smartSearch(store,input,config,key,{
+          signal:controller.signal,onProgress:(progress,preview)=>process.parentPort.postMessage({id,progress,preview})});
+        process.parentPort.postMessage({id,result});
+      } catch(e) {process.parentPort.postMessage({id,error:e.message});}
+      finally {active.delete(id);}
+    })();
+    return;
+  }
   queue = queue.then(async () => {
     try {
       const store = await ResearchStore.open(root);

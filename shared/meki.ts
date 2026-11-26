@@ -138,6 +138,12 @@ export interface MekiAPI {
   changeRecentFolders(input: RecentFolderChange): Promise<RecentFolder[]>;
   refreshWorkspace(): Promise<Workspace | null>;
   researchSnapshot(filter?: ResearchFilter, includeLinked?: boolean): Promise<ResearchSnapshot | null>;
+  researchAISettings(root:string): Promise<import('./research-ai').ResearchAISettings>;
+  saveResearchAISettings(root:string,value:import('./research-ai').ResearchAIConfig,key?:string|null): Promise<import('./research-ai').ResearchAIConfig>;
+  researchAIModels(root:string,value:import('./research-ai').ResearchAIConfig,key?:string): Promise<string[]>;
+  smartSearch(root:string,input:import('./research-ai').SmartQuery,token:string): Promise<import('./research-ai').SmartAnswer>;
+  cancelSmartSearch(token:string):Promise<void>;
+  onSmartSearchProgress(callback:(event:{token:string;stage:string;preview?:import('./research-ai').SmartAnswer})=>void):()=>void;
   searchResearch(root: string, input: import('./research').ResearchSearchQuery): Promise<import('./research').ResearchSearchResponse>;
   listResearchProjects(): Promise<RecentResearchProject[]>;
   openResearchProject(root?: string): Promise<Workspace | null>;

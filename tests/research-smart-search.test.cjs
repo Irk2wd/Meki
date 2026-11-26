@@ -7,6 +7,15 @@ const {smartSearch,validateAnswer}=require('../electron/research-smart-search.cj
 const {config,envKey}=require('../electron/research-ai-settings.cjs');
 const provider=require('../electron/research-ai-provider.cjs');
 const http=require('node:http');
+test('Codex resolves a Windows npm shim without executing a command shell',async t=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'mekir-codex-shim-'));
+  t.after(()=>fs.rm(root,{recursive:true,force:true}));
+  const shim=path.join(root,'codex.cmd'),entry=path.join(root,'node_modules','@openai','codex','bin','codex.js'),node=path.join(root,'node.exe');
+  await fs.mkdir(path.dirname(entry),{recursive:true});
+  await Promise.all([shim,entry,node].map(f=>fs.writeFile(f,'')));
+  assert.deepEqual(await provider.codexCommand('',{PATH:root},'win32'),{executable:node,prefix:[entry]});
+  assert.deepEqual(await provider.codexCommand(shim,{PATH:root},'win32'),{executable:node,prefix:[entry]});
+});
 test('smart search resolves source IDs, tool output and explicit gaps for external agents',async t=>{
   const tmp=await fs.mkdtemp(path.join(os.tmpdir(),'mekir-smart-test-')), previous=process.env.MEKIR_LOCAL_STATE;
   process.env.MEKIR_LOCAL_STATE=tmp;
@@ -17,6 +26,8 @@ test('smart search resolves source IDs, tool output and explicit gaps for extern
   assert.throws(()=>config({...cfg,base:'http://insecure.example'},[]));
   const e=new Evidence(store,state,cfg,{query:'基线'},undefined);
   assert.equal(e.ref('forest-timings'),undefined);
+  const hidden=state.documents.find(d=>d.id==='forest-timings');
+  assert.equal(e.outbound('See '+hidden.title+' in '+hidden.relativePath+'.'),'See [excluded source] in [excluded source].');
   const id=e.ref('tile-culling'),read=await e.read(id);
   assert.ok(read.trials.some(r=>r.trial==='baseline-repeat'));
   const proof=read.context[0],answer={claims:[{text:'这条轨迹有遮挡剔除复测。',proofs:[{ref:proof.ref,quote:proof.text.slice(0,8)}]}],tables:[id],gaps:[]};

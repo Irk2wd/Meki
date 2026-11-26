@@ -205,7 +205,7 @@ const documents = new DocumentTabs({ editor: () => editor, settings: () => setti
   dispatch: (command, payload) => { void dispatch(command, payload); }, notify });
 const researchUI = new ResearchWorkspace(el('.main-area'), el('#research-sidebar'), {
   root: () => workspace?.root, blocked: () => !ready || busy, whenIdle,
-  open: (root, id, origin, edit, sourceProjectId, locator) => perform(async () => {
+  open: (root, id, origin, edit, sourceProjectId, locator, revision) => perform(async () => {
     const previous = captureResearchStep();
     if (previous && dirty()) await persistDraft();
     const linked = sourceProjectId ? await window.meki.openLinkedResearchSummary(root, sourceProjectId, id) : null;
@@ -222,7 +222,9 @@ const researchUI = new ResearchWorkspace(el('.main-area'), el('#research-sidebar
     else el('#research-reader-title').focus({ preventScroll: true });
     if (switched) animateResearchDocument(1);
     if (locator?.kind === 'paragraph' || locator?.kind === 'trial') {
-      if (!revealResearchPassage(el('#visual-editor .ProseMirror'), locator, current.content)) notify(t("原段落已变化，请重新搜索。"));
+      const found = revealResearchPassage(el('#visual-editor .ProseMirror'), locator, current.content);
+      if (!found) notify(t("原段落已变化，请重新搜索。"));
+      else if (revision && revision !== doc.revision) notify(t("引用后的文稿有更新，请核对当前内容。"));
     }
   }, true),
   closeReader: closeResearchReader,
@@ -690,6 +692,7 @@ async function dispatch(action: string, payload?: unknown, origin?: HTMLElement)
     return;
   }
   if (action === 'research') { await showResearch(); return; }
+  if (action === 'research-ai-settings') { await researchUI.modelSettings().catch(error=>notify(String(error),true)); return; }
   if (action === 'research-projects') {
     closePopovers();
     await researchUI.showProjects().catch(error => notify(String(error), true));

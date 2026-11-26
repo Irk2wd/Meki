@@ -43,6 +43,7 @@ const linkedDocumentRoots = new Map();
 const pendingCommands = [];
 const launchPaths = [];
 let mainWindow = null;
+const activeSearches = new Set();
 let attachments;
 let imageHosting;
 let workspace = null;
@@ -696,6 +697,38 @@ function registerIpc() {
   });
   register('refresh-workspace', refreshWorkspace);
   register('research-snapshot', researchSnapshot);
+  const preferences = require('./research-ai-settings.cjs');
+  const tokenFor = token => {
+    if (typeof token!=='string' || !/^[a-zA-Z0-9-]{1,80}$/.test(token)) throw Error('Invalid search token.');
+    return id+'-'+token;
+  };
+  register('research-ai-settings', async root => {
+    const state=await preferences.settings(await requireResearch(root));
+    const stored=state.value && await preferences.desktopKey(state.value);
+    return {...state,hasKey:Boolean(stored || state.value && preferences.envKey(state.value))};
+  });
+  register('save-research-ai-settings', async (root,value,key) => {
+    const store=await requireResearch(root), {project}=await store.manifest();
+    const selected=preferences.config(value,(project.evidenceSources||[]).map(s=>s.id));
+    if(key!==undefined) await preferences.desktopKey(selected,key);
+    return preferences.save(store,selected);
+  });
+  register('research-ai-models', async(root,value,key)=>{
+    const {project}=await (await requireResearch(root)).manifest();
+    const selected=preferences.config({...value,model:value.model || 'model-list'},(project.evidenceSources||[]).map(s=>s.id));
+    return require('./research-ai-provider.cjs').listModels(selected,key || await preferences.desktopKey(selected) || preferences.envKey(selected));
+  });
+  register('smart-search-research', async (root,input,token) => {
+    const store=await requireResearch(root), {value}=await preferences.settings(store);
+    const identity=tokenFor(token), service=require('./research-search-service.cjs');
+    const key=value ? await preferences.desktopKey(value) || preferences.envKey(value) : '';
+    for(const old of activeSearches) service.cancel(old);
+    activeSearches.add(identity);
+    try{return await service.smart(store.root,input,value,key,identity,(stage,preview)=>{
+      if(mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('meki:smart-search-progress',{token,stage,preview});
+    });}finally{activeSearches.delete(identity);}
+  });
+  register('cancel-research-ai', token=>require('./research-search-service.cjs').cancel(tokenFor(token)));
   register('search-research', async (root, input) => require('./research-search-service.cjs').search((await requireResearch(root)).root, input));
   register('list-research-projects', listResearchProjects);
   register('open-research-project', openResearchProject);
@@ -1116,7 +1149,7 @@ function createWindow() {
     event.preventDefault();
     coordinator.requestClose(id);
   });
-  mainWindow.on('closed', () => { clearTimeout(windowSaveTimer); attachments?.abandon(); imageHosting?.abandon(); mainWindow = null; coordinator.closed(id); });
+  mainWindow.on('closed', () => { for(const token of activeSearches) require('./research-search-service.cjs').cancel(token); clearTimeout(windowSaveTimer); attachments?.abandon(); imageHosting?.abandon(); mainWindow = null; coordinator.closed(id); });
   contents.on('render-process-gone', async (_event, details) => {
     attachments?.abandon();
     imageHosting?.abandon();

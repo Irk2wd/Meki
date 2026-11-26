@@ -459,12 +459,15 @@ export class ResearchTools {
     if (focusTab) selected?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   }
 
-  async evidence(root: string, id: string, sourceDocument?: string, returnLabel = t("返回正文"), origin?: HTMLElement, besideReader = false, locator?: ResearchSearchLocator) {
+  async evidence(root: string, id: string, sourceDocument?: string, returnLabel = t("返回正文"), origin?: HTMLElement, besideReader = false, locator?: ResearchSearchLocator, revision?:string) {
     const request = ++this.evidenceRequest;
     const existing = besideReader && this.evidenceTabs.get(id);
     if (existing) { existing.origin = origin; this.selectEvidenceTab(existing, true); return; }
     const file = await window.meki.openResearchEvidence(root, id, sourceDocument);
     if (request !== this.evidenceRequest) return;
+    if (revision && file.revision !== revision && locator?.kind !== 'cells') {
+      this.notify(t("引用后的资料有更新，请重新检索定位原文。")); locator=undefined;
+    }
     if (file.kind === 'pdf' || file.kind === 'pptx') {
       this.report.show([file], {
         read: async () => file,

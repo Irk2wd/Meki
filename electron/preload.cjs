@@ -51,6 +51,16 @@ contextBridge.exposeInMainWorld('meki', Object.freeze({
   changeRecentFolders: (input) => invoke('change-recent-folders', input),
   refreshWorkspace: () => invoke('refresh-workspace'),
   researchSnapshot: (filter, includeLinked) => invoke('research-snapshot', filter, includeLinked),
+  researchAISettings: root => invoke('research-ai-settings',root),
+  saveResearchAISettings: (root,value,key) => invoke('save-research-ai-settings',root,value,key),
+  researchAIModels: (root,value,key) => invoke('research-ai-models',root,value,key),
+  smartSearch: (root,input,token) => invoke('smart-search-research',root,input,token),
+  cancelSmartSearch: token => invoke('cancel-research-ai',token),
+  onSmartSearchProgress: callback => {
+    const listener=(_event,value)=>callback(value);
+    ipcRenderer.on('meki:smart-search-progress',listener);
+    return ()=>ipcRenderer.removeListener('meki:smart-search-progress',listener);
+  },
   searchResearch: (root, input) => invoke('search-research', root, input),
   listResearchProjects: () => invoke('list-research-projects'),
   openResearchProject: root => invoke('open-research-project', root),

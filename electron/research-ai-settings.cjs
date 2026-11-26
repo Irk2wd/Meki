@@ -69,6 +69,8 @@ async function desktopKey(value,change) {
 function envKey(value) {
   const p=presetFor(value.provider);
   // A credential for an official API must never be reused automatically for a different gateway.
-  return process.env.MEKIR_AI_API_KEY || (p.env && value.base===p.base && process.env[p.env]) || '';
+  if (p.id==='codex') return '';
+  if (p.id==='compatible' || value.base!==p.base) return process.env.MEKIR_AI_API_KEY || '';
+  return process.env[p.env] || '';
 }
 module.exports={presets,config,presetFor,settings,save,desktopKey,envKey};

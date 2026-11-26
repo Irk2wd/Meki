@@ -76,7 +76,7 @@ async function previewEvidence(file, reference, source) {
   const format = researchReportFormat(file.path);
   if (format && file.size <= reportPreviewLimit) {
     const { bytes } = await readBytes(file.path, reportPreviewLimit);
-    return { ...result, kind: format, bytes: Uint8Array.from(bytes) };
+    return { ...result, kind: format, revision: digest(bytes), bytes: Uint8Array.from(bytes) };
   }
   const ext = path.extname(file.path).toLowerCase();
   const mime = evidenceImageMime(file.path);
@@ -92,7 +92,7 @@ async function previewEvidence(file, reference, source) {
     } catch { /* Files in other encodings can still be opened at their source. */ }
     return result;
   }
-  return { ...result, kind: 'text', content: decodeDocument(bytes).content };
+  return { ...result, kind: 'text', revision: digest(bytes), content: decodeDocument(bytes).content };
 }
 
 module.exports = { bindDirectory, boundSources, sourceDirectory, evidencePath, previewEvidence, knownEvidence };

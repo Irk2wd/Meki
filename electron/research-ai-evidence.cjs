@@ -1,6 +1,5 @@
 'use strict';
 
-const fs=require('node:fs/promises');
 const path=require('node:path');
 const {searchProject}=require('./research-search.cjs');
 const {markdownPassages,reportPassages}=require('./research-search-passages.cjs');
@@ -9,7 +8,7 @@ const {activityDates}=require('./research-phases.mjs');
 const {trialRows,parseTable,measure,numerals}=require('./research-measurements.cjs');
 const {digest,readBytes,decodeDocument,MAX_DOCUMENT_BYTES}=require('./file-store.cjs');
 const formatOf = name=>/\.(?:md|markdown|mdown|txt)$/i.test(name)?'markdown':/\.(pdf|pptx)$/i.exec(name)?.[1].toLowerCase()||'file';
-const safeText = value=>String(value || '').replace(/(?:file:\/\/\/|[a-z]:[\\\/]|\/(?:Users|home|Volumes)\/)[^\s)\]]+/gi,'[local path]');
+const safeText = value=>String(value ?? '').replace(/(?:file:\/\/\/|[a-z]:[\\\/]|\/(?:Users|home|Volumes)\/)[^\s)\]]+/gi,'[local path]');
 const clip=(value,n=1200)=>safeText(value).slice(0,n);
 const sameLocator=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 
@@ -18,6 +17,12 @@ class Evidence {
     this.store=store;this.snapshot=snapshot;this.config=config;this.query=query;this.signal=signal;
     this.docs=new Map(snapshot.documents.map(d=>[d.id,d]));
     this.records=new Map(snapshot.records.map(e=>[e.record.id,e]));
+    const unavailable=[...this.docs.values()].filter(doc=>doc.sourceId && (!config.sourceIds.includes(doc.sourceId) ||
+      snapshot.project.search?.sourceIds && !snapshot.project.search.sourceIds.includes(doc.sourceId)));
+    // A permitted report can name an attachment in prose even when that attachment was excluded.
+    const hidden=new Set(unavailable.flatMap(doc=>[doc.title,doc.relativePath,path.posix.basename(doc.relativePath),'mekir:'+doc.id]).filter(Boolean));
+    const literals=[...hidden].sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+    this.excludedNames=literals.length ? new RegExp(literals.join('|'),'gi') : null;
     this.members=new Map(); this.index=new Map();this.citations={};this.readRefs=new Set();this.sourceTables=new Map();this.tables=new Map();this.searches=[];
     for(const entry of snapshot.records){
       const rec=entry.record;
@@ -25,6 +30,10 @@ class Evidence {
         if(!this.members.has(id))this.members.set(id,[]);this.members.get(id).push(entry);
       }
     }
+  }
+  outbound(value) {
+    const text=safeText(value);
+    return this.excludedNames ? text.replace(this.excludedNames,'[excluded source]') : text;
   }
   visible(id) {
     const doc=this.docs.get(id);if(!doc)return false;
@@ -43,11 +52,11 @@ class Evidence {
       ref='E'+(this.index.size+1);this.index.set(key,ref);const doc=this.docs.get(id);
       this.citations[ref]={id,title:doc.title,format:formatOf(doc.relativePath),locator,snippet:'',revision};
     }
-    if(content)this.citations[ref].snippet=clip(content,1400);
+    if(content)this.citations[ref].snippet=this.outbound(content).slice(0,1400);
     if(revision)this.citations[ref].revision=revision;
     return ref;
   }
-  card(ref){const c=this.citations[ref];return c && {ref,title:clip(c.title,180),format:c.format,text:c.snippet,
+  card(ref){const c=this.citations[ref];return c && {ref,title:this.outbound(c.title).slice(0,180),format:c.format,text:c.snippet,
     ...(c.locator.kind==='page'&&{page:c.locator.page}),...(c.locator.trialId&&{trial:c.locator.trialId,date:c.locator.date})};}
   async search(query) {
     this.signal?.throwIfAborted();
@@ -108,10 +117,14 @@ class Evidence {
   async read(ref) {
     const c=this.citations[ref];if(!c || !this.visible(c.id))throw Error('Unknown or out-of-scope evidence.');
     this.signal?.throwIfAborted();
-    let passages,revision,table,related=[];
+    let passages,revision,table,fields,related=[];
     if(this.records.has(c.id)){
       const rec=await this.store.read(c.id);revision=rec.revision;passages=markdownPassages(rec.body);
       table=await this.trialTable(c.id,rec);
+      fields=Object.entries(rec.record.fields || {}).slice(0,24).map(([name,value])=>{
+        const origin=rec.fieldOrigins?.[name], rule=origin?.rule;
+        return {name:clip(rule?.label || name,100),value:clip(value,240),unit:clip(rule?.unit,45),definition:clip(rule?.description,240),origin:origin?.source || 'unknown'};
+      });
       related=this.links([...(rec.record.evidence||[]),...(rec.record.sources||[])]);
     }else{
       const doc=this.docs.get(c.id);
@@ -119,10 +132,16 @@ class Evidence {
         const file=await this.source(c.id);
         if(['csv','tsv'].includes(file.kind)){
           const data=await this.csv(c.id); if(!data)throw Error('Table exceeds the preview limit.');
-          this.readRefs.add(ref);return {ref,columns:data.header.slice(0,48).map(s=>clip(s,100)),sample:data.rows.slice(0,5).map(row=>row.slice(0,48).map(v=>clip(v,90))),rows:data.rows.length};
+          this.readRefs.add(ref);
+          if(c.locator.kind==='cells'){
+            const {rows,column,revision}=c.locator;
+            if(data.revision!==revision)throw Error('The timing source changed. Run the query again.');
+            return {ref,column:clip(data.header[column-1],100),count:rows.length,rows:rows.slice(0,48).map(n=>({row:n,value:clip(data.rows[n-1][column-1],90)}))};
+          }
+          return {ref,columns:data.header.slice(0,48).map(s=>clip(s,100)),sample:data.rows.slice(0,5).map(row=>row.slice(0,48).map(v=>clip(v,90))),rows:data.rows.length};
         }
-        if(file.bytes){revision=digest(file.bytes);passages=await reportPassages(file.kind,Buffer.from(file.bytes));}
-        else if(file.kind==='text'){revision=digest(Buffer.from(file.content));passages=markdownPassages(file.content);}
+        if(file.bytes){revision=file.revision || digest(file.bytes);passages=await reportPassages(file.kind,Buffer.from(file.bytes));}
+        else if(file.kind==='text'){revision=file.revision || digest(Buffer.from(file.content));passages=markdownPassages(file.content);}
         else return {ref,title:clip(c.title),status:'only the title is available'};
       }else{
         const file=await this.store.indexedDocument(c.id,doc.relativePath);
@@ -139,7 +158,7 @@ class Evidence {
       const p=passages[i];if(!p)continue;const key=this.ref(c.id,p.locator,p.text,revision);
       if(key){this.readRefs.add(key);context.push(this.card(key));}
     }
-    return {ref,title:clip(c.title),context,...(table?.rows.length && {trials:table.rows.map(row=>({trial:row.trialId,date:row.date,ref:row.ref,cells:row.cells,links:this.links(row.links)}))}),related};
+    return {ref,title:clip(c.title),context,...(fields?.length && {fields}),...(table?.rows.length && {trials:table.rows.map(row=>({trial:row.trialId,date:row.date,ref:row.ref,cells:row.cells,links:this.links(row.links)}))}),related};
   }
   follow(ref) {
     const c=this.citations[ref];if(!c || !this.visible(c.id))throw Error('Unknown or out-of-scope evidence.');

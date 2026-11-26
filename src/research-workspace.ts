@@ -5,6 +5,7 @@ import { researchReportFormat } from '../electron/research-report-format.mjs';
 import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSearchLocator, ResearchSnapshot, ResearchType, ResearchValue, ResearchView } from '../shared/research';
 import { icon } from './icons';
 import { ComparisonGridEditor, ComparisonViewer } from './research-comparison';
+import { ResearchAISettingsDialog } from './research-ai-settings';
 import { ResearchSearchDialog } from './research-search-dialog';
 import { ResearchColumns } from './research-columns';
 import { evidenceWipe, placeReaderFigure, supportsWipe, type WipePosition } from './research-wipe';
@@ -315,7 +316,7 @@ interface Hooks {
   root(): string | undefined;
   blocked(): boolean;
   whenIdle(): Promise<void>;
-  open(root: string, id: string, origin?: HTMLButtonElement, edit?: boolean, sourceProjectId?: string, locator?: ResearchSearchLocator): Promise<void>;
+  open(root: string, id: string, origin?: HTMLButtonElement, edit?: boolean, sourceProjectId?: string, locator?: ResearchSearchLocator, revision?:string): Promise<void>;
   closeReader(): Promise<void>;
   expandNavigation(): void;
   openProject(root: string): Promise<void>;
@@ -343,6 +344,8 @@ export class ResearchWorkspace {
   private rangePicker = document.createElement('dialog');
   private tools: ResearchTools;
   private projectSearch: ResearchSearchDialog;
+  private readonly aiSettings = new ResearchAISettingsDialog();
+  private returnToSearch?: () => void;
   private comparisonViewer = new ComparisonViewer();
   private comparisonGrid?: ComparisonGridEditor;
   private snapshot: ResearchSnapshot | null = null;
@@ -393,7 +396,7 @@ export class ResearchWorkspace {
 
   constructor(private host: HTMLElement, private sidebar: HTMLElement, private hooks: Hooks) {
     this.tools = new ResearchTools(this.host.querySelector<HTMLElement>('#document-surface')!, () => this.refresh(), hooks.notify);
-    this.projectSearch = new ResearchSearchDialog(hooks.notify);
+    this.projectSearch = new ResearchSearchDialog(hooks.notify,root=>this.aiSettings.show(root));
     this.panel.id = 'research-workspace';
     this.panel.hidden = true;
     this.toolbar.className = 'research-toolbar';
@@ -626,7 +629,13 @@ export class ResearchWorkspace {
     }
   }
 
+  async modelSettings() {
+    if (!this.snapshot) { this.hooks.notify(t("请先打开科研项目。")); return; }
+    await this.aiSettings.show(this.snapshot.root);
+  }
+
   closeReader(focus = true) {
+    const resume = this.returnToSearch; this.returnToSearch = undefined;
     const returning = this.readerReturn;
     if (!returning) return;
     this.tools.closeEvidence(false);
@@ -651,6 +660,7 @@ export class ResearchWorkspace {
         events ? timelineEventButton(this.content, events) :
         id ? this.content.querySelector<HTMLButtonElement>(`[data-research-record="${CSS.escape(id)}"]${origin}`) : null;
       (button?.isConnected ? button : replacement || this.content.querySelector('h1'))?.focus({ preventScroll: true });
+      resume?.();
     }
   }
 
@@ -1547,11 +1557,20 @@ export class ResearchWorkspace {
       if (this.hooks.blocked()) await this.hooks.whenIdle();
       if (!this.visible || this.snapshot?.root !== state.root) return;
       const origin = this.toolbar.querySelector<HTMLButtonElement>('[data-research-search]') || button;
-      this.projectSearch.show(state.root, state.project.phases, async (doc, hit) => {
+      this.projectSearch.show(state.root, state.project.phases, async (doc, hit, resume) => {
         if (this.snapshot?.root !== state.root) return;
+        const restore = () => { if (this.visible && this.snapshot?.root === state.root) resume?.(); };
         const source = state.documents.find(item => item.id === doc.id);
-        if (source?.sourceId) await this.tools.evidence(state.root, doc.id, undefined, undefined, origin, false, hit.locator);
-        else await this.hooks.open(state.root, doc.id, origin, false, undefined, hit.locator);
+        if (source?.sourceId) {
+          await this.tools.evidence(state.root, doc.id, undefined, resume ? t("返回检索结果") : undefined, origin, false, hit.locator, hit.revision);
+          const preview = document.querySelector('dialog.research-evidence-preview[open], #research-report-dialog[open]');
+          if (resume && preview) preview.addEventListener('close',restore,{once:true});
+          else if (!preview) restore();
+        } else {
+          await this.hooks.open(state.root, doc.id, origin, false, undefined, hit.locator, hit.revision);
+          if (resume && this.readerOpen) this.returnToSearch = restore;
+          else if (!this.readerOpen) restore();
+        }
       });
       return;
     }

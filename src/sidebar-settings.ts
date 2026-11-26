@@ -19,6 +19,7 @@ export class SidebarSettings {
       <button type="button" role="menuitem" tabindex="-1" data-sidebar-setting="lifecycle-settings">${icon('save', 16)}<span>${ht("文稿与保存")}</span></button>
       <button type="button" role="menuitem" tabindex="-1" data-sidebar-setting="shortcut-settings">${icon('keyboard', 16)}<span>${ht("自定义快捷键…")}</span></button>
       <div role="separator"></div>
+      <button type="button" role="menuitem" tabindex="-1" data-sidebar-setting="research-ai-settings">${icon('search', 16)}<span>${ht("智能检索与模型")}</span></button>
       <button type="button" role="menuitem" tabindex="-1" data-sidebar-setting="image-hosting">${icon('image', 16)}<span>${ht("图床")}</span></button>
       <button type="button" role="menuitem" tabindex="-1" data-sidebar-setting="organize-attachments">${icon('folder', 16)}<span>${ht("整理图片附件…")}</span></button>`;
     document.body.append(this.menu);

@@ -14,7 +14,7 @@ export interface ResearchSearchQuery {
 export type ResearchSearchLocator = { kind: 'document' } | { kind: 'page'; page: number } |
   { kind: 'cells'; rows: number[]; column: number; revision: string } |
   { kind: 'paragraph' | 'trial'; line: number; heading: string; anchor: string; occurrence: number; trialId?: string; date?: string };
-export interface ResearchSearchHit { locator: ResearchSearchLocator; snippet: string; dataTable: boolean }
+export interface ResearchSearchHit { locator: ResearchSearchLocator; snippet: string; dataTable: boolean; revision?: string }
 export interface ResearchSearchDocument { id: string; title: string; format: ResearchSearchFormat; hits: ResearchSearchHit[] }
 export interface ResearchSearchResponse {
   mode: ResearchSearchMode;
