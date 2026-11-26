@@ -150,7 +150,23 @@ function validateField(rule, typeId) {
 }
 
 function validateProject(project) {
-  object(project, 'project', ['version', 'id', 'title', 'description', 'timezone', 'start', 'phaseGoals', 'instructions', 'phases', 'recordTypes', 'views', 'defaultView', 'evidenceSources', 'savedFilters']);
+  object(project, 'project', ['version', 'id', 'title', 'description', 'timezone', 'start', 'phaseGoals', 'instructions', 'phases', 'recordTypes', 'views', 'defaultView', 'evidenceSources', 'savedFilters', 'search']);
+  if (project.search !== undefined) {
+    object(project.search, 'project.search', ['aliases', 'sourceIds']);
+    if (project.search.sourceIds !== undefined) {
+      listOfIds(project.search.sourceIds, 'search.sourceIds', 100);
+      assert(project.search.sourceIds.every(id => project.evidenceSources?.some(s => s.id === id)), 'Unknown search source ID.');
+    }
+    if (project.search.aliases !== undefined) {
+      object(project.search.aliases, 'search.aliases');
+      array(Object.keys(project.search.aliases), 'search.aliases', 128);
+      for (const [term, variants] of Object.entries(project.search.aliases)) {
+        string(term, 'search term', { limit: 80 });
+        array(variants, 'search variants', 16);
+        for (const variant of variants) string(variant, 'search variant', { limit: 80 });
+      }
+    }
+  }
   assert(project.version === 1, 'project.version must be 1.');
   id(project.id, 'project.id');
   string(project.title, 'project.title');

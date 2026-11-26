@@ -584,5 +584,40 @@
         "sha256": "0b8e3b4f0042f33677406344854c1dcce3a2878eb3a3f6baee58c6f5752655ce"
       }
     ]
+  },
+  "guid-typescript@1.0.9": {
+    "license": "ISC",
+    "author": "nicolas",
+    "packageSource": "https://registry.npmjs.org/guid-typescript/-/guid-typescript-1.0.9.tgz",
+    "reason": "The published package declares ISC and omits a license file. The SPDX ISC license text is included with the package author metadata.",
+    "files": [
+      {
+        "path": "licenses/upstream/isc.txt",
+        "url": "https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/ISC.txt",
+        "sha256": "f2ec607f67bb0dd3053b49835b02110d5cd0f8eb6da3aac4dc0b142a6b299be9"
+      }
+    ]
+  },
+  "onnxruntime-common@1.31.1": {
+    "license": "MIT",
+    "reason": "The published package omits the project license. Preserved from the upstream ONNX Runtime project.",
+    "files": [
+      {
+        "path": "licenses/upstream/onnxruntime.txt",
+        "url": "https://github.com/microsoft/onnxruntime/blob/main/LICENSE",
+        "sha256": "201f79f421ef5e9621f2fe1a869b60482012caf2f355c1c6d5098702ed029d78"
+      }
+    ]
+  },
+  "onnxruntime-web@1.31.1": {
+    "license": "MIT",
+    "reason": "The published package omits the project license. Preserved from the upstream ONNX Runtime project.",
+    "files": [
+      {
+        "path": "licenses/upstream/onnxruntime.txt",
+        "url": "https://github.com/microsoft/onnxruntime/blob/main/LICENSE",
+        "sha256": "201f79f421ef5e9621f2fe1a869b60482012caf2f355c1c6d5098702ed029d78"
+      }
+    ]
   }
 }

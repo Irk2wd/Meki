@@ -21,6 +21,8 @@ const usage = `${PRODUCT_NAME} research projects
   list <folder> [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--phase ID] [--type ID]
                 [--query TERMS] [--month YYYY-MM] [--field FIELD=VALUE]... [--filter ID]
   read <folder> <record-id>
+  search <folder> --query TEXT [--mode keyword|concept] [--format markdown|pptx|pdf|file]
+                  [--phase ID] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--limit N]
   sources <folder>
   bind-source <folder> <source-id> --path <local-folder> [--label <new-source-name>]
   index <folder> <document-id> --path <relative-file> [--source <source-id>] [--label <title>]
@@ -74,14 +76,16 @@ async function main(args) {
       from: { type: 'string' }, to: { type: 'string' }, phase: { type: 'string' }, type: { type: 'string' },
       source: { type: 'string' }, label: { type: 'string' }, local: { type: 'boolean' }, confirm: { type: 'string' },
       query: { type: 'string' }, month: { type: 'string' }, field: { type: 'string', multiple: true }, filter: { type: 'string' },
+      mode: { type: 'string' }, format: { type: 'string' }, limit: { type: 'string' },
     },
   });
   const [command, folder, documentId, ...extra] = positionals;
   if (!command || command === 'help' || values.help) { process.stdout.write(usage); return undefined; }
-  assert(['init-demo', 'init', 'describe', 'upgrade-guidance', 'list', 'read', 'index', 'resolve', 'batch', 'configure', 'sources', 'bind-source', 'import-archive', 'save-filter'].includes(command), `Unknown command: ${command}. Run --help.`);
+  assert(['init-demo', 'init', 'describe', 'upgrade-guidance', 'list', 'search', 'read', 'index', 'resolve', 'batch', 'configure', 'sources', 'bind-source', 'import-archive', 'save-filter'].includes(command), `Unknown command: ${command}. Run --help.`);
   const needsId = ['read', 'index', 'resolve', 'bind-source', 'import-archive'].includes(command);
   assert(folder && !extra.length && Boolean(documentId) === needsId, needsId ? 'Provide the project folder and an ID.' : 'Provide the project folder.');
   const optionsByCommand = { list: ['from', 'to', 'phase', 'type', 'query', 'month', 'field', 'filter'], init: ['input'], batch: ['input'], configure: ['input'],
+    search: ['query','mode','format','from','to','phase','limit'],
     index: ['path', 'source', 'label'], 'bind-source': ['path', 'label'], resolve: ['local'], 'import-archive': ['confirm'], 'save-filter': ['input', 'label'] };
   const allowedOptions = optionsByCommand[command] || [];
   for (const key of Object.keys(values)) assert(allowedOptions.includes(key), `--${key} is not used by ${command}.`);
@@ -96,6 +100,10 @@ async function main(args) {
   const store = await ResearchStore.open(root);
   assert(store, `Could not find ${MANIFEST} or ${LEGACY_MANIFEST} in ${root}.`);
   if (command === 'upgrade-guidance') return store.upgradeGuidance();
+  if (command === 'search') {
+    const { limit, ...input } = values;
+    return require('./research-search.cjs').searchProject(store, { ...input, ...(limit !== undefined && { limit: Number(limit) }) });
+  }
   if (command === 'describe') {
     const { project, revision } = await store.manifest();
     const { files } = await store.guidanceChanges({ project });
@@ -108,6 +116,9 @@ async function main(args) {
         summaryPath: `${store.summaryPath ? SUMMARIES : RECORDS}/r-<id>.md`,
         ...(store.indexPath ? { index: INDEX, documentLink: `${DOCUMENT_SCHEME}<id>` } : {}),
         dateFormat: 'YYYY-MM-DD',
+        search: { command: 'search <project> --query TEXT --mode keyword|concept', filters: ['--format','--phase','--from','--to','--limit'],
+          result: 'Each result has a stable document or evidence ID and matched hits with original snippets. Markdown locators carry a body-relative line and anchor, trials also carry a trial ID and date, and PDF/PPTX pages are one-based. Inspect mode and warning if the local model is unavailable.',
+          configuration: 'project.search.aliases maps terms to equivalent spellings. project.search.sourceIds optionally limits indexed read-only sources.' },
         fieldTypes: FIELD_TYPES, templateVariables: [...TEMPLATE_KEYS, 'field.<id>'],
         rules: {
           guide: 'AGENTS.md in the project root, when present',

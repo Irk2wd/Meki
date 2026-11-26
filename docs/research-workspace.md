@@ -40,6 +40,14 @@ Markdown 用 `fieldRules` 引用 `.mekir/field-rules/` 中按内容摘要命名�
 
 项目的 `.mekir/project.json` 定义阶段、记录类型、字段规则、创建模板、视图和 agent 指引。普通实验写入 `records/r-<id>.md`，新建的阶段总结写入 `.mekir/summaries/r-<id>.md`。两者都包含 JSON 文档头和可编辑的 Markdown 正文。日期使用 `YYYY-MM-DD`，所有时段包含首尾两日。
 
+## 项目搜索
+
+项目搜索可以按关键词或概念查询实验、阶段总结、已登记的文稿和资料。关键词模式支持前缀和英文术语的拼写纠错。首次使用概念模式会下载量化的 multilingual-e5-small 模型，此后在本地进行检索。搜索结果显示命中片段，正文行号从研究记录的 Markdown 正文第一行开始，PPTX 和 PDF 页码从 1 开始。计时比较查询优先显示含指标和数值表格的命中。
+
+Agent 可运行 `node electron/research-cli.cjs search "<项目目录>" --query "不同机位的计时对比" --mode concept --format pptx`。可用 `--from`、`--to`、`--phase` 和 `--limit` 缩小范围，日期按实际试次和关联记录筛选。返回的 `results[].hits` 保留原文片段和定位信息。若模型暂时不可用，返回 `mode: "keyword"` 和具体原因。
+
+项目可通过 `configure` 设置 `project.search.aliases`（术语到别名列表）以及 `project.search.sourceIds`（纳入检索的已登记来源 ID）。省略来源列表时检索所有已登记来源。SQLite 索引和模型默认存入本机 `~/.mekir/search`，可通过 `MEKIR_SEARCH_HOME` 指定缓存目录。注册的扫描件和旧版 PPT 可按文档标题查找。
+
 ## 时间线事件与图像对比
 
 展开「时间线选项」后，「事件类型」提供 16 个图标，可为图像对比指定图标，也可创建组会汇报、审阅、里程碑等新类型。「添加事件」会保存日期、所属阶段和正文。同阶段同日的事件合并展示，点图标组可按标题选择。相邻日期的图标在空间不足时合并，放大时间轴后会分开。

@@ -119,6 +119,7 @@ export interface ResearchProject {
   defaultView: string;
   evidenceSources?: ResearchSource[];
   savedFilters?: SavedResearchFilter[];
+  search?: { aliases?: Record<string, string[]>; sourceIds?: string[] };
 }
 
 export interface ResearchComparison {
