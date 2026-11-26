@@ -37,9 +37,20 @@ try {
   page.on('pageerror', err => errors.push(err.message));
   await page.waitForSelector('#shell[data-ready="true"]');
   const search = page.locator('#research-search-dialog');
+  const queryInput = search.getByRole('searchbox');
+  await page.locator('[data-research-search]').click();
+  await queryInput.click();
+  assert.equal(await queryInput.evaluate(input => getComputedStyle(input).outlineStyle), 'none');
+  await page.keyboard.press('Tab');
+  assert.ok(await search.locator('button[type=submit]').evaluate(button =>
+    button.matches(':focus-visible') && getComputedStyle(button).outlineStyle !== 'none'));
+  await page.keyboard.press('Shift+Tab');
+  assert.ok(await queryInput.evaluate(input => input === document.activeElement));
+  await page.keyboard.press('Escape');
+
   async function find(query, format, mode = 'keyword') {
     await page.locator('[data-research-search]').click();
-    await search.locator('input[name=query]').fill(query);
+    await queryInput.fill(query);
     await search.locator('select[name=format]').selectOption(format);
     await search.locator('label:has(input[value='+mode+'])').click();
     await search.locator('button[type=submit]').click();

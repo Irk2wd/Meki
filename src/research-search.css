@@ -8,8 +8,8 @@
   display: flex; align-items: center; gap: 9px;
 }
 .research-search-input { border: 1px solid var(--border); border-radius: 9px; padding: 5px 5px 5px 12px; color: var(--soft); }
-.research-search-input:focus-within { border-color: var(--accent); }
-.research-search-input input { border: 0; outline: none; box-shadow: none; background: transparent; flex: 1; min-width: 0; }
+.research-search-input input[type=search] { border: 0; outline: none; box-shadow: none; background: transparent; flex: 1; min-width: 0; }
+.research-search-input:has(input:focus-visible) > svg { color: var(--text); stroke-width: 2.25; }
 .research-search-controls { margin-top: 10px; flex-wrap: wrap; justify-content: space-between; }
 .research-search-mode { padding: 2px; gap: 2px; border: 1px solid var(--border); border-radius: 7px; }
 .research-search-mode label { display: block; position: relative; cursor: pointer; }
