@@ -38,6 +38,7 @@ function commandAt(directory, name, args = [], input, errorPattern) {
 }
 
 const command = (name, args, input, errorPattern) => commandAt(project, name, args, input, errorPattern);
+const tileTitle = '开启分块遮挡剔除能缩短 GPU 帧时间吗？';
 
 let app, page;
 const results = [], errors = [];
@@ -200,6 +201,29 @@ try {
   assert.match(await phases.first().innerText(), /进行中/);
   assert.equal(await phases.first().locator('.research-timeline-dot:not(.is-ended)').count(), 1);
   assert.equal(await phases.last().locator('.research-timeline-dot.is-ended').count(), 1);
+  const tileReport = command('read', ['tile-culling']);
+  const dayButton = day => page.locator(`[data-research-trial-day="exploration/2026-11-${day}"]`);
+  const openFromDay = async (day, choose = false) => {
+    await dayButton(day).focus();
+    await dayButton(day).press('Enter');
+    if (choose) await page.getByRole('dialog', { name: '2026-11-11 的实验记录' }).getByRole('button', { name: tileTitle }).click();
+    await page.locator('#research-reader-title').getByText(tileTitle, { exact: true }).waitFor();
+    await closeReader();
+    assert.ok(await dayButton(day).evaluate(el => el === document.activeElement));
+  };
+  await openFromDay('07');
+  await dayButton('08').click();
+  await page.locator('#research-reader-title').getByText(tileTitle, { exact: true }).waitFor();
+  await closeReader();
+  assert.ok(await dayButton('08').evaluate(el => el === document.activeElement));
+  const rerun = tileReport.body.replace('\n\n## 待验证', '\n| retry | 2026-11-11 | 复测 | 10.2 |\n\n## 待验证');
+  command('batch', [], { records: [{ id: 'tile-culling', ifRevision: tileReport.revision, body: rerun }] });
+  await refresh.click();
+  await dayButton('11').and(page.getByRole('button', { name: '2026-11-11 的 2 条实验记录' })).waitFor();
+  await openFromDay('11', true);
+  assert.equal(await page.locator('[data-research-phase=exploration]').getAttribute('aria-pressed'), 'false');
+  command('batch', [], { records: [{ id: 'tile-culling', ifRevision: command('read', ['tile-culling']).revision, body: tileReport.body }] });
+  pass('dated trials open one report from multiple days and shared days offer a choice, with focus returned to the original date');
   await page.clock.setFixedTime(new Date('2026-11-19T12:00:00+08:00'));
   await refresh.click();
   await idle();
@@ -474,7 +498,7 @@ try {
   await phaseSummary.locator('.research-progress-conclusion').getByText(explorationFinding).waitFor();
   const progressSource = page.locator('[data-research-progress-link=tile-culling]');
   await progressSource.click();
-  await page.locator('#research-reader-title').getByText('测试分块遮挡剔除').waitFor();
+  await page.locator('#research-reader-title').getByText(tileTitle).waitFor();
   await closeReader();
   await progressSource.and(page.locator(':focus')).waitFor();
   assert.deepEqual(await phaseSummary.locator('.research-summary-dates > span').allTextContents(), ['覆盖 2026-11-05 – 2026-11-13', '撰写于 2026-11-16']);
@@ -494,7 +518,7 @@ try {
   assert.match(await page.locator('#document-scroll').evaluate(content => getComputedStyle(content).backgroundImage), /linear-gradient/);
   assert.match(await page.locator('#visual-editor h1').first().evaluate(heading => getComputedStyle(heading).fontFamily), /monospace/);
   await page.locator('#visual-editor a[href="mekir:tile-culling"]').click();
-  await page.locator('#research-reader-title').getByText('测试分块遮挡剔除', { exact: true }).waitFor();
+  await page.locator('#research-reader-title').getByText(tileTitle, { exact: true }).waitFor();
   await idle();
   const baselineLink = page.locator('#visual-editor a[href="mekir:baseline-city"]');
   await baselineLink.scrollIntoViewIfNeeded();
@@ -507,7 +531,7 @@ try {
   await idle();
   const back = page.getByRole('button', { name: '返回上一份文档' });
   await back.click();
-  await readerTitle.getByText('测试分块遮挡剔除', { exact: true }).waitFor();
+  await readerTitle.getByText(tileTitle, { exact: true }).waitFor();
   assert.equal(await documentScroll.evaluate(element => element.scrollTop), tileScroll);
   assert.ok(await baselineLink.evaluate(link => link === document.activeElement));
   await idle();
@@ -554,7 +578,7 @@ try {
   });
   await page.waitForFunction(() => !document.body.classList.contains('is-busy') && document.querySelector('#research-reader-title').textContent === '验证保守深度阈值');
   await page.locator('[data-peek-step="-1"]').click();
-  await readerTitle.getByText('测试分块遮挡剔除').waitFor();
+  await readerTitle.getByText(tileTitle).waitFor();
   await closeReader();
   assert.ok(await peer.evaluate(button => button === document.activeElement));
   pass('records switch inside one open desktop reader and return to the selected list item');

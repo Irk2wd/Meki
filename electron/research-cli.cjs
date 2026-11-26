@@ -4,9 +4,9 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { parseArgs } = require('node:util');
-const { projectToday, sortEntries, summaryCoversPhase } = require('./research-phases.mjs');
+const { projectToday, latestActivity, monthFilter, summaryCoversPhase } = require('./research-phases.mjs');
 const { ResearchStore, reportWritingGuide } = require('./research-store.cjs');
-const { phaseFilingGuide, recordFilingGuide, continuationGuide, titleGuide } = require('./research-guidance.cjs');
+const { phaseFilingGuide, recordFilingGuide, continuationGuide, titleGuide, trialGuide } = require('./research-guidance.cjs');
 const { MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, DOCUMENT_SCHEME, RECORDS, FIELD_TYPES, TEMPLATE_KEYS, RELATION_KINDS, RUN_FILTER_FIELDS, assert, date, id, comparisonType } = require('./research-model.cjs');
 const { comparisonLimits } = require('./research-comparison.mjs');
 const { createExampleProject } = require('./research-example.cjs');
@@ -46,10 +46,12 @@ async function readInput(input) {
 function phaseContext(project, items) {
   const today = projectToday(project.timezone);
   const kinds = new Map(project.recordTypes.map(type => [type.id, type.kind]));
-  const entries = [...items.values()].filter(({ record }) => record.date <= today).sort((a, b) => sortEntries(b, a));
+  const day = entry => latestActivity(entry, '', today);
+  const entries = [...items.values()].filter(day).sort((a, b) => day(b).localeCompare(day(a)) || b.record.id.localeCompare(a.record.id));
   const summaries = entries.filter(({ record }) => record.coverage || kinds.get(record.type) === 'summary');
   const recent = new Map();
-  const brief = ({ record, excerpt }) => ({ id: record.id, title: record.title, date: record.date, ...(excerpt && { excerpt }) });
+  const brief = entry => ({ id: entry.record.id, title: entry.record.title, date: entry.record.date,
+    ...(entry.trials && { lastActivity: day(entry) }), ...(entry.excerpt && { excerpt: entry.excerpt }) });
   for (const entry of entries) {
     const { phaseId, type, coverage } = entry.record;
     if (!phaseId || coverage || kinds.get(type) !== 'entry') continue;
@@ -113,6 +115,7 @@ async function main(args) {
           phaseSelection: phaseFilingGuide,
           filing: recordFilingGuide,
           continuation: continuationGuide,
+          trials: trialGuide,
           title: titleGuide,
           experimentReport: reportWritingGuide,
           excerpt: 'For entries and summaries, put a supported finding in the configured text conclusionField or the Conclusion/结论 section. list uses the first sentence of that field, then the conclusion, then the first available prose outside pending sections. Put open questions and missing comparisons under 待验证 or Open questions at the end.',
@@ -202,10 +205,11 @@ async function main(args) {
   const matched = matchingIds && new Set(matchingIds);
   if (values.phase) assert(project.phases.some(phase => phase.id === values.phase), `Unknown phase: ${values.phase}.`);
   if (values.type) assert(project.recordTypes.some(type => type.id === values.type), `Unknown type: ${values.type}.`);
-  return { projectRevision: revision, problems, documents, records: records.filter(({ record }) =>
-    (!values.from || record.date >= values.from) && (!values.to || record.date <= values.to) &&
-    (!values.phase || record.phaseId === values.phase) && (!values.type || record.type === values.type) && (!matched || matched.has(record.id)))
-    .sort((a, b) => b.record.date.localeCompare(a.record.date) || a.record.id.localeCompare(b.record.id)) };
+  const accepts = monthFilter(filter);
+  const day = entry => latestActivity(entry, values.from, values.to, accepts);
+  return { projectRevision: revision, problems, documents, records: records.filter(entry => day(entry) &&
+    (!values.phase || entry.record.phaseId === values.phase) && (!values.type || entry.record.type === values.type) && (!matched || matched.has(entry.record.id)))
+    .sort((a, b) => day(b).localeCompare(day(a)) || a.record.id.localeCompare(b.record.id)) };
 }
 
 main(process.argv.slice(2)).then(result => {

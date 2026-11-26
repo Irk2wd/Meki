@@ -1,5 +1,5 @@
 import { getLocale, ht, t } from '../electron/i18n.mjs';
-import { overlaps, phaseSpan, projectToday, sortEntries, summaryCoversPhase } from '../electron/research-phases.mjs';
+import { activityDates, latestActivity, monthFilter, overlaps, phaseSpan, projectToday, sortEntries, summaryCoversPhase } from '../electron/research-phases.mjs';
 import { comparisonImages } from '../electron/research-comparison.mjs';
 import { researchReportFormat } from '../electron/research-report-format.mjs';
 import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSnapshot, ResearchType, ResearchValue, ResearchView } from '../shared/research';
@@ -67,7 +67,7 @@ function resolveTimelineRange(selection: TimelineRange | undefined, today: strin
 }
 
 function timelineBounds({ project, records }: ResearchSnapshot, today: string): ResearchRange {
-  const first = project.start ?? [...project.phases.map(phase => phase.start), ...records.map(({ record }) => record.date)]
+  const first = project.start ?? [...project.phases.map(phase => phase.start), ...records.map(entry => activityDates(entry)[0])]
     .reduce((earliest, date) => date < earliest ? date : earliest, today);
   return { start: first < today ? first : today, end: today };
 }
@@ -133,8 +133,8 @@ function experimentEnded({ fields, run }: ResearchEntry['record'], phaseEnded: b
   return phaseEnded;
 }
 
-function comparePhaseProgress(a: ResearchEntry, b: ResearchEntry, recordTypes: ResearchType[]) {
-  const byDate = a.record.date.localeCompare(b.record.date);
+function comparePhaseProgress(a: ResearchEntry, b: ResearchEntry, recordTypes: ResearchType[], today: string) {
+  const byDate = latestActivity(a, '', today).localeCompare(latestActivity(b, '', today));
   if (byDate) return byDate;
   const isSummary = ({ record }: ResearchEntry) => Boolean(record.coverage) ||
     recordTypes.some(type => type.id === record.type && type.kind === 'summary');
@@ -151,10 +151,11 @@ function rankPhases(phases: ResearchPhase[], entries: ResearchEntry[], today: st
     let update: ResearchEntry | undefined;
     for (const item of [...assigned, ...(progressByPhase?.get(phase.id) || [])]) {
       const { record, excerpt } = item;
-      if (record.date > today) continue;
-      if (record.date > latest) latest = record.date;
+      const day = latestActivity(item, '', today);
+      if (!day) continue;
+      if (day > latest) latest = day;
       if (!excerpt && (record.coverage || reportTypes.has(record.type))) continue;
-      if (!update || comparePhaseProgress(update, item, recordTypes) < 0) update = item;
+      if (!update || comparePhaseProgress(update, item, recordTypes, today) < 0) update = item;
     }
     const group: keyof typeof phaseGroupOrder = today < span.start ? 'upcoming' : today > span.end ? 'ended' : 'ongoing';
     return { phase, span, group, latest, assigned, update };
@@ -169,10 +170,10 @@ function rankPhases(phases: ResearchPhase[], entries: ResearchEntry[], today: st
 function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByPhase: Map<string, ResearchEntry[]>, eventsByPhase: Map<string, ResearchEntry[]>,
   { activePhase, today, range, bounds, selectedRange, presetId, page: requestedPage, pageSize, revealPhase, canCreatePhase, canCreateEvent, types }: TimelineOptions) {
   const start = dayNumber(range.start), end = dayNumber(range.end), span = end - start + 1;
+  const dayWidth = 100 / span;
   const fullRange = range.start === bounds.start && range.end === bounds.end;
   const crossesYear = new Date(start * 86400000).getUTCFullYear() !== new Date(end * 86400000).getUTCFullYear();
   const position = (date: string, offset = 0) => (dayNumber(date) - start + offset) * 100 / span;
-  const dot = (date: string, ended: boolean) => `<i class="research-timeline-dot${ended ? ' is-ended' : ''}" style="--point:${position(date, 0.5)}%"></i>`;
   const todayLine = containsDay(range, today) ? `<i class="research-today-line" style="--point:${position(today, 0.5)}%"></i>` : '';
   const ticks = [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(start + (end - start) * i / 4)))];
   const tickPosition = (day: number) => (day - start + .5) * 100 / span;
@@ -188,11 +189,22 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
   if ([...usedTypes].some(id => !types.has(id))) eventKeys.add(legendKey(timelineIcon(undefined, true), t("可视化展示")));
   const eventDays = new Map<string, TimelineEventDay[]>();
   const phaseRows = ordered.slice((page - 1) * limit, page * limit).map(({ phase, span, group, latest, assigned, update }) => {
-    const activity = new Map<string, boolean>();
-    for (const { record } of assigned) {
-      if (!containsDay(range, record.date)) continue;
-      activity.set(record.date, (activity.get(record.date) ?? true) && experimentEnded(record, group === 'ended'));
+    const activity = new Map<string, ResearchEntry[]>();
+    for (const entry of assigned) {
+      for (const day of activityDates(entry)) {
+        if (!containsDay(range, day)) continue;
+        const items = activity.get(day);
+        if (items) items.push(entry);
+        else activity.set(day, [entry]);
+      }
     }
+    const dots = [...activity].sort(([a], [b]) => a.localeCompare(b)).map(([day, items]) => {
+      const ended = items.every(({ record }) => experimentEnded(record, group === 'ended'));
+      const label = items.length === 1 ? `${day} · ${escape(items[0].record.title)}` : ht("{0} 的 {1} 条实验记录", day, items.length);
+      return `<button type="button" class="research-trial-day" data-research-trial-day="${phase.id}/${day}" data-date="${day}"
+        data-research-trial-records="${items.map(({ record }) => record.id).join(' ')}" style="--point:${position(day, .5)}%;--day-width:${dayWidth}%" aria-label="${label}" title="${label}">
+        <i aria-hidden="true" class="research-timeline-dot${ended ? ' is-ended' : ''}"></i></button>`;
+    }).join('');
     const phaseEvents = eventsByPhase.get(phase.id) || [];
     const groups = new Map<string, ResearchEntry[]>();
     for (const event of phaseEvents) {
@@ -211,8 +223,8 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
         <strong>${escape(phase.title)} <span class="research-phase-status${group === 'ongoing' ? ' research-phase-ongoing' : ''}">${status}</span></strong>
         ${progress ? `<span class="research-phase-progress" title="${escape(progress)}">${escape(progress)}</span>` : ''}
         <small class="research-phase-facts"><span>${escape(phaseDates(phase, today, true))} · ${ht("{0} 条实验", assigned.length)}</span>${latest ? `<span>${ht("最近进展 {0}", escape(formatDay(dayNumber(latest), latest.slice(0, 4) !== today.slice(0, 4))))}</span>` : ''}</small></button>
-      <div class="research-timeline-track" data-research-track${fullRange ? '' : ' data-research-pan'}${phaseEvents.length ? ' data-research-has-events' : ''}><span aria-hidden="true">${overlaps(span, range) ? `<i class="research-timeline-bar" style="--left:${left}%;--right:${right}%"></i>` : ''}${[...activity].map(([date, ended]) => dot(date, ended)).join('')}
-        </span>${groups.size ? `<div class="research-timeline-events" data-phase="${phase.id}"></div>` : ''}</div>
+      <div class="research-timeline-track" data-research-track${fullRange ? '' : ' data-research-pan'}${phaseEvents.length ? ' data-research-has-events' : ''}>${overlaps(span, range) ? `<i aria-hidden="true" class="research-timeline-bar" style="--left:${left}%;--right:${right}%"></i>` : ''}${dots}
+        ${groups.size ? `<div class="research-timeline-events" data-phase="${phase.id}"></div>` : ''}</div>
     </div>`;
   }).join('');
   const presetButtons = rangePresets.map(({ id, amount, unit }) => {
@@ -600,12 +612,14 @@ export class ResearchWorkspace {
       const button = returning.origin;
       const id = button?.dataset.researchRecord;
       const events = button?.dataset.researchTimelineEvents;
+      const trialDay = button?.dataset.researchTrialDay;
       const linked = button?.dataset.researchLinkedProject;
       const origin = linked ? `[data-research-linked-project="${CSS.escape(linked)}"]` : ':not([data-research-linked-project])';
       const shortcut = button?.dataset.researchStageLink;
       const progress = button?.dataset.researchProgressLink;
       const replacement = shortcut ? this.sidebar.querySelector<HTMLButtonElement>(`[data-research-stage-link="${CSS.escape(shortcut)}"]`) :
         progress ? this.content.querySelector<HTMLButtonElement>(`[data-research-progress-link="${CSS.escape(progress)}"]`) :
+        trialDay ? this.content.querySelector<HTMLButtonElement>(`[data-research-trial-day="${CSS.escape(trialDay)}"]`) :
         events ? timelineEventButton(this.content, events) :
         id ? this.content.querySelector<HTMLButtonElement>(`[data-research-record="${CSS.escape(id)}"]${origin}`) : null;
       (button?.isConnected ? button : replacement || this.content.querySelector('h1'))?.focus({ preventScroll: true });
@@ -1122,9 +1136,11 @@ export class ResearchWorkspace {
       active.page === 'view' ? inView : inView.filter(isExperiment);
     const matching = state.matchingIds && new Set(state.matchingIds);
     const matches = ({ record }: ResearchEntry) => !matching || matching.has(record.id);
-    const entries = projectPage && !phase ? [] : sequence.filter(({ record }) => (!phase || record.phaseId === phase.id) &&
-      (!this.date || record.date === this.date) && (!dateRange || containsDay(dateRange, record.date)))
-      .filter(matches).sort((a, b) => view?.order === 'oldest' ? sortEntries(a, b) : sortEntries(b, a));
+    const acceptsDay = monthFilter(this.recordFilter);
+    const dayInView = (entry: ResearchEntry) => latestActivity(entry, this.date || dateRange?.start, this.date || dateRange?.end, acceptsDay);
+    const compareRows = (a: ResearchEntry, b: ResearchEntry) => dayInView(a).localeCompare(dayInView(b)) || a.record.id.localeCompare(b.record.id);
+    const entries = projectPage && !phase ? [] : sequence.filter(item => (!phase || item.record.phaseId === phase.id) && dayInView(item) && matches(item))
+      .sort((a, b) => view?.order === 'oldest' ? compareRows(a, b) : compareRows(b, a));
     const linkedSummaries = active.page === 'summaries' ? (state.linkedSummaries || [])
       .filter(({ record }) => !this.date || record.date === this.date)
       .sort((a, b) => view?.order === 'oldest' ? sortEntries(a, b) : sortEntries(b, a)) : [];
@@ -1140,11 +1156,14 @@ export class ResearchWorkspace {
     }) : undefined;
     if (timelineView) this.phasePage = timelineView.page;
     const latestExperiment = phase && projectPage ? sequence.filter(item =>
-      item.record.phaseId === phase.id && item.record.date <= today && item.excerpt && matches(item)
-    ).sort((a, b) => sortEntries(b, a))[0] : undefined;
+      item.record.phaseId === phase.id && latestActivity(item, '', today) && item.excerpt && matches(item)
+    ).sort((a, b) => comparePhaseProgress(b, a, project.recordTypes, today))[0] : undefined;
     const phaseTitle = phase ? `<h2 id="research-journal-title">${escape(phase.title)}</h2><p class="research-phase-range">${escape(phaseDates(phase, today))}</p>`
       : `<h2 id="research-journal-title">${active.page === 'summaries' ? ht("已归档总结") : ht("实验记录")} <span>${entries.length + linkedSummaries.length}</span></h2>`;
-    const lastExperiment = experiments.reduce((latest, { record }) => record.date > latest ? record.date : latest, '');
+    const lastExperiment = experiments.reduce((latest, item) => {
+      const day = latestActivity(item, '', today);
+      return day > latest ? day : latest;
+    }, '');
     const newEntry = project.recordTypes.some(type => type.kind === 'entry') ? `<button type="button" class="secondary-button" data-research-new="entry">${icon('plus', 14)}${ht("新建研究记录")}</button>` : '';
     const newSummary = summaryTypes.size ? `<button type="button" class="secondary-button" data-research-new="summary">${icon('plus', 14)}${ht("插入阶段总结")}</button>` : '';
     const previousMarkers = timelineView && !this.axisDrag?.moving ? this.timelineEvents.capture() : undefined;
@@ -1179,7 +1198,7 @@ export class ResearchWorkspace {
           ${this.recordFilter ? `<p class="research-active-filter">${escape([
             this.recordFilter.query, this.recordFilter.month, ...(this.recordFilter.fields || []).map(({ field, value }) => `${this.filterFieldName(field, state)} = ${value}`),
           ].filter(Boolean).join(' · '))}</p>` : ''}
-          ${entries.length ? this.renderEntries(entries, view, state) : ''}
+          ${entries.length ? this.renderEntries(entries, view, state, dayInView) : ''}
           ${linkedSummaries.length ? this.renderLinkedSummaries(linkedSummaries) : ''}
           ${entries.length || linkedSummaries.length ? '' : `<p class="research-empty-list">${ht("这个视图中没有符合条件的记录。")}</p>`}
         </section>`}
@@ -1224,7 +1243,7 @@ export class ResearchWorkspace {
     if (!entries.length && !experiment) return create ? `<div class="research-actions research-stage-create">${create}</div>` : '';
     const sorted = entries.sort((a, b) => sortEntries(b, a));
     const summary = sorted.find(item => item.record.date <= today && item.excerpt);
-    const latest = experiment && (!summary || comparePhaseProgress(experiment, summary, state.project.recordTypes) > 0) ? experiment : summary;
+    const latest = experiment && (!summary || comparePhaseProgress(experiment, summary, state.project.recordTypes, today) > 0) ? experiment : summary;
     const row = (entry: ResearchEntry, featured = false) => {
       const { record, excerpt } = entry;
       const isExperiment = entry === experiment;
@@ -1233,7 +1252,7 @@ export class ResearchWorkspace {
         ${icon(isExperiment ? 'page' : 'report', 18)}<span>${featured && excerpt ? `<strong class="research-progress-conclusion">${escape(excerpt)}</strong>` : ''}
           <strong class="research-summary-title">${escape(record.title)}</strong>
           ${!featured && excerpt ? `<span class="research-summary-lede">${escape(excerpt)}</span>` : ''}
-          <small class="research-summary-dates">${record.coverage ? `<span>${ht("覆盖 {0}", escape(rangeText(record.coverage)))}</span>` : ''}<span>${isExperiment ? ht("实验日期 {0}", escape(record.date)) : ht("撰写于 {0}", escape(record.date))}</span></small></span>${icon('chevron', 14)}</button>
+          <small class="research-summary-dates">${record.coverage ? `<span>${ht("覆盖 {0}", escape(rangeText(record.coverage)))}</span>` : ''}<span>${isExperiment ? ht("实验日期 {0}", latestActivity(entry, '', today)) : ht("撰写于 {0}", escape(record.date))}</span></small></span>${icon('chevron', 14)}</button>
       ${isExperiment ? '' : `<button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button>`}</li>`;
     };
     const others = sorted.filter(entry => entry !== latest);
@@ -1346,12 +1365,13 @@ export class ResearchWorkspace {
     </section>`;
   }
 
-  private renderEntries(entries: ResearchEntry[], view: ResearchView | undefined, state: ResearchSnapshot) {
+  private renderEntries(entries: ResearchEntry[], view: ResearchView | undefined, state: ResearchSnapshot, dayInView: (entry: ResearchEntry) => string) {
     const byDate = new Map<string, ResearchEntry[]>();
     for (const item of entries) {
-      const group = byDate.get(item.record.date);
+      const day = dayInView(item);
+      const group = byDate.get(day);
       if (group) group.push(item);
-      else byDate.set(item.record.date, [item]);
+      else byDate.set(day, [item]);
     }
     const titles = new Map(state.documents.map(({ id, title }) => [id, title]));
     return Array.from(byDate, ([date, items]) => `<div class="research-date-group">
@@ -1435,8 +1455,9 @@ export class ResearchWorkspace {
       return;
     }
     if (data.researchProgressLink) { await this.openReference(data.researchProgressLink, button); return; }
-    if (data.researchTimelineEvents) {
-      const ids = new Set(data.researchTimelineEvents.split(' '));
+    const dayRecords = data.researchTimelineEvents || data.researchTrialRecords;
+    if (dayRecords) {
+      const ids = new Set(dayRecords.split(' '));
       const events = state.records.filter(({ record }) => ids.has(record.id)).sort(sortEntries);
       if (events.length === 1) await this.openReference(events[0].record.id, button);
       else if (events.length) {

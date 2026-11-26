@@ -9,6 +9,7 @@ const { exampleProject, exampleRecords } = require('../electron/research-example
 const { formatMarkdown, validateProject } = require('../electron/research-model.cjs');
 const { WorkspaceStore } = require('../electron/workspace-store.cjs');
 const { previewEvidence } = require('../electron/research-evidence.cjs');
+const { readTrialLog } = require('../electron/research-trials.cjs');
 
 async function projectFolder(t) {
   const temporary = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'mekir-layout-')));
@@ -61,7 +62,7 @@ test('describe gives a fresh agent the stage decision, latest summary and three 
   assert.deepEqual(phase.recentExperiments.map(item => item.id), ['d', 'c', 'b']);
   const guide = await fs.readFile(path.join(root, 'AGENTS.md'), 'utf8');
   assert.ok(guide.includes(describe.format.rules.phaseSelection));
-  for (const key of ['filing', 'continuation', 'title']) assert.ok(guide.includes(describe.format.rules[key]));
+  for (const key of ['filing', 'continuation', 'trials', 'title']) assert.ok(guide.includes(describe.format.rules[key]));
   assert.match(describe.format.rules.filing, /更新论文全文.*跳过实验归档/);
   assert.match(describe.format.rules.continuation, /待验证.*沿用记录 ID/);
   assert.match(describe.format.rules.title, /检验的变量/);
@@ -74,6 +75,65 @@ test('describe gives a fresh agent the stage decision, latest summary and three 
     assert.equal(headings.at(-1), '## 待验证');
     assert.match(type.template, /优先用 Markdown 表格/);
   }
+});
+
+test('only dated trial rows index experiment activity', () => {
+  const table = (id, day) => ['Trial ID | Date', '--- | ---', `${id} | ${day}`].join('\n');
+  const body = [
+    '## Notes', table('other', '2000-01-01'), '~~~md', '## Trials', table('code', '2000-01-02'), '~~~',
+    '<!--', '## Trials', table('commented', '2000-01-03'), '-->',
+    '## Trials', table('original', '2000-01-04'), '', '    ' + table('indented', '2000-01-05').replaceAll('\n', '\n    '),
+    '## 实验试次', '| 试次 ID | 实验日期 | 自定义观测 |', '| :--- | ---: | --- |', '|  | | |',
+    '| rerun | 2000-01-06 | 没有变化 |', '| rerun | 2000-01-06 | 重复输入 |', '| invalid | 2000-02-31 | 错误日期 |',
+    '## 待验证', table('future', '2000-01-07'),
+  ].join('\r\n');
+  const { trials, issues } = readTrialLog(body);
+  assert.deepEqual(trials, [{ id: 'original', date: '2000-01-04' }, { id: 'rerun', date: '2000-01-06' }]);
+  assert.match(issues[0], /Duplicate trial ID/);
+  assert.match(issues[1], /Invalid trial ID or date/);
+});
+
+test('fresh CLI invocations append to one question across months, filter by real trials and protect concurrent edits', async t => {
+  const root = await projectFolder(t);
+  const phaseId = 'review';
+  const project = { ...exampleProject, phases: [{ id: phaseId, title: '评估树冠简化', start: '2000-01-01' }] };
+  const base = { id: 'canopy-time', type: 'experiment', phaseId, title: '换机位后能否缩短出图时间？',
+    date: '2000-01-31', fields: { scene: '林地' }, body: '三层已测完，待补同机位对照。' };
+  const store = await ResearchStore.initialize(root, project, [base]);
+  const invoke = (name, args = [], input) => JSON.parse(require('node:child_process').execFileSync(process.execPath,
+    [require.resolve('../electron/research-cli.cjs'), name, root, ...args, ...(input ? ['--input', '-'] : [])],
+    { encoding: 'utf8', input: input && JSON.stringify(input) }));
+  const list = (...args) => invoke('list', args).records.map(item => item.record.id);
+  const first = invoke('read', [base.id]);
+  assert.deepEqual(list('--phase', phaseId), [base.id]);
+  const body = ['固定步道机位后，简化树冠仍缩短出图时间。', '', '## 实验试次', '',
+    '| 试次 ID | 实验日期 | 方法 |', '| --- | --- | --- |', '| first | 2000-01-31 | 简化 |',
+    '| baseline | 2000-02-02 | 对照 |', '| repeat | 2000-02-02 | 重复对照 |'].join('\n');
+  const changes = { records: [{ id: base.id, ifRevision: first.revision, body }] };
+  assert.equal(invoke('batch', [], changes).records[0].changed, true);
+  assert.equal(invoke('batch', [], changes).records[0].changed, false);
+  const second = invoke('read', [base.id]);
+  assert.equal(second.relativePath, first.relativePath);
+  assert.equal(second.record.date, base.date);
+  assert.equal(second.trials.length, 3);
+  assert.deepEqual(list('--from', '2000-02-01', '--to', '2000-02-01'), []);
+  assert.deepEqual(list('--from', '2000-02-02', '--to', '2000-02-02'), [base.id]);
+  assert.deepEqual(list('--month', '2000-02', '--query', '林地 + 2 月'), [base.id]);
+  assert.deepEqual(list('--month', '2000-01', '--from', '2000-02-01'), []);
+  assert.deepEqual(list('--query', '１ 月', '--from', '2000-02-01'), []);
+  assert.deepEqual(list('--from', base.date, '--to', '2000-02-02'), [base.id]);
+  await assert.rejects(store.writeBatch({ records: [{ id: base.id, ifRevision: first.revision, body: body + '\n并发写入' }] }), { code: 'RESEARCH_CONFLICT' });
+  await assert.rejects(store.writeBatch({ records: [{ id: base.id, ifRevision: second.revision, body: body + '\n| baseline | 2000-02-03 | 重复 |' }] }), /Duplicate trial ID/);
+  invoke('batch', [], { records: [{ id: base.id, ifRevision: second.revision, body: body + '\n\n论文已于 2000-02-03 引用这条数据。' }] });
+  assert.deepEqual(list('--from', '2000-02-03'), []);
+  const independent = { ...base, id: 'canopy-edges', title: '简化树冠是否改变遮挡边缘？', body: '边缘差异尚待确认。' };
+  invoke('batch', [], { records: [independent, { id: 'report', type: 'stage-summary', phaseId, title: '阶段总结', date: base.date,
+    coverage: { start: base.date, end: base.date }, body }] });
+  assert.equal(invoke('read', ['report']).trials, undefined);
+  const phase = invoke('describe').phaseContext[0];
+  assert.deepEqual(phase.recentExperiments.map(item => item.id), [base.id, independent.id]);
+  assert.equal(phase.recentExperiments[0].lastActivity, '2000-02-02');
+  assert.deepEqual(list('--month', '2000-02'), [base.id]);
 });
 
 test('older default filing rules can be upgraded without changing authored guidance or records', async t => {

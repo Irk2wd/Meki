@@ -1,5 +1,28 @@
+export function activityDates({ record, trials }) {
+  if (!trials?.length) return [record.date];
+  return [...new Set([record.date, ...trials.map(trial => trial.date)])].sort();
+}
+
+export const monthTerms = /(?<!\d)(0?[1-9]|1[0-2])\s*月/g;
+
+export function monthFilter({ month, query = '' } = {}) {
+  const terms = [...query.normalize('NFKC').matchAll(monthTerms)].map(match => Number(match[1]));
+  if (!month && !terms.length) return undefined;
+  return date => (!month || date.startsWith(`${month}-`)) && terms.every(term => Number(date.slice(5, 7)) === term);
+}
+
+export function latestActivity(entry, from = '', to = '9999-12-31', accepts) {
+  const inRange = date => date >= from && date <= to && (!accepts || accepts(date));
+  const first = entry.record.date;
+  let latest = inRange(first) ? first : '';
+  for (const { date } of entry.trials || []) {
+    if (date > latest && inRange(date)) latest = date;
+  }
+  return latest;
+}
+
 export const sortEntries = (a, b) =>
-  a.record.date.localeCompare(b.record.date) || a.record.id.localeCompare(b.record.id);
+  latestActivity(a).localeCompare(latestActivity(b)) || a.record.id.localeCompare(b.record.id);
 
 export const overlaps = (a, b) => a.start <= b.end && b.start <= a.end;
 

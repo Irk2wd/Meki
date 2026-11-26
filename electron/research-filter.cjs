@@ -1,5 +1,6 @@
 'use strict';
 
+const { latestActivity, monthFilter, monthTerms } = require('./research-phases.mjs');
 const normalize = value => String(value ?? '').normalize('NFKC').toLowerCase();
 const categoryLabels = {
   asset_build: '资产构建 候选', quality: '质量 画质', performance: '性能 计时 帧时间',
@@ -8,15 +9,15 @@ const categoryLabels = {
 
 function researchMatcher(filter, project) {
   const categories = normalize(filter.query);
-  const months = [...categories.matchAll(/(?<!\d)(0?[1-9]|1[0-2])\s*月/g)].map(match => Number(match[1]));
-  const terms = (categories.replace(/(?<!\d)(0?[1-9]|1[0-2])\s*月/g, ' ').match(/"[^"]+"|[^+\s]+/g) || [])
+  const accepts = monthFilter(filter);
+  const terms = (categories.replace(monthTerms, ' ').match(/"[^"]+"|[^+\s]+/g) || [])
     .map(term => term.replace(/^"|"$/g, '')).filter(Boolean);
   const fields = (filter.fields || []).map(({ field, value }) => ({ field, value: normalize(value) }));
   const phases = new Map(project.phases.map(phase => [phase.id, phase.title]));
   const types = new Map(project.recordTypes.map(type => [type.id, type.label]));
-  return ({ record, body }) => {
-    if (filter.month && !record.date.startsWith(`${filter.month}-`)) return false;
-    if (months.some(month => Number(record.date.slice(5, 7)) !== month)) return false;
+  return entry => {
+    const { record, body } = entry;
+    if (accepts && !latestActivity(entry, undefined, undefined, accepts)) return false;
     const run = record.run;
     const category = run?.category ? `${run.category} ${Object.hasOwn(categoryLabels, run.category) ? categoryLabels[run.category] : ''}` : '';
     const status = [run?.status, run?.missing.includes('RUN.md') ? '待补报告 report pending' : ''].filter(Boolean).join(' ');

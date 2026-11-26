@@ -1719,6 +1719,8 @@
   "阶段事件": "Phase events",
   "时间线设置": "Timeline settings",
   "{0} 的事件": "Events on {0}",
+  "{0} 的实验记录": "Experiments on {0}",
+  "{0} 的 {1} 条实验记录": "{1} experiments on {0}",
   "舒适": "Comfortable",
   "贴边": "Edge to edge",
   "隐藏": "Hidden",

@@ -349,19 +349,34 @@ body:not(.window-fitted) #window-caption + .research-shell > .research-column-di
 .research-timeline-bar { position: absolute; inset: 12px var(--right) auto var(--left); height: 7px; border-radius: 5px; background: color-mix(in srgb, var(--soft) 42%, var(--bg)); }
 .research-timeline-row:has(.research-timeline-label[aria-pressed="true"]) .research-timeline-bar { background: var(--accent); }
 .research-timeline-row[data-status="ongoing"] .research-timeline-bar { background: var(--accent); }
-.research-timeline-dot {
+.research-trial-day {
   position: absolute;
   top: 15.5px;
   left: var(--point);
+  transform: translate(-50%, -50%);
+  width: min(26px, var(--day-width));
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+}
+.research-trial-day:hover { background: transparent; }
+.research-timeline-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   transform: translate(-50%, -50%);
   width: 8px;
   height: 8px;
   border: 1px solid var(--bg);
   border-radius: 50%;
   background: var(--text);
-  z-index: 1;
+  pointer-events: none;
 }
 .research-timeline-dot.is-ended { background: var(--muted); }
+.research-trial-day:is(:hover, :focus-visible) .research-timeline-dot { box-shadow: 0 0 0 3px var(--accent-soft); }
 .research-timeline-events { position: absolute; inset: 0; pointer-events: none; }
 .research-timeline-event {
   position: absolute;

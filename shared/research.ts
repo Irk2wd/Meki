@@ -145,6 +145,7 @@ export interface ResearchRecord {
 
 export interface ResearchEntry {
   record: ResearchRecord;
+  trials?: Array<{ id: string; date: string }>;
   excerpt?: string;
   fieldOrigins?: Record<string, ResearchFieldOrigin>;
   revision: string;

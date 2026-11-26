@@ -20,6 +20,7 @@ const {
 } = require('./research-model.cjs');
 
 const { filingSection, upgradeGuideText, upgradeProjectRules } = require('./research-guidance.cjs');
+const { readTrialLog } = require('./research-trials.cjs');
 
 const MAX_JSON_BYTES = 512 * 1024;
 const MAX_INDEX_BYTES = 8 * 1024 * 1024;
@@ -222,9 +223,14 @@ class ResearchStore {
     const target = await this.findRecord(recordId);
     assert(target, `Record ${recordId} does not exist.`);
     const item = publicRecord(await this.readFile(target, recordId, true));
+    const { project } = await this.manifest();
+    const type = project.recordTypes.find(type => type.id === item.record.type);
     if (Object.keys(item.record.fields).length) {
-      const { project } = await this.manifest();
-      item.currentFields = project.recordTypes.find(type => type.id === item.record.type)?.fields.filter(rule => Object.hasOwn(item.record.fields, rule.id)) || [];
+      item.currentFields = type?.fields.filter(rule => Object.hasOwn(item.record.fields, rule.id)) || [];
+    }
+    if (type?.kind === 'entry') {
+      const { trials } = readTrialLog(item.body);
+      if (trials.length) item.trials = trials;
     }
     return item;
   }
@@ -249,12 +255,17 @@ class ResearchStore {
           }
           seen.add(recordId);
           const item = await this.readFile(target, recordId, Boolean(excerptTypes) || bodyIds.has(recordId), rules);
-          if (matches?.(item)) matchingIds.push(recordId);
           if (excerptTypes) {
             const type = excerptTypes.get(item.record.type);
+            if (type?.kind === 'entry') {
+              const { trials, issues } = readTrialLog(item.body);
+              if (trials.length) item.trials = trials;
+              if (issues.length) item.trialIssues = issues;
+            }
             const field = type?.conclusionField && item.record.fields[type.conclusionField];
             item.excerpt = (typeof field === 'string' && firstSentence(field)) || progressExcerpt(item.body, type?.kind === 'entry' || type?.kind === 'summary');
           }
+          if (matches?.(item)) matchingIds.push(recordId);
           if (!bodyIds.has(recordId)) delete item.body;
           items.set(recordId, item);
         } catch (error) {
@@ -436,9 +447,10 @@ class ResearchStore {
     const { items, problems, matchingIds } = await this.catalog(new Set(), filter && researchMatcher(validateFilter(filter), project),
       new Map(project.recordTypes.map(type => [type.id, type])));
     const index = await this.documentIndex(items, await this.readIndex());
-    const records = [...items.values()].map(({ record, revision, relativePath, excerpt, fieldOrigins }) => ({
-      record, revision, relativePath, ...(fieldOrigins && { fieldOrigins }), ...(excerpt ? { excerpt } : {}),
+    const records = [...items.values()].map(({ record, revision, relativePath, excerpt, fieldOrigins, trials, trialIssues }) => ({
+      record, revision, relativePath, ...(fieldOrigins && { fieldOrigins }), ...(excerpt ? { excerpt } : {}), ...(trials && { trials }),
       issues: [
+        ...(trialIssues || []),
         ...relationshipIssues(record, project),
         ...fieldIssues(record, project.recordTypes.find(type => type.id === record.type)).map(issue => issue.message),
         ...(record.sources || []).filter(source => !index.documents.has(source)).map(source => `Missing source document: ${source}.`),
@@ -692,6 +704,14 @@ class ResearchStore {
       if (body !== undefined) assert(typeof body === 'string' && !body.includes('\0'), 'body must be Markdown text.');
       validateChange(record, existing?.record, project, documents, pending);
       const markdown = body?.replace(/\r\n/g, '\n') ?? existing?.body ?? templateBody(record, project, documents, this.sourceHref);
+      if (type?.kind === 'entry' && markdown !== existing?.body) {
+        const { issues } = readTrialLog(markdown);
+        if (issues.length) {
+          const prior = new Set(existing ? readTrialLog(existing.body).issues : []);
+          const added = issues.find(issue => !prior.has(issue));
+          if (added) throw new Error(added);
+        }
+      }
       const ruleBytes = captureFieldRules(record, existing, type, patch);
       if (existing && isDeepStrictEqual(existing.record, record) && existing.body === markdown) return existing;
       if ((ifRevision ?? null) !== (existing?.revision ?? null)) throw revisionConflict(change.id);

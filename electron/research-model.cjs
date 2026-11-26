@@ -427,7 +427,7 @@ module.exports = {
   METADATA, MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, RECORDS, DOCUMENT_SCHEME,
   RECORD_FILE, REVISION, FIELD_TYPES, TEMPLATE_KEYS,
   RELATION_KINDS, RUN_CONTEXT, RUN_FILTER_FIELDS, validateSource, validateEvidencePath, validateEvidence, validateFilter,
-  assert, object, array, id, date, listOfIds, validateProject, validateRecord, relationshipIssues,
+  assert, object, array, id, date, isDate, listOfIds, validateProject, validateRecord, relationshipIssues,
   comparisonType,
   fieldIssues, validateField, validateChange, parseMarkdown, formatMarkdown, fileName, templateBody,
 };

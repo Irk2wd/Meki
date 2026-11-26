@@ -107,9 +107,9 @@ const exampleRecords = [
     body: '# 城市街区基线\n\n城市街区这条轨迹的无剔除基线为 **12.8 ms**。固定画质采集 600 帧，按去预热后的 GPU 帧时间中位数比较后续方案。\n',
   },
   {
-    id: 'tile-culling', type: 'experiment', title: '测试分块遮挡剔除', date: '2026-11-07', phaseId: 'exploration',
+    id: 'tile-culling', type: 'experiment', title: '开启分块遮挡剔除能缩短 GPU 帧时间吗？', date: '2026-11-07', phaseId: 'exploration',
     fields: { scene: 'City Block', gpu_ms: 10.2, outcome: '有效' },
-    body: `# 测试分块遮挡剔除
+    body: `# 开启分块遮挡剔除能缩短 GPU 帧时间吗？
 
 在城市街区的同一条相机轨迹上，开启分块遮挡剔除后，GPU 帧时间缩短了。两组计时均已去掉预热帧。
 
@@ -119,6 +119,13 @@ const exampleRecords = [
 | 分块遮挡剔除 | 10.2 |
 
 [城市街区基线](mekir:baseline-city)
+
+## 实验试次
+
+| 试次 ID | 实验日期 | 剔除设置 | GPU 帧时间中位数（ms） |
+| --- | --- | --- | ---: |
+| tile-on | 2026-11-07 | 开启分块遮挡剔除 | 10.2 |
+| baseline-repeat | 2026-11-08 | 沿同一条轨迹关闭剔除，复测基线 | 12.7 |
 
 ## 待验证
 
@@ -149,7 +156,7 @@ const exampleRecords = [
 | 剔除设置 | GPU 帧时间中位数（ms） | 实验记录 |
 | --- | ---: | --- |
 | 关闭（基线） | 12.8 | [城市街区基线](mekir:baseline-city) |
-| 分块遮挡剔除 | 10.2 | [测试分块遮挡剔除](mekir:tile-culling) |
+| 分块遮挡剔除 | 10.2 | [分块遮挡剔除实验](mekir:tile-culling) |
 | 保守深度阈值 | 10.7 | [验证保守深度阈值](mekir:conservative-depth) |
 
 ## 待验证
