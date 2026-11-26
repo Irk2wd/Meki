@@ -19,6 +19,8 @@ const {
   relationshipIssues, fieldIssues, validateChange, parseMarkdown, formatMarkdown, fileName, templateBody,
 } = require('./research-model.cjs');
 
+const { filingSection, upgradeGuideText, upgradeProjectRules } = require('./research-guidance.cjs');
+
 const MAX_JSON_BYTES = 512 * 1024;
 const MAX_INDEX_BYTES = 8 * 1024 * 1024;
 
@@ -603,6 +605,32 @@ class ResearchStore {
     });
   }
 
+  async guidanceChanges(current) {
+    const project = upgradeProjectRules(current.project);
+    const file = path.join(this.root, 'AGENTS.md');
+    const entry = await statIfPresent(file);
+    let guide;
+    if (entry?.isFile() && entry.size <= MAX_JSON_BYTES) {
+      const { bytes, mode } = await readBytes(file, MAX_JSON_BYTES);
+      const content = bytes.toString('utf8');
+      const updated = upgradeGuideText(content);
+      if (updated !== content && Buffer.from(content).equals(bytes)) guide = { file, mode, before: digest(bytes), bytes: Buffer.from(updated) };
+    }
+    return { project, guide, files: [...(project !== current.project ? [this.manifestFile] : []), ...(guide ? ['AGENTS.md'] : [])] };
+  }
+
+  async upgradeGuidance() {
+    return this.locked(async () => {
+      const current = await this.manifest();
+      const { project, guide, files } = await this.guidanceChanges(current);
+      if (guide) await atomicWrite(guide.file, guide.bytes, { mode: guide.mode, beforeCommit: async () => {
+        if (!(await statIfPresent(guide.file))?.isFile() || digest((await readBytes(guide.file)).bytes) !== guide.before) throw revisionConflict('AGENTS.md');
+      } });
+      const revision = project === current.project ? current.revision : await this.writeManifest(validateProject(project), current);
+      return { files, revision };
+    });
+  }
+
   async saveDocument(document, save, overwrite) {
     const recordId = RECORD_FILE.exec(path.basename(document.path))[1];
     return this.locked(async () => {
@@ -690,8 +718,6 @@ function encodeJson(value, limit = MAX_JSON_BYTES) {
   return bytes;
 }
 
-const phaseFilingGuide = '归档前先看 describe.phaseContext，按本轮要回答的问题选择已有阶段。调参、换机位、补基线或重跑仍服务于同一项判断时，沿用阶段 ID，为每轮实验单独记一条。研究要作的决定改变时再建阶段，在阶段说明中写明这次要判断什么。普通实验暂时找不到归属时，可先按日期记录，留待归类。';
-
 const comparisonTableGuide = '比较不同方案、轮次或条件下的数值时，优先用 Markdown 表格。标明比较对象，在表头写清指标和单位。正文解释差异对研究问题意味着什么，避免逐项复述表中数值。单个独立读数可以直接写在正文中。';
 const reportWritingGuide = `实验记录和阶段总结都从证据已支持的结论写起。首句回答本轮研究疑问，再按重要性写出其他已确认的发现。交代测量对象、对照和适用范围，并链接原始证据。${comparisonTableGuide}缺少对照时先写本轮实测值或直接观察。把推测、待补的对照和下一次要做的验证集中放在文末「待验证」。没有遗留问题时可以省略这一节。`;
 
@@ -703,15 +729,15 @@ const projectGuide = `# mekiR 研究项目的 Agent 指引
 
 在 \`fields\` 中使用字段 ID。按字段说明从实际产物取值，遵守类型、单位、范围与必填要求。枚举使用 \`options\` 中的原值。用正文说明缺失数据及原因。若必填项缺少有效值和可用默认值，先补证据。
 
-## 这轮实验属于哪个阶段
+## 这次工作是否归档，写进哪份实验
 
-${phaseFilingGuide}
+${filingSection}
 
 ## 写入记录
 
 读取历史字段时，先核对 read 或 list 给出的 fieldOrigins。rule 是该值写入时采用的定义，source 为 record（明确写入）或 default（创建时采用项目默认值）。用 read.currentFields 对照当前定义。缺少来源时把历史口径记为未知。通过 batch 更新实际改变的字段，保留项目内 field-rules 快照和文稿中的引用。
 
-1. 用 \`list\` 查找同一轮运行，复用稳定记录 ID。用 \`read <目录> <ID>\` 获取已有的字段、正文和 \`revision\`。发生日期采用项目时区的实际日期。
+1. 用 \`list\` 查找已有问题和试次，复用稳定记录 ID。用 \`read <目录> <ID>\` 获取已有的字段、正文和 \`revision\`。发生日期采用项目时区的实际日期。
 2. 用 \`batch <目录> --input <文件或 ->\` 提交 \`ifProjectRevision\` 和 \`records\`。前者取自 \`describe.revision\`。新记录提交 \`id\`、\`ifRevision: null\`、\`type\`、\`title\`、\`date\` 及所需属性。已有记录提交 \`id\`、\`read.revision\` 作为 \`ifRevision\`，以及要修改的内容。
 3. 新建时，省略已配置默认值的字段会使用默认值，省略 \`body\` 会套用模板。更新时，省略的字段和正文保留原值。要主动清除可选字段，在 \`fields\` 中把该字段设为 \`null\`。收到 \`RESEARCH_CONFLICT\` 后重新读取规则和相关记录，再合并重试。
 
@@ -748,4 +774,4 @@ ${reportWritingGuide}
 调整显示名称时沿用原 ID。字段的含义或单位变化时使用新 ID，并同步更新模板里的 \`{{field.<ID>}}\` 和视图的 \`fieldIds\`。配置保存后重新 \`describe\`，用 \`list\` 的 \`issues\` 检查历史记录，再按需用 \`batch\` 补录。项目规则放在配置的 \`instructions\`，项目协作流程可在这份 \`AGENTS.md\` 中维护。
 `;
 
-module.exports = { ResearchStore, phaseFilingGuide, reportWritingGuide, comparisonTableGuide };
+module.exports = { ResearchStore, reportWritingGuide, comparisonTableGuide };

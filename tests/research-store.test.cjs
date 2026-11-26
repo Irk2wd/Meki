@@ -61,6 +61,11 @@ test('describe gives a fresh agent the stage decision, latest summary and three 
   assert.deepEqual(phase.recentExperiments.map(item => item.id), ['d', 'c', 'b']);
   const guide = await fs.readFile(path.join(root, 'AGENTS.md'), 'utf8');
   assert.ok(guide.includes(describe.format.rules.phaseSelection));
+  for (const key of ['filing', 'continuation', 'title']) assert.ok(guide.includes(describe.format.rules[key]));
+  assert.match(describe.format.rules.filing, /更新论文全文.*跳过实验归档/);
+  assert.match(describe.format.rules.continuation, /待验证.*沿用记录 ID/);
+  assert.match(describe.format.rules.title, /检验的变量/);
+  assert.match(project.recordTypes.find(type => type.id === 'experiment').template, /试次 ID.*实验日期/);
   assert.ok(guide.includes(describe.format.rules.experimentReport));
   assert.match(describe.format.rules.experimentReport, /优先用 Markdown 表格/);
   for (const type of describe.project.recordTypes.filter(type => type.kind === 'entry' || type.kind === 'summary')) {
@@ -69,6 +74,30 @@ test('describe gives a fresh agent the stage decision, latest summary and three 
     assert.equal(headings.at(-1), '## 待验证');
     assert.match(type.template, /优先用 Markdown 表格/);
   }
+});
+
+test('older default filing rules can be upgraded without changing authored guidance or records', async t => {
+  const root = await projectFolder(t);
+  const project = structuredClone(exampleProject);
+  project.instructions = ['每个完成的运行写一条实验记录。以运行的实际日期和固定 ID 登记，记录场景、显卡和分辨率。', '本项目保留仪器自检日志。'];
+  const type = project.recordTypes[0];
+  type.template = '# {{title}}\n\n<!-- 同一问题的调参、换机位和补基线沿用原阶段。先写证据支持的发现和适用条件。缺少对照时写本轮实测值。 -->\n\n## 自定义仪器\n';
+  const store = await ResearchStore.initialize(root, project, exampleRecords);
+  const guide = path.join(root, 'AGENTS.md');
+  const old = '归档前先看 describe.phaseContext，按本轮要回答的问题选择已有阶段。调参、换机位、补基线或重跑仍服务于同一项判断时，沿用阶段 ID，为每轮实验单独记一条。研究要作的决定改变时再建阶段，在阶段说明中写明这次要判断什么。普通实验暂时找不到归属时，可先按日期记录，留待归类。';
+  await fs.writeFile(guide, '\uFEFF# mekiR 研究项目的 Agent 指引\r\n\r\n' + old + '\r\n\r\n本项目保留仪器自检日志。\r\n');
+  const before = await store.read('tile-culling');
+  const command = name => JSON.parse(require('node:child_process').execFileSync(process.execPath, [require.resolve('../electron/research-cli.cjs'), name, root]));
+  assert.deepEqual(command('describe').guidanceUpgrade.files, ['.mekir/project.json', 'AGENTS.md']);
+  assert.deepEqual(command('upgrade-guidance').files, ['.mekir/project.json', 'AGENTS.md']);
+  const updated = command('describe');
+  assert.equal(updated.guidanceUpgrade, undefined);
+  assert.equal(updated.project.instructions[1], project.instructions[1]);
+  assert.match(updated.project.recordTypes[0].template, /## 实验试次[\s\S]*## 自定义仪器/);
+  const text = await fs.readFile(guide, 'utf8');
+  assert.ok(text.startsWith('\uFEFF') && text.endsWith('本项目保留仪器自检日志。\r\n') && !/(?<!\r)\n/.test(text));
+  assert.deepEqual(command('upgrade-guidance').files, []);
+  assert.equal((await store.read('tile-culling')).revision, before.revision);
 });
 
 test('summary excerpts prefer the project’s conclusion field, then a conclusion section, then the first prose sentence', async t => {

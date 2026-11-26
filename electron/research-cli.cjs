@@ -5,7 +5,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { parseArgs } = require('node:util');
 const { projectToday, sortEntries, summaryCoversPhase } = require('./research-phases.mjs');
-const { ResearchStore, phaseFilingGuide, reportWritingGuide } = require('./research-store.cjs');
+const { ResearchStore, reportWritingGuide } = require('./research-store.cjs');
+const { phaseFilingGuide, recordFilingGuide, continuationGuide, titleGuide } = require('./research-guidance.cjs');
 const { MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, DOCUMENT_SCHEME, RECORDS, FIELD_TYPES, TEMPLATE_KEYS, RELATION_KINDS, RUN_FILTER_FIELDS, assert, date, id, comparisonType } = require('./research-model.cjs');
 const { comparisonLimits } = require('./research-comparison.mjs');
 const { createExampleProject } = require('./research-example.cjs');
@@ -16,6 +17,7 @@ const usage = `${PRODUCT_NAME} research projects
   init-demo <folder>
   init <folder> --input <project.json|->
   describe <folder>
+  upgrade-guidance <folder>
   list <folder> [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--phase ID] [--type ID]
                 [--query TERMS] [--month YYYY-MM] [--field FIELD=VALUE]... [--filter ID]
   read <folder> <record-id>
@@ -74,7 +76,7 @@ async function main(args) {
   });
   const [command, folder, documentId, ...extra] = positionals;
   if (!command || command === 'help' || values.help) { process.stdout.write(usage); return undefined; }
-  assert(['init-demo', 'init', 'describe', 'list', 'read', 'index', 'resolve', 'batch', 'configure', 'sources', 'bind-source', 'import-archive', 'save-filter'].includes(command), `Unknown command: ${command}. Run --help.`);
+  assert(['init-demo', 'init', 'describe', 'upgrade-guidance', 'list', 'read', 'index', 'resolve', 'batch', 'configure', 'sources', 'bind-source', 'import-archive', 'save-filter'].includes(command), `Unknown command: ${command}. Run --help.`);
   const needsId = ['read', 'index', 'resolve', 'bind-source', 'import-archive'].includes(command);
   assert(folder && !extra.length && Boolean(documentId) === needsId, needsId ? 'Provide the project folder and an ID.' : 'Provide the project folder.');
   const optionsByCommand = { list: ['from', 'to', 'phase', 'type', 'query', 'month', 'field', 'filter'], init: ['input'], batch: ['input'], configure: ['input'],
@@ -91,11 +93,14 @@ async function main(args) {
   }
   const store = await ResearchStore.open(root);
   assert(store, `Could not find ${MANIFEST} or ${LEGACY_MANIFEST} in ${root}.`);
+  if (command === 'upgrade-guidance') return store.upgradeGuidance();
   if (command === 'describe') {
     const { project, revision } = await store.manifest();
+    const { files } = await store.guidanceChanges({ project });
     const { items, problems } = await store.catalog(new Set(), undefined, new Map(project.recordTypes.map(type => [type.id, type])));
     return {
       root: store.root, revision, project, phaseContext: phaseContext(project, items), problems,
+      ...(files.length && { guidanceUpgrade: { files, command: 'upgrade-guidance', instructions: '项目使用了旧版内置归档规则。写入前运行 upgrade-guidance <项目目录>，再重新 describe。项目自订内容会保留。' } }),
       format: {
         manifest: store.manifestFile, recordPath: `${RECORDS}/r-<id>.md`,
         summaryPath: `${store.summaryPath ? SUMMARIES : RECORDS}/r-<id>.md`,
@@ -106,6 +111,9 @@ async function main(args) {
           guide: 'AGENTS.md in the project root, when present',
           instructions: 'project.instructions',
           phaseSelection: phaseFilingGuide,
+          filing: recordFilingGuide,
+          continuation: continuationGuide,
+          title: titleGuide,
           experimentReport: reportWritingGuide,
           excerpt: 'For entries and summaries, put a supported finding in the configured text conclusionField or the Conclusion/结论 section. list uses the first sentence of that field, then the conclusion, then the first available prose outside pending sections. Put open questions and missing comparisons under 待验证 or Open questions at the end.',
           recordTypes: 'Read project.recordTypes. Match record.type to the record type ID, then read its fields and template.',

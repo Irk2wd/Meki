@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { ResearchStore, comparisonTableGuide } = require('./research-store.cjs');
+const { exampleInstruction, experimentDescription, experimentPrompt, trialTable } = require('./research-guidance.cjs');
 
 const pendingSection = '## 待验证\n\n<!-- 在这里写尚未证实的解释、缺少的对照及验证方法。没有待验证事项时删去本节。 -->\n';
 
@@ -27,7 +28,7 @@ const exampleProject = {
   timezone: 'Asia/Shanghai',
   start: '2026-11-01',
   instructions: [
-    '每个完成的运行写一条实验记录。以运行的实际日期和固定 ID 登记，记录场景、显卡和分辨率。',
+    exampleInstruction,
     'GPU 帧时间使用毫秒。缺少有效测量时在正文解释原因，保留原始配置、日志或报告的相对链接。',
     '阶段总结写明确切的覆盖区间，引用作出判断所用的文档 ID。',
   ],
@@ -42,7 +43,7 @@ const exampleProject = {
   ],
   recordTypes: [
     {
-      id: 'experiment', label: '实验', kind: 'entry', description: '一条记录对应一次完整的渲染运行或一组共同测量。',
+      id: 'experiment', label: '实验', kind: 'entry', description: experimentDescription,
       fields: [
         { id: 'scene', label: '场景', type: 'text', required: true, description: '使用报告中的场景名。' },
         { id: 'gpu', label: '显卡', type: 'text', required: true, default: 'RTX 4080' },
@@ -54,7 +55,9 @@ const exampleProject = {
 
 ## 结论
 
-<!-- 同一问题的调参、换机位和补基线沿用原阶段。先写证据支持的发现和适用条件。缺少对照时写本轮实测值。 -->
+${experimentPrompt}
+
+${trialTable}
 
 ## 对照与依据
 
