@@ -321,7 +321,18 @@ try {
   assert.equal(await page.locator('.research-entry').count(), 1);
   const focus = page.locator('.research-phase-focus');
   assert.match(await focus.innerText(), /本阶段要判断什么[\s\S]*同轨迹/);
-  assert.equal(await focus.evaluate(el => el.nextElementSibling.matches('.research-progress')), true);
+  const stageDetail = page.getByRole('region', { name: '复测与验证', exact: true });
+  assert.equal(await stageDetail.evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
+  const progressSection = stageDetail.getByRole('region', { name: '最新进展', exact: true });
+  const evidenceSection = stageDetail.getByRole('region', { name: '结论依据', exact: true });
+  const experimentSection = stageDetail.getByRole('region', { name: /^实验记录/ });
+  assert.equal(await focus.evaluate(el => el.closest('header').nextElementSibling.matches('.research-progress')), true);
+  assert.equal(await evidenceSection.evaluate(el => el.previousElementSibling.matches('.research-progress')), true);
+  await evidenceSection.getByRole('heading', { name: '结论依据' }).waitFor();
+  assert.equal(await progressSection.locator('.research-sample-table').count(), 0);
+  for (const section of [progressSection, evidenceSection, experimentSection]) {
+    assert.equal(await section.evaluate(el => getComputedStyle(el).borderTopWidth), '1px');
+  }
   const recentExperiment = page.locator('.research-progress-latest [data-research-progress-link=forest-validation]');
   assert.equal(await page.locator('.research-entry-conclusion').textContent(), '开启遮挡剔除后，树林轨迹的 GPU 帧时间中位数为 11.4 ms。');
   assert.equal(await recentExperiment.locator('.research-progress-conclusion').textContent(),
@@ -1052,6 +1063,9 @@ try {
   assert.equal(commandAt(secondPeer.root, 'describe').project.description, '追踪论文的章节修改。');
   pass('a project without a description can add one from project settings');
   await page.locator('[data-research-phase=drafting]').click();
+  assert.equal(await page.getByRole('region', { name: '结论依据', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('region', { name: '可视化展示', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: '新建可视化展示', exact: true }).count(), 1);
   const paperEntry = page.locator('.research-entry').filter({ hasText: '方法章节修改' });
   assert.match(await paperEntry.locator('.research-entry-meta').innerText(), /章节 方法/);
   assert.doesNotMatch(await paperEntry.locator('.research-entry-meta').innerText(), /稿件版本/);

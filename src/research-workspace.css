@@ -423,6 +423,17 @@ body:not(.window-fitted) #window-caption + .research-shell > .research-column-di
 .research-phase-pages .icon-button { width: 27px; height: 27px; border: 1px solid var(--border); }
 
 .research-journal { padding-bottom: 17px; }
+.research-journal.research-stage-detail { margin-top: clamp(22px, 3cqi, 34px); padding: 0 0 12px; border: 0; border-radius: 0; background: transparent; }
+.research-stage-detail > header h2 { font-size: clamp(18px, 2.2cqi, 22px); }
+.research-stage-context { display: grid; gap: 12px; margin-top: 16px; }
+.research-stage-context > div { min-width: 0; overflow-wrap: anywhere; }
+.research-stage-context h3 { color: var(--soft); font-size: 12px; }
+.research-stage-context > div + div { padding-block-start: 12px; border-block-start: 1px solid var(--research-rule); }
+@container (min-width: 660px) {
+  .research-stage-context:has(> div + div) { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; }
+  .research-stage-context > div + div { padding: 0 0 0 22px; border-block-start: 0; border-inline-start: 1px solid var(--research-rule); }
+}
+:root[data-theme-background] .research-stage-detail > * { background-color: var(--bg); }
 .research-summary-lede { display: block; margin: 4px 0; color: var(--text); font-size: 13px; line-height: 1.65; }
 :root[data-paper-margins] :is(.research-content, .research-reader-open .document-scroll) {
   background-color: var(--bg);
@@ -433,12 +444,8 @@ body:not(.window-fitted) #window-caption + .research-shell > .research-column-di
 .research-overview .research-timeline-shortcuts { margin-inline-start: auto; gap: 3px; }
 .research-overview .research-timeline-shortcuts .secondary-button { padding: 6px 8px; gap: 5px; color: var(--soft); border: 0; border-radius: 7px; }
 .research-overview .research-timeline-shortcuts [data-research-new="entry"] { color: var(--accent); font-weight: 600; }
-.research-phase-focus { margin-block: 14px 10px; }
 .research-phase-focus p { max-inline-size: 76ch; margin: 5px 0 0; font-size: 15px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
-.research-phase-details { display: flex; flex-wrap: wrap; gap: 14px 26px; padding-block: 14px 5px; }
-.research-phase-details > div { flex: 1 1 250px; min-width: 0; overflow-wrap: anywhere; }
-.research-phase-details p { margin: 6px 0 0; white-space: pre-wrap; }
-.research-phase-details ul { margin: 6px 0 0; padding-inline-start: 19px; }
+.research-phase-details ul { margin: 5px 0 0; padding-inline-start: 19px; font-size: 13px; line-height: 1.6; }
 .research-phase-details li + li { margin-top: 4px; }
 .research-phase-details .research-goal-checklist { list-style: none; padding: 0; }
 .research-goal-checklist label { display: flex; align-items: baseline; gap: 6px; }
@@ -475,8 +482,20 @@ body:not(.window-fitted) #window-caption + .research-shell > .research-column-di
 :is(.research-phase-summaries, .research-indexed-files, .research-project-list) li button > svg { flex: 0 0 auto; color: var(--accent); }
 .research-phase-summaries li button > svg { color: var(--soft); }
 .research-summary-item { display: flex; align-items: center; gap: 4px; }
-.research-stage-create { margin-block: 10px; }
-.research-phase-summaries.research-progress { padding: 0; border: 0; background: transparent; }
+.research-stage-detail > .research-stage-section {
+  position: relative; margin: clamp(20px, 2.8cqi, 30px) 0 0; padding: 13px 0 0;
+  border: 0; border-top: 1px solid color-mix(in srgb, var(--text) 19%, var(--bg)); border-radius: 0; background: transparent;
+}
+.research-stage-section::before {
+  content: ''; position: absolute; inset-block-start: -1px; inset-inline-start: 0; width: 30px; height: 2px;
+  border-radius: 2px; background: var(--record-ink, var(--accent)); pointer-events: none;
+}
+.research-stage-section h3 { font-size: 15px; line-height: 1.45; }
+.research-stage-section > .research-record-filters { margin-top: 0; }
+.research-stage-section > ul { margin-top: 10px; }
+.research-stage-section:not(.research-progress) .research-summary-item > button[data-research-record] { border-color: transparent; background: transparent; }
+.research-stage-section:not(.research-progress) .research-summary-item > button[data-research-record]:is(:hover, :focus-visible) { background: var(--hover); }
+.research-stage-section .research-summary-item + .research-summary-item { padding-top: 5px; border-top: 1px solid var(--research-rule); }
 .research-progress .research-progress-latest > li {
   align-items: flex-start; padding: clamp(12px, 1.4vw, 20px);
   border-inline-start: 3px solid var(--record-ink); border-radius: 0 10px 10px 0;
@@ -490,7 +509,6 @@ body:not(.window-fitted) #window-caption + .research-shell > .research-column-di
 }
 .research-progress .research-progress-latest .research-summary-title { font-size: 12px; font-weight: 550; color: var(--record-ink); }
 .research-progress-latest button:hover .research-summary-title { text-decoration: underline; text-underline-offset: 3px; }
-.research-progress .research-progress-other { margin-top: 14px; }
 .research-progress-links, .research-progress-links details[open] > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .research-progress-links { margin-block-start: 5px; }
 .research-progress-links button, .research-progress-links summary { padding: 3px 0; color: var(--accent); font-size: 12px; cursor: pointer; }
@@ -758,8 +776,8 @@ body:not(.window-fitted) #window-caption + .research-shell > .research-column-di
 .research-peek-split #research-workspace .research-content { padding-inline: 12px; }
 .research-peek-split #research-workspace:has(.research-journal) :is(.research-timeline, .research-overview) { display: none; }
 .research-peek-split .research-journal { margin-top: 0; padding: 8px 5px; border: 0; }
-.research-peek-split .research-journal > .research-section-heading { align-items: start; }
-.research-peek-split .research-phase-summaries { padding-inline: 0; border: 0; border-top: 1px solid var(--research-rule); border-radius: 0; background: transparent; }
+.research-peek-split .research-journal > header .research-section-heading { align-items: start; }
+.research-peek-split .research-phase-summaries:not(.research-stage-section) { padding-inline: 0; border: 0; border-top: 1px solid var(--research-rule); border-radius: 0; background: transparent; }
 .research-peek-split .research-phase-summaries li > button[data-research-record] { border-color: transparent; }
 .research-peek-split .research-phase-summaries .secondary-button,
 .research-peek-split .research-journal .research-actions .secondary-button { border-color: transparent; color: var(--soft); }
