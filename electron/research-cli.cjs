@@ -23,6 +23,9 @@ const usage = `${PRODUCT_NAME} research projects
   read <folder> <record-id>
   search <folder> --query TEXT [--mode keyword|concept] [--format markdown|pptx|pdf|file]
                   [--phase ID] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--limit N]
+  smart-search <folder> --query TEXT [--phase ID] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--format markdown|pptx|pdf|file]
+  smart-config <folder> [--input <connection-and-scope.json|->]
+  smart-models <folder>
   sources <folder>
   bind-source <folder> <source-id> --path <local-folder> [--label <new-source-name>]
   index <folder> <document-id> --path <relative-file> [--source <source-id>] [--label <title>]
@@ -81,11 +84,12 @@ async function main(args) {
   });
   const [command, folder, documentId, ...extra] = positionals;
   if (!command || command === 'help' || values.help) { process.stdout.write(usage); return undefined; }
-  assert(['init-demo', 'init', 'describe', 'upgrade-guidance', 'list', 'search', 'read', 'index', 'resolve', 'batch', 'configure', 'sources', 'bind-source', 'import-archive', 'save-filter'].includes(command), `Unknown command: ${command}. Run --help.`);
+  assert(['init-demo', 'init', 'describe', 'upgrade-guidance', 'list', 'search', 'smart-search', 'smart-config', 'smart-models', 'read', 'index', 'resolve', 'batch', 'configure', 'sources', 'bind-source', 'import-archive', 'save-filter'].includes(command), `Unknown command: ${command}. Run --help.`);
   const needsId = ['read', 'index', 'resolve', 'bind-source', 'import-archive'].includes(command);
   assert(folder && !extra.length && Boolean(documentId) === needsId, needsId ? 'Provide the project folder and an ID.' : 'Provide the project folder.');
   const optionsByCommand = { list: ['from', 'to', 'phase', 'type', 'query', 'month', 'field', 'filter'], init: ['input'], batch: ['input'], configure: ['input'],
     search: ['query','mode','format','from','to','phase','limit'],
+    'smart-search': ['query','format','from','to','phase'], 'smart-config':['input'],
     index: ['path', 'source', 'label'], 'bind-source': ['path', 'label'], resolve: ['local'], 'import-archive': ['confirm'], 'save-filter': ['input', 'label'] };
   const allowedOptions = optionsByCommand[command] || [];
   for (const key of Object.keys(values)) assert(allowedOptions.includes(key), `--${key} is not used by ${command}.`);
@@ -116,6 +120,7 @@ async function main(args) {
         summaryPath: `${store.summaryPath ? SUMMARIES : RECORDS}/r-<id>.md`,
         ...(store.indexPath ? { index: INDEX, documentLink: `${DOCUMENT_SCHEME}<id>` } : {}),
         dateFormat: 'YYYY-MM-DD',
+        smartSearch: { command: 'smart-search <project> --query TEXT', settings: 'smart-config <project>', result: 'claims[].refs, tables[].rows[].cells[].ref, citations, gaps, status; partial/local means the external answer was incomplete.', measurements: 'project.search.measurements map a trial table field to a CSV header, explicit filters and statistic.' },
         search: { command: 'search <project> --query TEXT --mode keyword|concept', filters: ['--format','--phase','--from','--to','--limit'],
           result: 'Each result has a stable document or evidence ID and matched hits with original snippets. Markdown locators carry a body-relative line and anchor, trials also carry a trial ID and date, and PDF/PPTX pages are one-based. Inspect mode and warning if the local model is unavailable.',
           configuration: 'project.search.aliases maps terms to equivalent spellings. project.search.sourceIds optionally limits indexed read-only sources.' },
@@ -170,6 +175,18 @@ async function main(args) {
         },
       },
     };
+  }
+  if (command === 'smart-search' || command === 'smart-config' || command === 'smart-models') {
+    const preferences = require('./research-ai-settings.cjs');
+    if (command === 'smart-config' && values.input) return preferences.save(store, await readInput(values.input));
+    const state = await preferences.settings(store);
+    if (command === 'smart-config') return state;
+    const key = state.value ? preferences.envKey(state.value) : '';
+    if (command === 'smart-models') {
+      assert(state.value, 'Select a model provider first.');
+      return require('./research-ai-provider.cjs').listModels(state.value, key);
+    }
+    return require('./research-smart-search.cjs').smartSearch(store, values, state.value, key);
   }
   if (command === 'read') return store.read(documentId);
   if (command === 'resolve') {

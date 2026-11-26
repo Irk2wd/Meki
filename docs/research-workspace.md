@@ -42,6 +42,10 @@ Markdown 用 `fieldRules` 引用 `.mekir/field-rules/` 中按内容摘要命名�
 
 ## 项目搜索
 
+「智能检索」通过已选模型补查原始证据。桌面设置或 `smart-config <项目目录>` 选择模型、协议、端点及这个项目可以发送的来源。Agent 运行 `node electron/research-cli.cjs smart-search "<项目目录>" --query "<问题>"`。返回的 `claims`、`tables` 和 `gaps` 共用 `citations`。状态 `partial` 或 `local` 时，按实际取得的原文核对结果。CLI 使用当前服务商的环境变量，兼容网关使用 `MEKIR_AI_API_KEY`。Codex CLI 可复用自己的登录。设置存于本机。
+
+项目可在 `project.search.measurements` 登记实验表与原始证据的对应关系。每条规则给出试次表列名 `field`、CSV/TSV 数值列 `column`、按原表列名和值筛选的 `where`，以及 `statistic`（median、mean、min、max、value）。可用 `recordId` 或 `recordType` 限定适用记录。例如把步道试次的“三层中位数（ms）”映射到 `cpu_draw_and_png_ms`，按 `camera=trail` 和 `canopy_layers=3` 过滤后求中位数。使用该试次链接的 CSV 验证记录精度，成功后数字可打开参与计算的原始行。缺项保留原文。
+
 点击项目页右上角的「搜索项目」，选择关键词或概念。点击结果标题或片段会进入高亮的实验段落、试次表格行或报告页。「另外几处命中」可展开同一份资料里的其他位置。关闭预览后，重新打开搜索可以继续查看刚才的结果。
 
 项目搜索可以按关键词或概念查询实验、阶段总结、已登记的文稿和资料。关键词模式支持前缀和英文术语的拼写纠错。首次使用概念模式会下载量化的 multilingual-e5-small 模型，此后在本地进行检索。搜索结果显示命中片段，正文行号从研究记录的 Markdown 正文第一行开始，PPTX 和 PDF 页码从 1 开始。计时比较查询优先显示含指标和数值表格的命中。
