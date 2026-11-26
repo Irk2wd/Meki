@@ -86,7 +86,7 @@ export class ComparisonViewer {
     this.dialog.addEventListener('close', () => { if (!this.dialog.open) this.clear(); });
     this.dialog.addEventListener('wheel', event => {
       const tile = this.tileAt(event.target);
-      if (!tile?.image) return;
+      if (!tile?.image || event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
       event.preventDefault();
       const rect = tile.viewport.getBoundingClientRect();
       this.zoom(tile, Math.exp(clamp(-event.deltaY / 450, -1, 1)), event.clientX - rect.left - rect.width / 2,
@@ -147,11 +147,11 @@ export class ComparisonViewer {
         <button type="button" class="secondary-button" data-comparison-mode="pixels">${ht("1:1 原像素")}</button></div>
         <small data-grid-controls>${ht("滚轮缩放，拖动平移。同一行同步。")}</small>
         <button type="button" class="secondary-button" data-comparison-edit>${ht("编辑图注")}</button></div>
-      <div class="research-comparison-scroll"><table style="--comparison-columns:${columns.length}"><thead><tr><td></td>${columns.map(label => `<th scope="col">${escape(label)}</th>`).join('')}</tr></thead>
+      <div class="research-comparison-scroll"><table class="research-comparison-grid" style="--comparison-columns:${columns.length}"><thead><tr><td></td>${columns.map(label => `<th scope="col">${escape(label)}</th>`).join('')}</tr></thead>
         <tbody>${rows.map(({ label, images }) => `<tr><th scope="row">${escape(label)}</th>${images.map((image, column) =>
-          `<td><div class="research-comparison-image"${image ? ` data-image-evidence="${escape(image)}" tabindex="0" aria-label="${escape(`${label} · ${columns[column]}`)}"` : ''}>
-            <span>${image ? ht("正在读取原图…") : ht("未选择原图")}</span></div>${image ? `<button type="button" class="text-button" data-comparison-source="${escape(image)}">${ht("打开原图")}</button>` : ''}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
-      ${body.trim() ? `<section class="research-comparison-caption"><h3>${ht("图注")}</h3><div></div></section>` : ''}`;
+          `<td><div class="research-comparison-tile"><div class="research-comparison-image"${image ? ` data-image-evidence="${escape(image)}" tabindex="0" aria-label="${escape(`${label} · ${columns[column]}`)}"` : ''}>
+            <span>${image ? ht("正在读取原图…") : ht("未选择原图")}</span></div>${image ? `<button type="button" class="text-button" data-comparison-source="${escape(image)}">${ht("打开原图")}</button>` : ''}</div></td>`).join('')}</tr>`).join('')}</tbody></table>
+      ${body.trim() ? `<section class="research-comparison-caption"><h3>${ht("图注")}</h3><div></div></section>` : ''}</div>`;
     const caption = this.dialog.querySelector('.research-comparison-caption > div');
     if (caption) caption.innerHTML = DOMPurify.sanitize(renderMarkdown(body).html);
     this.dialog.querySelector('[data-comparison-close]')!.addEventListener('click', () => this.dialog.close());
@@ -166,21 +166,30 @@ export class ComparisonViewer {
     for (const button of this.dialog.querySelectorAll<HTMLButtonElement>('[data-comparison-source]')) {
       button.addEventListener('click', () => { void actions.evidence(button.dataset.comparisonSource!, button).catch(actions.error); });
     }
-    const grid = this.dialog.querySelector<HTMLElement>('.research-comparison-scroll')!;
+    const gallery = this.dialog.querySelector<HTMLElement>('.research-comparison-scroll')!;
+    const grid = gallery.querySelector<HTMLElement>('.research-comparison-grid')!;
+    let gridPosition = { top: 0, left: 0 };
     let wipe: HTMLElement | undefined;
+    let rowPicker: HTMLSelectElement | undefined;
     const layouts = this.dialog.querySelectorAll<HTMLButtonElement>('[data-comparison-layout]');
     for (const button of layouts) button.addEventListener('click', () => {
       const sliding = button.dataset.comparisonLayout === 'wipe';
+      if (grid.hidden === sliding) return;
+      if (sliding) gridPosition = { top: gallery.scrollTop, left: gallery.scrollLeft };
       if (sliding && !wipe) {
         wipe = evidenceWipe([{ title: record.title, comparison: record.comparison! }], {
           read: id => window.meki.openResearchEvidence(root, id), open: actions.evidence, error: actions.error,
         });
         grid.after(wipe);
+        rowPicker = wipe.querySelector<HTMLSelectElement>('[data-wipe-row]')!;
+        this.dialog.querySelector('[data-comparison-edit]')!.before(rowPicker);
       }
       if (wipe) wipe.hidden = !sliding;
+      if (rowPicker) rowPicker.hidden = !sliding;
       grid.hidden = sliding;
       this.dialog.querySelectorAll<HTMLElement>('[data-grid-controls]').forEach(control => { control.hidden = sliding; });
       layouts.forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+      gallery.scrollTo(sliding ? { top: 0, left: 0 } : gridPosition);
     });
     this.dialog.showModal();
     const loads = new Map<string, Promise<ResearchEvidenceFile>>();
@@ -192,8 +201,8 @@ export class ComparisonViewer {
         if (!loads.has(tile.evidence)) loads.set(tile.evidence, window.meki.openResearchEvidence(root, tile.evidence));
         void this.load(tile, loads.get(tile.evidence)!);
       }
-    }, { root: this.dialog.querySelector('.research-comparison-scroll') });
-    this.rows = [...this.dialog.querySelectorAll('.research-comparison-scroll tbody tr')].map(element => {
+    }, { root: gallery });
+    this.rows = [...grid.querySelectorAll('tbody tr')].map(element => {
       const row: ImageRow = { mode: 'fit', zoom: 1, x: 0.5, y: 0.5, tiles: [] };
       for (const viewport of element.querySelectorAll<HTMLElement>('[data-image-evidence]')) {
         const tile = { viewport, row, evidence: viewport.dataset.imageEvidence! };
@@ -227,6 +236,7 @@ export class ComparisonViewer {
       await image.decode();
       if (this.tiles.get(tile.viewport) !== tile) return;
       tile.image = image;
+      tile.viewport.parentElement!.style.setProperty('--comparison-aspect', String(image.naturalWidth / image.naturalHeight));
       tile.viewport.replaceChildren(image);
       this.paint(tile);
     } catch {

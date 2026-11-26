@@ -1,12 +1,17 @@
-.research-wipe { margin: 0; min-width: 0; }
+.research-wipe {
+  --wipe-aspect: calc(16 / 9);
+  --wipe-max-height: min(52vh, 490px);
+  margin: 0; min-width: 0;
+}
 .research-wipe figcaption, .research-wipe-labels, .research-wipe-labels > div {
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 5px 12px;
 }
 .research-wipe figcaption { margin-bottom: 9px; }
 .research-wipe figcaption strong { font-size: 14px; }
-.research-wipe select { max-width: 100%; padding: 4px 6px; border-radius: 5px; border: 1px solid var(--border); color: var(--text); background: var(--bg); }
+.research-wipe select, .research-comparison-toolbar [data-wipe-row] { max-width: 100%; padding: 4px 6px; border-radius: 5px; border: 1px solid var(--border); color: var(--text); background: var(--bg); }
 .research-wipe-stage { --wipe-split: 50%; position: relative; display: grid; place-items: center; overflow: hidden; isolation: isolate;
-  aspect-ratio: var(--wipe-aspect, 1.78); max-height: min(52vh, 490px); width: 100%; background: var(--side); border-radius: 9px; }
+  width: min(100%, calc(var(--wipe-max-height) * var(--wipe-aspect)));
+  aspect-ratio: var(--wipe-aspect); margin-inline: auto; background: var(--side); border-radius: 9px; }
 .research-wipe-image { position: absolute; inset: 0; padding: 0; width: 100%; height: 100%; cursor: zoom-in; }
 .research-wipe-image img { width: 100%; height: 100%; display: block; object-fit: contain; pointer-events: none; }
 .research-wipe-image[data-wipe-side="left"] { clip-path: inset(0 calc(100% - var(--wipe-split)) 0 0); background: var(--side); }
@@ -17,7 +22,7 @@
 .research-wipe-divider span { position: relative; display: flex; align-items: center; justify-content: center; height: 30px; width: 30px; border-radius: 50%; background: #fff; box-shadow: 0 1px 5px #0005; }
 .research-wipe-divider:focus-visible { outline: none; }
 .research-wipe-divider:focus-visible span { outline: 3px solid var(--accent); outline-offset: 2px; }
-.research-wipe-labels { margin-top: 5px; color: var(--soft); font-size: 11px; }
+.research-wipe-labels { width: min(100%, max(260px, var(--wipe-max-height) * var(--wipe-aspect))); margin: 5px auto 0; color: var(--soft); font-size: 11px; }
 .research-wipe-status { max-width: 85%; text-align: center; color: var(--soft); }
 .research-inline-comparisons { margin: 24px 0 28px; background: var(--bg); font: 13px/1.5 var(--ui); white-space: normal; letter-spacing: normal; }
 .research-inline-comparisons .research-wipe { margin: 0; }

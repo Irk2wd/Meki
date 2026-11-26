@@ -110,7 +110,7 @@ export function evidenceWipe(reports: WipeReport[], actions: WipeActions, positi
         status.textContent = t("两张原图的宽高比不同，请分别打开原图。");
         return;
       }
-      stage.style.setProperty('--wipe-aspect', String(ratios[0]));
+      figure.style.setProperty('--wipe-aspect', String(ratios[0]));
       sides.forEach((side, i) => {
         side.setAttribute('aria-label', t("打开原图 · {0}", images[i].alt));
         side.title = side.getAttribute('aria-label')!;

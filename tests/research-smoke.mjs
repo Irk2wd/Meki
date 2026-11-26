@@ -1186,9 +1186,10 @@ try {
   const imageIds = ['mesh-canopy', 'ours-canopy', 'mesh-trunk', 'ours-trunk'];
   const images = await page.evaluate(() => ['#47779c', '#3d7658', '#42607e', '#366b67'].map((color, index) => {
     const canvas = document.createElement('canvas');
-    canvas.width = 640; canvas.height = 400;
+    canvas.width = index < 2 ? 640 : 400;
+    canvas.height = index < 2 ? 400 : 640;
     const context = canvas.getContext('2d');
-    context.fillStyle = color; context.fillRect(0, 0, 640, 400);
+    context.fillStyle = color; context.fillRect(0, 0, canvas.width, canvas.height);
     context.fillStyle = '#c5d8a1'; context.fillRect(70 + index * 14, 90, 300, 180);
     context.fillStyle = '#1e3746'; context.fillRect(10, 10, 80, 35);
     return canvas.toDataURL().split(',')[1];
@@ -1208,13 +1209,24 @@ try {
   await dialog.getByLabel('第 1 列', { exact: true }).fill('普通 Mesh');
   await dialog.getByLabel('第 2 列', { exact: true }).fill('Ours');
   for (let index = 0; index < imageIds.length; index++) await dialog.locator('[data-grid-image]').nth(index).fill(imageIds[index]);
-  await dialog.getByLabel('图注（Markdown）').fill('**同一机位**使用相同分辨率。');
+  const captionNotes = Array.from({ length: 10 }, (_, i) => `第 ${i + 1} 轮复测使用同一组相机。`);
+  await dialog.getByLabel('图注（Markdown）').fill(['**同一机位**使用相同分辨率。', ...captionNotes].join('\n\n'));
   await dialog.getByRole('button', { name: '保存展示', exact: true }).click();
   const comparison = page.locator('#research-comparison-dialog');
   await comparison.getByRole('heading', { name: '双机位 Mesh 对比', exact: true }).waitFor();
   await comparison.locator('.research-comparison-caption strong').getByText('同一机位').waitFor();
   const imagesInView = comparison.locator('.research-comparison-image img');
   await imagesInView.nth(3).waitFor();
+  const fitFrames = await imagesInView.evaluateAll(images => images.map(image => {
+    const frame = image.parentElement.getBoundingClientRect();
+    const column = image.closest('td').clientWidth;
+    const galleryHeight = image.closest('.research-comparison-scroll').clientHeight;
+    return { width: frame.width, height: frame.height, column, galleryHeight, ratio: image.naturalWidth / image.naturalHeight };
+  }));
+  for (const frame of fitFrames) {
+    assert.ok(Math.abs(frame.width - frame.ratio * frame.height) < 1, JSON.stringify(frame));
+    assert.ok(frame.width >= frame.column * .95 || frame.height >= frame.galleryHeight * .75, JSON.stringify(frame));
+  }
   const comparisonWindow = await app.browserWindow(page);
   const previousSize = await comparisonWindow.evaluate(win => win.getContentSize());
   await comparisonWindow.evaluate(win => win.setContentSize(780, 480));
@@ -1222,14 +1234,25 @@ try {
   const compactGrid = await comparison.evaluate(dialog => {
     const grid = dialog.querySelector('.research-comparison-scroll');
     grid.scrollTop = grid.scrollHeight;
-    const source = grid.querySelector('tr:last-child td:last-child [data-comparison-source]').getBoundingClientRect();
+    const visible = grid.getBoundingClientRect();
+    const lastNote = grid.querySelector('.research-comparison-caption p:last-child').getBoundingClientRect();
+    const lastSource = grid.querySelector('tr:last-child td:last-child [data-comparison-source]');
+    lastSource.scrollIntoView({ block: 'nearest' });
+    const source = lastSource.getBoundingClientRect();
     const box = dialog.getBoundingClientRect();
     return { top: box.top, bottomGap: innerHeight - box.bottom, titlebar: navigator.windowControlsOverlay?.getTitlebarAreaRect().bottom || 0,
-      outerOverflow: dialog.scrollHeight - dialog.clientHeight, scrolled: grid.scrollTop, lastImageReachable: source.bottom <= grid.getBoundingClientRect().bottom + 1 };
+      outerOverflow: dialog.scrollHeight - dialog.clientHeight, scrolled: grid.scrollTop, galleryHeight: visible.height,
+      captionReachable: lastNote.top >= visible.top - 1 && lastNote.bottom <= visible.bottom + 1, lastImageReachable: source.top >= visible.top - 1 && source.bottom <= visible.bottom + 1 };
   });
   assert.ok(compactGrid.top >= compactGrid.titlebar - 1 && compactGrid.bottomGap > 0, JSON.stringify(compactGrid));
-  assert.ok(compactGrid.outerOverflow <= 1 && compactGrid.scrolled > 0 && compactGrid.lastImageReachable, JSON.stringify(compactGrid));
-  await comparison.locator('.research-comparison-scroll').evaluate(grid => { grid.scrollTop = 0; });
+  assert.ok(compactGrid.outerOverflow <= 1 && compactGrid.galleryHeight > 240 && compactGrid.scrolled > 0 && compactGrid.captionReachable && compactGrid.lastImageReachable, JSON.stringify(compactGrid));
+  const comparisonGallery = comparison.locator('.research-comparison-scroll');
+  await comparison.locator('[data-comparison-layout="wipe"]').click();
+  await comparison.getByRole('slider').waitFor();
+  assert.equal(await comparisonGallery.evaluate(node => node.scrollTop), 0);
+  await comparison.locator('[data-comparison-layout="grid"]').click();
+  assert.equal(await comparisonGallery.evaluate(node => node.scrollTop), compactGrid.scrolled);
+  await comparisonGallery.evaluate(node => { node.scrollTop = 0; });
   await comparisonWindow.evaluate((win, size) => win.setContentSize(...size), previousSize);
   await page.waitForFunction(([w, h]) => innerWidth === w && innerHeight === h &&
     [...document.querySelectorAll('#research-comparison-dialog .research-comparison-image img')].every(image => {
@@ -1269,6 +1292,7 @@ try {
   const divider = comparison.getByRole('slider', { name: '图像对比分界线' });
   await divider.waitFor();
   const stage = await comparison.locator('.research-wipe-stage').boundingBox();
+  assert.ok(Math.abs(stage.width - stage.height * 640 / 400) < 1);
   await page.mouse.move(stage.x + stage.width / 2, stage.y + stage.height / 2);
   await page.mouse.down();
   await page.mouse.move(stage.x + stage.width * 0.7, stage.y + stage.height / 2, { steps: 5 });
@@ -1278,6 +1302,8 @@ try {
   await comparison.locator('[data-wipe-row]').selectOption('1');
   const trunkImage = comparison.locator('[data-wipe-side="left"]');
   await trunkImage.getByAltText('mesh-trunk.png').waitFor();
+  const portraitStage = await comparison.locator('.research-wipe-stage').boundingBox();
+  assert.ok(Math.abs(portraitStage.width - portraitStage.height * 400 / 640) < 1);
   await trunkImage.click({ position: { x: 20, y: 30 } });
   await tools.locator('img[alt="mesh-trunk.png"]').waitFor();
   await tools.getByRole('button', { name: '返回对比' }).click();
@@ -1331,6 +1357,8 @@ try {
   }));
   await inline.locator('[data-wipe-row]').selectOption('1');
   await inline.locator('[data-wipe-side="right"] img[alt="ours-trunk.png"]').waitFor();
+  const inlinePortrait = await inline.locator('.research-wipe-stage').boundingBox();
+  assert.ok(Math.abs(inlinePortrait.width - inlinePortrait.height * 400 / 640) < 1);
   await inline.getByRole('slider').press('Home');
   await inline.locator('[data-wipe-side="right"]').click();
   await inspector.getByRole('button', { name: '返回正文' }).click();
