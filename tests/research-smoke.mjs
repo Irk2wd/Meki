@@ -980,7 +980,8 @@ try {
   await timelineView.click();
   assert.deepEqual(await phaseOrder(), secondPage);
   assert.equal(await pageNumber.innerText(), '第 2 页，共 4 页');
-  await page.locator('.research-timeline').screenshot({ path: path.join(folder, 'timeline-pagination.png'), animations: 'disabled' });
+  await phasePager.scrollIntoViewIfNeeded();
+  await page.locator('.research-content').screenshot({ path: path.join(folder, 'timeline-pagination.png'), animations: 'disabled' });
   await previousPage.click();
   assert.deepEqual(await phaseOrder(), firstPage);
   for (let i = 0; i < 3; i++) await nextPage.click();

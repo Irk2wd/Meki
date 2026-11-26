@@ -8,11 +8,15 @@ async function readWindows(profile) {
   const store = new FileStore(profile), history = new LifecycleStore(store);
   for (let attempt = 0; ; attempt++) {
     const windows = new WindowSessions(store, history);
-    await windows.init();
-    if (!windows.corrupt) return windows.records;
-    // A running application may replace the catalog and prune its old body while
-    // this independent test reader is loading it. Retry against the new catalog.
-    if (attempt === 4) throw Error(windows.warning);
+    // The running app can replace the catalog during its first stat or prune
+    // an old body during the read. Each attempt checks the whole snapshot.
+    try {
+      await windows.init();
+      if (windows.corrupt) throw new Error(windows.warning);
+      return windows.records;
+    } catch (error) {
+      if (attempt === 4) throw error;
+    }
     await new Promise(resolve => setTimeout(resolve, 5));
   }
 }
