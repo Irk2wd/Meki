@@ -9,7 +9,7 @@ import subprocess
 import zipfile
 from pathlib import Path, PurePosixPath
 
-EDITIONS = {'Meki': ('main', 'v'), 'mekiR': ('research', 'mekir-v')}
+EDITIONS = {'Meki': ('main', 'v'), 'mekiR': ('meki-research-dev', 'mekir-v')}
 PART = r'(?:0|[1-9][0-9]{0,5})'
 RELEASE_TAG = re.compile(rf'(mekir-)?v({PART}\.{PART}\.{PART})')
 RELEASE_METADATA = (
@@ -74,6 +74,13 @@ def has_changes(product, commit, released):
     if previous == commit:
         return False
     paths = [':(exclude)' + name for name in RELEASE_METADATA]
+    # Only the branch-name correction in the packaged 1.5.5 README is release housekeeping.
+    if product == 'mekiR' and released[product] == '1.5.5':
+        original = subprocess.check_output(['git', 'show', f'{previous}:README.md'])
+        renamed = original.replace(b'`research`', b'`meki-research-dev`', 1)
+        blob = subprocess.check_output(['git', 'hash-object', '--stdin'], input=renamed).decode().strip()
+        if git('ls-tree', commit, '--', 'README.md') == f'100644 blob {blob}\tREADME.md':
+            paths.append(':(exclude)README.md')
     status = subprocess.run(['git', 'diff', '--quiet', '--no-ext-diff', previous, commit, '--', '.', *paths]).returncode
     if status not in (0, 1):
         raise RuntimeError(f'Could not compare {product} with {tag}.')
