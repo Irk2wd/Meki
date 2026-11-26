@@ -101,7 +101,7 @@ async function refreshIndex(db, docs) {
   const problems = [];
   for (const doc of docs.values()) {
     const previous = before.get(doc.id);
-    if (previous?.stamp === doc.stamp) {
+    if (previous?.stamp === doc.stamp && (!previous.problem || !doc.read)) {
       if (previous.problem) problems.push({ id: doc.id, message: previous.problem });
       continue;
     }

@@ -32,7 +32,12 @@ async function stageRuntime(output) {
     if (key === 'pdf' || key === 'xml') {
       const dest = path.dirname(target);
       await fs.promises.cp(path.dirname(source(key)), dest, { recursive: true });
-      if (key === 'xml') await fs.promises.writeFile(path.join(dest, 'package.json'), '{"type":"commonjs"}');
+      // Keep package-local imports resolvable when the application ships without node_modules.
+      const metadata = key === 'pdf' ? {
+        name: 'unpdf', type: 'module', exports: { './pdfjs': './pdfjs.mjs' },
+        imports: { '#pdfjs-decoders': './pdfjs-decoders.mjs' },
+      } : { type: 'commonjs' };
+      await fs.promises.writeFile(path.join(dest, 'package.json'), JSON.stringify(metadata));
     } else await fs.promises.copyFile(source(key), target);
   }
 }

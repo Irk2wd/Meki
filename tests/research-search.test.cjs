@@ -53,3 +53,16 @@ test('paragraph anchors retain repeated paragraphs and table units; report extra
   const bytes=await fs.readFile(path.join(__dirname,'../electron/research-example/forest-briefing.pptx'));
   assert.deepEqual((await reportPassages('pptx',bytes)).map(p=>[p.locator.page,p.strength]),[[1,0],[2,0],[3,2]]);
 });
+
+test('the distributed PDF extractor runs outside node_modules', async t => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mekir-distribution-'));
+  t.after(() => fs.rm(temp, { recursive: true, force: true }));
+  const { stageRuntime } = require('../electron/research-search-runtime.cjs');
+  await stageRuntime(temp);
+  const { pathToFileURL } = require('node:url');
+  const api = await import(pathToFileURL(path.join(temp, 'search-runtime', 'pdf', 'index.mjs')).href);
+  const bytes = await fs.readFile(path.join(__dirname, '../electron/research-example/forest-observations.pdf'));
+  const document = await api.getDocumentProxy(new Uint8Array(bytes));
+  try { assert.equal(document.numPages, 2); }
+  finally { await document.loadingTask.destroy(); }
+});
