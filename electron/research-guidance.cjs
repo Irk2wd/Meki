@@ -1,5 +1,8 @@
 'use strict';
 
+const localSearchGuide = '查过去如何验证一个问题，用 `search <项目目录> --query "研究问题" --mode concept`。已知术语或运行编号时用 `--mode keyword`。用 `--format pptx` 或 `--format pdf` 查汇报和报告，用 `--phase`、`--from`、`--to` 限定实验时段。结果的 ID、正文段落或页码可用于核对原文。';
+const smartSearchGuide = '要跨试次核对基线、复测与报告时，用 `smart-search <项目目录> --query "研究问题"`。通过 `smart-config <项目目录>` 读取本机选定的模型和资料范围。用 `claims[].refs` 和表格单元格的 `ref` 查 `citations`，按文档 ID、页码或原表行号核对原文。`partial` 与 `local` 返回本轮可用的本地证据，缺项保留为待补。';
+
 const phaseFilingGuide = '用 describe.phaseContext 找到本次研究决定所属的阶段。一个阶段可以容纳多个具体问题。只有研究要作的决定改变时才建阶段。';
 const recordFilingGuide = '先判断这次工作提供了什么研究证据。用已确认的数据更新论文全文、重绘已有图表、排版或按既定流程做例行检查，默认跳过实验归档。若作者作出新的采用决定，可在依据记录上关联论文版本并说明原因。项目明确要求跟踪写作时，使用该项目指定的记录类型。';
 const continuationGuide = '写入前用 list --phase 查已有记录，再用 read 读最相关的正文和「待验证」。调参、换机位、重复测量或补基线仍在回答同一个具体问题时，沿用记录 ID，在原文的试次表追加日期、改变的条件、观察结果和证据链接，再更新开头的结论。相同试次 ID 重试时更新原行。换会话、跨日期和新 run 目录都可以继续同一条记录。只有出现可以独立判断的新问题，才在原阶段新建记录。无效、持平和反例同样是研究证据。';
@@ -20,6 +23,7 @@ function upgradeGuideText(text) {
   if (!text.replace(/^\uFEFF/, '').startsWith('# mekiR 研究项目的 Agent 指引')) return text;
   const newline = text.includes('\r\n') ? '\r\n' : '\n';
   const section = filingSection.replaceAll('\n', newline);
+  if (!text.includes('smart-search <项目目录>')) text = text.replace(localSearchGuide,localSearchGuide+newline.repeat(2)+smartSearchGuide);
   const oldLookup = '查找同一轮运行，复用稳定记录 ID。';
   if (!text.includes(previousPhaseGuide) && !text.includes(phaseFilingGuide) && text.includes(oldLookup)) {
     text = text.replace('## 写入记录', '## 这次工作是否归档，写进哪份实验' + newline.repeat(2) + section + newline.repeat(2) + '## 写入记录');
@@ -43,5 +47,5 @@ function upgradeProjectRules(project) {
   return updated.instructions === project.instructions && updated.recordTypes.every((type, i) => type === project.recordTypes[i]) ? project : updated;
 }
 
-module.exports = { phaseFilingGuide, recordFilingGuide, continuationGuide, titleGuide, trialGuide, filingSection, trialTable,
+module.exports = { localSearchGuide, smartSearchGuide, phaseFilingGuide, recordFilingGuide, continuationGuide, titleGuide, trialGuide, filingSection, trialTable,
   exampleInstruction, experimentDescription, experimentPrompt, upgradeGuideText, upgradeProjectRules };

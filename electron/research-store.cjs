@@ -19,7 +19,7 @@ const {
   relationshipIssues, fieldIssues, validateChange, parseMarkdown, formatMarkdown, fileName, templateBody,
 } = require('./research-model.cjs');
 
-const { filingSection, upgradeGuideText, upgradeProjectRules } = require('./research-guidance.cjs');
+const { localSearchGuide, smartSearchGuide, filingSection, upgradeGuideText, upgradeProjectRules } = require('./research-guidance.cjs');
 const { readTrialLog } = require('./research-trials.cjs');
 
 const MAX_JSON_BYTES = 512 * 1024;
@@ -745,7 +745,9 @@ const projectGuide = `# mekiR 研究项目的 Agent 指引
 
 ## 读取当前项目
 
-查过去如何验证一个问题，用 \`search <项目目录> --query "研究问题" --mode concept\`。已知术语或运行编号时用 \`--mode keyword\`。用 \`--format pptx\` 或 \`--format pdf\` 查汇报和报告，用 \`--phase\`、\`--from\`、\`--to\` 限定实验时段。结果的 ID、正文段落或页码可用于核对原文。
+${localSearchGuide}
+
+${smartSearchGuide}
 
 每批写入前先运行 \`node "<mekiR 源码目录>/electron/research-cli.cjs" describe "<项目根目录>"\`。读取 \`project.instructions\`，按 \`project.recordTypes\` 中的 ID 选择记录类型，再使用该类型的字段和模板。项目可以各自定义实验、分析、写作记录或总结。
 
