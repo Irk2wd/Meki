@@ -1624,11 +1624,15 @@ try {
   pass('timeline legend, phase rows and selection stay fixed while panning past today and the last visible event');
 
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(520, 760));
-  await page.waitForFunction(() => getComputedStyle(document.querySelector('.research-legend-events')).borderBlockStartWidth === '1px');
-  assert.equal(await eventLegend.evaluate(node => getComputedStyle(node).borderInlineStartWidth), '0px');
-  const [stackedMarkers, stackedEvents] = await Promise.all([markerLegend.boundingBox(), eventLegend.boundingBox()]);
-  assert.equal(stackedEvents.x, stackedMarkers.x);
-  assert.ok(stackedEvents.y > stackedMarkers.y + stackedMarkers.height);
+  await page.waitForFunction(() => {
+    const markers = document.querySelector('.research-legend-markers');
+    const events = document.querySelector('.research-legend-events');
+    if (!markers || !events) return false;
+    const style = getComputedStyle(events);
+    const upper = markers.getBoundingClientRect(), lower = events.getBoundingClientRect();
+    return style.borderBlockStartWidth === '1px' && style.borderInlineStartWidth === '0px'
+      && lower.left === upper.left && lower.top > upper.bottom;
+  });
   assert.equal(await legend.innerHTML(), legendContents);
   await legend.screenshot({ path: path.join(folder, 'timeline-legend-narrow.png'), animations: 'disabled' });
   pass('timeline markers and custom events switch from a vertical divider to stacked groups in narrow layouts');
