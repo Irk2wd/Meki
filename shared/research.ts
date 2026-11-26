@@ -12,6 +12,7 @@ export interface ResearchSearchQuery {
   to?: string;
 }
 export type ResearchSearchLocator = { kind: 'document' } | { kind: 'page'; page: number } |
+  { kind: 'cells'; rows: number[]; column: number; revision: string } |
   { kind: 'paragraph' | 'trial'; line: number; heading: string; anchor: string; occurrence: number; trialId?: string; date?: string };
 export interface ResearchSearchHit { locator: ResearchSearchLocator; snippet: string; dataTable: boolean }
 export interface ResearchSearchDocument { id: string; title: string; format: ResearchSearchFormat; hits: ResearchSearchHit[] }
@@ -107,6 +108,7 @@ export interface ResearchEvidenceFile {
   content?: string;
   mime?: string;
   bytes?: Uint8Array;
+  revision?: string;
 }
 
 export interface ResearchImportRun {
@@ -139,7 +141,8 @@ export interface ResearchProject {
   defaultView: string;
   evidenceSources?: ResearchSource[];
   savedFilters?: SavedResearchFilter[];
-  search?: { aliases?: Record<string, string[]>; sourceIds?: string[] };
+  search?: { aliases?: Record<string, string[]>; sourceIds?: string[];
+    measurements?: Array<{ recordId?: string; recordType?: string; field: string; column: string; where: Record<string,string>; statistic: 'median'|'mean'|'min'|'max'|'value' }> };
 }
 
 export interface ResearchComparison {

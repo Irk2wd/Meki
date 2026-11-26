@@ -152,7 +152,22 @@ function validateField(rule, typeId) {
 function validateProject(project) {
   object(project, 'project', ['version', 'id', 'title', 'description', 'timezone', 'start', 'phaseGoals', 'instructions', 'phases', 'recordTypes', 'views', 'defaultView', 'evidenceSources', 'savedFilters', 'search']);
   if (project.search !== undefined) {
-    object(project.search, 'project.search', ['aliases', 'sourceIds']);
+    object(project.search, 'project.search', ['aliases', 'sourceIds', 'measurements']);
+    if (project.search.measurements !== undefined) {
+      array(project.search.measurements, 'search.measurements', 96);
+      for (const rule of project.search.measurements) {
+        object(rule, 'measurement', ['recordId','recordType','field','column','where','statistic']);
+        if (rule.recordId !== undefined) id(rule.recordId, 'measurement.recordId');
+        if (rule.recordType !== undefined) id(rule.recordType, 'measurement.recordType');
+        for (const key of ['field','column']) string(rule[key], 'measurement.'+key, { limit:160 });
+        assert(['median','mean','min','max','value'].includes(rule.statistic), 'Unknown measurement statistic.');
+        object(rule.where, 'measurement.where');
+        array(Object.keys(rule.where), 'measurement filters', 16);
+        for (const [key,val] of Object.entries(rule.where)) {
+          string(key, 'source column', { limit:160 }); string(val, 'source value', { limit:160 });
+        }
+      }
+    }
     if (project.search.sourceIds !== undefined) {
       listOfIds(project.search.sourceIds, 'search.sourceIds', 100);
       assert(project.search.sourceIds.every(id => project.evidenceSources?.some(s => s.id === id)), 'Unknown search source ID.');

@@ -4,45 +4,9 @@ const pageSize = 50;
 const columnPageSize = 32;
 const numberCell = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?%?$/i;
 
-// Index logical records without retaining every cell of a large timing log.
-function scanRows(text: string, delimiter: string, start: number,
-  onRow: (next: number, width: number) => boolean,
-  onField?: (column: number, start: number, end: number) => void) {
-  let fieldStart = start, column = 0, quoted = false;
-  for (let i = start; i <= text.length; i++) {
-    const char = text[i];
-    if (char === '"' && (quoted || i === fieldStart)) {
-      if (quoted && text[i + 1] === '"') i++;
-      else quoted = !quoted;
-      continue;
-    }
-    if (i < text.length && (quoted || (char !== delimiter && char !== '\r' && char !== '\n'))) continue;
-    if (i === text.length && i === fieldStart && column === 0) return;
-    onField?.(column, fieldStart, i);
-    column++;
-    if (char !== delimiter) {
-      if (char === '\r' && text[i + 1] === '\n') i++;
-      if (!onRow(i + 1, column)) return;
-      column = 0;
-    }
-    fieldStart = i + 1;
-  }
-}
-
-function readRows(text: string, delimiter: string, offset: number, skip: number, count: number, startColumn: number, columns: number) {
-  let cells: string[] = [];
-  const rows: string[][] = [];
-  scanRows(text, delimiter, offset, () => {
-    if (skip > 0) skip--;
-    else { rows.push(cells); cells = []; }
-    return rows.length < count;
-  }, (column, start, end) => {
-    if (skip || column < startColumn || column >= startColumn + columns) return;
-    const field = text.slice(start, end);
-    cells.push(field.startsWith('"') && field.endsWith('"') ? field.slice(1, -1).replace(/""/g, '"') : field);
-  });
-  return rows;
-}
+import { readRows, scanRows } from '../electron/research-delimited.mjs';
+import type { ResearchSearchLocator } from '../shared/research';
+type CellLocation = Extract<ResearchSearchLocator, { kind: 'cells' }>;
 
 export function sampleTable(text: string, delimiter: string) {
   return readRows(text, delimiter, 0, 0, 5, 0, 4);
@@ -64,7 +28,7 @@ function indexTable(text: string, delimiter: string) {
   return { height, width, read };
 }
 
-export function showEvidenceTable(body: HTMLElement, text: string, delimiter: string, title: string) {
+export function showEvidenceTable(body: HTMLElement, text: string, delimiter: string, title: string, location?: CellLocation) {
   const model = indexTable(text, delimiter);
   if (!model.height) {
     const empty = document.createElement('p');
@@ -89,7 +53,9 @@ export function showEvidenceTable(body: HTMLElement, text: string, delimiter: st
   table.setAttribute('aria-label', title);
   const heading = body.querySelector('input')!;
   const pager = body.querySelector('nav')!;
-  let page = 0, columnPage = 0;
+  const selected = new Set(location?.rows);
+  let page = location ? Math.floor((location.rows[0] - 1) / pageSize) : 0;
+  let columnPage = location ? Math.floor((location.column - 1) / columnPageSize) : 0;
 
   function navigation(group: HTMLElement, current: number, total: number, label: string, change: (to: number) => void) {
     group.hidden = total <= 1;
@@ -118,12 +84,17 @@ export function showEvidenceTable(body: HTMLElement, text: string, delimiter: st
     }
     table.tHead!.replaceChildren(head);
     const fragment = document.createDocumentFragment();
-    for (const values of rows) {
+    for (const [index, values] of rows.entries()) {
       const row = document.createElement('tr');
       for (let i = 0; i < last - first; i++) {
         const cell = row.insertCell();
         cell.textContent = values[i] ?? '';
         if (numberCell.test(cell.textContent)) cell.className = 'number';
+        const sourceRow = headerRows + page * pageSize + index;
+        if (location && selected.has(sourceRow) && first + i + 1 === location.column) {
+          cell.setAttribute('data-research-search-target', '');
+          cell.dataset.sourceRow = String(sourceRow);
+        }
       }
       fragment.append(row);
     }
@@ -136,4 +107,5 @@ export function showEvidenceTable(body: HTMLElement, text: string, delimiter: st
   }
   heading.onchange = () => { page = 0; render(); };
   render();
+  if (location) requestAnimationFrame(() => body.querySelector('[data-research-search-target]')?.scrollIntoView({block:'center', inline:'center'}));
 }

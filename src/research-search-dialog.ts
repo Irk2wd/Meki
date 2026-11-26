@@ -9,6 +9,7 @@ type OpenHit = (doc: ResearchSearchDocument, hit: ResearchSearchHit) => Promise<
 
 function location(hit: ResearchSearchHit) {
   const loc = hit.locator;
+  if (loc.kind === 'cells') return t("原始计时行 {0}", loc.rows.join(', '));
   if (loc.kind === 'page') return t("第 {0} 页", loc.page);
   if (loc.kind === 'document') return t("文档标题");
   return loc.trialId ? [loc.date, loc.trialId].filter(Boolean).join(' · ') : loc.heading || t("正文第 {0} 行", loc.line);

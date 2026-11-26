@@ -1,4 +1,6 @@
 {
+  "原始计时行 {0}": "Source rows {0}",
+  "计时文件已变化，请重新检索以定位数值。": "The source table has changed. Search again to locate the values.",
   "搜索项目": "Search project",
   "搜索内容": "Search terms",
   "搜索实验、汇报或研究问题": "Find experiments, reports or research questions",

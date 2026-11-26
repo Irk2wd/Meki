@@ -52,7 +52,7 @@ interface EvidenceTab {
   viewport: HTMLElement; scroll?: { left: number; top: number };
 }
 
-function evidenceContent(file: ResearchEvidenceFile) {
+function evidenceContent(file: ResearchEvidenceFile, locator?: ResearchSearchLocator) {
   const body = document.createElement('div');
   body.className = 'research-evidence-content';
   if (file.kind === 'image') {
@@ -61,7 +61,7 @@ function evidenceContent(file: ResearchEvidenceFile) {
     image.alt = file.title;
     body.append(image);
   } else if (file.kind === 'csv' || file.kind === 'tsv') {
-    showEvidenceTable(body, file.content ?? '', file.kind === 'tsv' ? '\t' : ',', file.title);
+    showEvidenceTable(body, file.content ?? '', file.kind === 'tsv' ? '\t' : ',', file.title, locator?.kind === 'cells' && file.revision === locator.revision ? locator : undefined);
   } else {
     const text = document.createElement(file.kind === 'text' ? 'pre' : 'p');
     text.textContent = file.content ?? t("可在原目录中查看此文件。");
@@ -494,7 +494,8 @@ export class ResearchTools {
       this.selectEvidenceTab(tab, false);
     } else {
       this.show(markup, 'research-evidence-preview');
-      const body = evidenceContent(file);
+      const body = evidenceContent(file, locator);
+      if (locator?.kind === 'cells' && file.revision !== locator.revision) this.notify(t("计时文件已变化，请重新检索以定位数值。"));
       this.dialog.querySelector('.research-evidence-content')!.replaceWith(body);
       if (locator?.kind === 'paragraph' || locator?.kind === 'trial') revealEvidenceLine(body, locator);
       this.dialog.querySelector('[data-evidence-reveal]')!.addEventListener('click', reveal);
