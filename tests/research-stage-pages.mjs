@@ -12,7 +12,8 @@ export async function checkStagePages({ page, command, open, closeReader, archiv
     views: [{ id: 'timeline', label: '时间线', layout: 'timeline', order: 'newest' }], defaultView: 'timeline',
   });
   command('bind-source', ['figures', '--path', archive, '--label', '图像']);
-  command('index', ['canopy-frame', '--source', 'figures', '--path', path.relative(archive, image)]);
+  const imagePath = path.relative(archive, image).split(path.sep).join('/');
+  command('index', ['canopy-frame', '--source', 'figures', '--path', imagePath]);
   for (const [kind, count] of Object.entries({ entry: 82, summary: 24, comparison: 13, event: 12 })) {
     command('batch', [], { records: Array.from({ length: count }, (_, i) => {
       const number = String(i + 1).padStart(2, '0');
