@@ -89,6 +89,9 @@ body:not(.window-fitted) #window-caption + .research-shell > .research-column-di
 }
 .research-nav-list button span, .research-nav-bottom button span { overflow-wrap: anywhere; }
 #research-sidebar button[aria-current="page"] { background: color-mix(in srgb, var(--surface) 86%, var(--accent-soft)); color: var(--text); font-weight: 600; }
+#research-sidebar [data-research-destination][aria-current="page"] > svg {
+  border-radius: 4px; color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .research-nav-label { margin: 8px 10px 4px; color: var(--soft); font: 550 var(--ui-caption-size)/1.6 var(--ui); }
 .research-phase-shelf > summary { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 3px 10px; list-style: none; border-radius: 5px; color: var(--soft); cursor: pointer; font-size: var(--ui-small-size); }
 .research-phase-shelf > summary::-webkit-details-marker { display: none; }
@@ -415,6 +418,16 @@ body:not(.window-fitted) #window-caption + .research-shell > .research-column-di
   pointer-events: auto;
 }
 .research-timeline-event:focus-visible { z-index: 4; }
+button.research-timeline-event {
+  --record-ink: var(--research-event-ink);
+  border-color: color-mix(in srgb, var(--record-ink) 24%, var(--bg));
+  background: color-mix(in srgb, var(--record-ink) 6%, var(--bg));
+}
+button.research-timeline-comparison { --record-ink: var(--research-comparison-ink); }
+button.research-timeline-event[data-latest-event] {
+  background: color-mix(in srgb, var(--record-ink) 13%, var(--bg));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--record-ink) 11%, transparent);
+}
 .research-timeline-event svg { flex: none; }
 .research-timeline-event small { color: var(--soft); font-size: var(--ui-caption-size); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .research-timeline-footer :is(.research-page-options, .research-phase-pages) { color: var(--soft); font-size: var(--ui-caption-size); }
@@ -504,6 +517,61 @@ body:not(.window-fitted) #window-caption + .research-shell > .research-column-di
 .research-progress .research-progress-latest li > button:first-child { align-items: center; padding: 0; border: 0; background: transparent; }
 .research-progress .research-progress-latest li > button:first-child > svg { color: var(--record-ink); }
 .research-finding-kind { display: inline-flex; align-items: center; gap: 6px; color: var(--record-ink); font: 600 var(--ui-caption-size)/1.4 var(--ui); }
+:is(.research-finding-kind, .research-proof-open) > .research-kind-mark {
+  position: relative; justify-content: center; width: 22px; height: 22px; border-radius: 7px;
+  background: color-mix(in srgb, var(--record-ink) 9%, var(--bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--record-ink) 19%, transparent);
+}
+.research-finding-kind > .research-kind-mark {
+  width: 26px; height: 26px; border-radius: 8px;
+  background: color-mix(in srgb, var(--record-ink) 14%, var(--bg));
+}
+
+/* The light travels around a cut-out rim; the glyph and its hit target stay still. */
+@property --research-edge-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 32deg;
+}
+@keyframes research-edge-turn { to { --research-edge-angle: 392deg; } }
+button.research-timeline-event::after,
+:is(.research-finding-kind, .research-proof-open) > .research-kind-mark::after {
+  content: ''; position: absolute; inset: 0; padding: 1.5px; border-radius: inherit; pointer-events: none;
+  background: conic-gradient(from var(--research-edge-angle), transparent 0turn .50turn,
+    color-mix(in srgb, var(--record-ink) 30%, transparent) .65turn, var(--record-ink) .83turn,
+    color-mix(in srgb, var(--record-ink) 35%, white) .92turn, var(--record-ink) .95turn, transparent 1turn);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: var(--research-edge-opacity, 0);
+}
+button.research-timeline-event::after { inset: -1px; }
+button.research-timeline-event[data-latest-event], .research-finding-kind > .research-kind-mark {
+  --research-edge-opacity: 1;
+  --research-edge-animation: research-edge-turn 5.6s linear infinite;
+}
+button.research-timeline-event:not([data-latest-event]):focus-visible,
+.research-proof-open:focus-visible > .research-kind-mark {
+  --research-edge-opacity: 1;
+  --research-edge-animation: research-edge-turn 950ms ease-out;
+}
+@media (hover: hover) {
+  button.research-timeline-event:not([data-latest-event]):hover,
+  .research-proof-open:hover > .research-kind-mark {
+    --research-edge-opacity: 1;
+    --research-edge-animation: research-edge-turn 950ms ease-out;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  button.research-timeline-event::after, :is(.research-finding-kind, .research-proof-open) > .research-kind-mark::after {
+    animation: var(--research-edge-animation, none);
+    transition: opacity 160ms ease-out;
+  }
+}
+@media (forced-colors: active) {
+  button.research-timeline-event::after, :is(.research-finding-kind, .research-proof-open) > .research-kind-mark::after {
+    animation: none; transition: none; padding: 0; border: 2px solid Highlight; background: none; mask: none;
+  }
+}
 .research-progress .research-progress-latest .research-progress-conclusion {
   max-inline-size: 68ch; margin: 6px 0 8px; font: 600 calc(clamp(16px, 1.3vw, 20px) * var(--ui-scale))/1.5 var(--ui); color: var(--text);
 }

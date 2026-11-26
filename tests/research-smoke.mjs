@@ -1591,6 +1591,9 @@ try {
   const selectedPhase = baseline.locator('[data-research-phase]');
   await selectedPhase.click();
   assert.equal(await selectedPhase.getAttribute('aria-pressed'), 'true');
+  const latestMarker = page.locator('.research-timeline-event[data-latest-event]');
+  assert.equal(await latestMarker.getAttribute('data-research-timeline-events'), 'follow-up');
+  assert.equal(await followUp.getAttribute('aria-description'), '本阶段最近事件');
   await ruler.scrollIntoViewIfNeeded();
   const axisTop = (await ruler.boundingBox()).y;
   const positions = () => phases.evaluateAll(rows => rows.map(row => {
@@ -1603,6 +1606,7 @@ try {
   assert.ok((await rangeButton.getAttribute('data-end')) < '2026-11-18');
   assert.equal(await todayLine.count(), 0);
   assert.equal(await followUp.count(), 0);
+  assert.equal(await latestMarker.count(), 0);
   assert.equal(await legend.innerHTML(), legendContents);
   assert.equal((await ruler.boundingBox()).y, axisTop);
   assert.deepEqual(await phaseOrder(), orderBeforePan);
@@ -1611,6 +1615,7 @@ try {
   assert.equal(await page.locator('#research-journal-title').innerText(), '基线测量');
   await week.click();
   await followUp.waitFor();
+  assert.equal(await latestMarker.getAttribute('data-research-timeline-events'), 'follow-up');
   assert.ok(await todayLine.count());
   assert.equal(await legend.innerHTML(), legendContents);
   assert.deepEqual(errors, []);
@@ -1636,6 +1641,8 @@ try {
   const firstEvent = ongoingRow.getByRole('button', { name: '打开事件 复测讨论', exact: true });
   const nextEvent = ongoingRow.getByRole('button', { name: '打开事件 次日审阅', exact: true });
   await combined.waitFor();
+  await ongoingRow.locator('[data-research-phase]').click();
+  assert.equal(await latestMarker.getAttribute('data-research-timeline-events'), 'adjacent-meeting adjacent-review');
   assert.equal(await combined.locator('svg').count(), 1);
   assert.equal(await combined.locator('small').innerText(), '+1');
   await combined.click();
@@ -1658,6 +1665,8 @@ try {
   await firstEvent.waitFor();
   await nextEvent.waitFor();
   assert.equal(await combined.count(), 0);
+  assert.equal(await latestMarker.getAttribute('data-research-timeline-events'), 'adjacent-review');
+  assert.equal(await nextEvent.evaluate(el => getComputedStyle(el, '::after').animationIterationCount), 'infinite');
   assert.ok(await motion.evaluate(probe => ['adjacent-meeting', 'adjacent-review'].every(id => probe.calls.includes(id))));
   await ongoingRow.screenshot({ path: path.join(folder, 'timeline-events-split.png'), animations: 'disabled' });
   const [firstBox, nextBox] = await Promise.all([firstEvent.boundingBox(), nextEvent.boundingBox()]);
@@ -1683,6 +1692,11 @@ try {
   for (let i = 0; i < 6 && !await combined.count(); i++) await zoomOut.click();
   await combined.waitFor();
   assert.equal(await motion.evaluate(probe => probe.calls.length), animationsBeforeZoom);
+  assert.equal(await latestMarker.getAttribute('data-research-timeline-events'), 'adjacent-meeting adjacent-review');
+  assert.deepEqual(await latestMarker.evaluate(el => {
+    const edge = getComputedStyle(el, '::after');
+    return [edge.animationName, edge.opacity, edge.pointerEvents];
+  }), ['none', '1', 'none']);
   await motion.evaluate(probe => probe.restore());
   await motion.dispose();
   pass('adjacent event dates merge without extra rows, split on resize or zoom, and honor reduced motion');

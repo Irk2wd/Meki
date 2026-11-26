@@ -6,6 +6,7 @@ import { recordKind, recordMark } from './research-record-mark';
 export interface TimelineEventDay {
   point: number;
   entries: ResearchEntry[];
+  latest: boolean;
 }
 
 interface Placement {
@@ -84,7 +85,7 @@ function placeMarkers(days: TimelineEventDay[], glyphs: string[][], width: numbe
   return placed;
 }
 
-function eventMarker(entries: ResearchEntry[], glyphs: string[], left: number) {
+function eventMarker(entries: ResearchEntry[], glyphs: string[], left: number, latest: boolean) {
   const first = entries[0].record;
   const last = entries[entries.length - 1].record;
   const dates = first.date === last.date ? first.date : `${first.date} – ${last.date}`;
@@ -93,9 +94,11 @@ function eventMarker(entries: ResearchEntry[], glyphs: string[], left: number) {
     ? comparisons ? ht("打开可视化展示 {0}", escape(first.title)) : ht("打开事件 {0}", escape(first.title))
     : comparisons ? ht("{0} 的 {1} 条可视化展示", dates, entries.length) : ht("{0} 的 {1} 个事件", dates, entries.length);
   const key = entries.map(({ record }) => record.id).join(' ');
+  const description = latest ? ht("本阶段最近事件") : '';
   return `<button type="button" class="research-timeline-event${comparisons ? ' research-timeline-comparison' : ''}"
     style="left:${left}px" data-research-timeline-events="${escape(key)}" data-date="${escape(dates)}"
-    ${entries.length > 1 || comparisons ? 'aria-haspopup="dialog"' : ''} aria-label="${label}" title="${label}">
+    ${description ? `data-latest-event aria-description="${description}"` : ''}
+    ${entries.length > 1 || comparisons ? 'aria-haspopup="dialog"' : ''} aria-label="${label}" title="${description ? `${label} · ${description}` : label}">
     ${symbols(glyphs, entries.length - glyphs.length)}</button>`;
 }
 
@@ -161,8 +164,9 @@ export class TimelineEventLayout {
       })).values()].slice(0, 2));
       const placed = placeMarkers(days, glyphs, width, measure);
       layer.innerHTML = placed.map(({ first, last, left }) => {
-        const entries = days.slice(first, last + 1).flatMap(day => day.entries);
-        return eventMarker(entries, first === last ? glyphs[first] : glyphs[first].slice(0, 1), left);
+        const cluster = days.slice(first, last + 1);
+        return eventMarker(cluster.flatMap(day => day.entries), first === last ? glyphs[first] : glyphs[first].slice(0, 1),
+          left, cluster.some(day => day.latest));
       }).join('');
       animateMarkers(layer, placed, before, width);
       if (focusKey) timelineEventButton(layer, focusKey)?.focus({ preventScroll: true });

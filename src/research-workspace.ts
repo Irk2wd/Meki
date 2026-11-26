@@ -180,6 +180,7 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
   const ticks = [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(start + (end - start) * i / 4)))];
   const tickPosition = (day: number) => (day - start + .5) * 100 / span;
   const ordered = rankPhases(phases, entries, today, [...types.values()], progressByPhase);
+  const focusPhase = activePhase || ordered[0]?.phase.id;
   const selectedIndex = revealPhase ? ordered.findIndex(({ phase }) => phase.id === revealPhase) : -1;
   const limit = pageSize ?? Math.max(1, ordered.length);
   const pageCount = Math.max(1, Math.ceil(ordered.length / limit));
@@ -209,14 +210,17 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
     }).join('');
     const phaseEvents = eventsByPhase.get(phase.id) || [];
     const groups = new Map<string, ResearchEntry[]>();
+    let latestEventDate = '';
     for (const event of phaseEvents) {
-      if (!containsDay(range, event.record.date)) continue;
-      const group = groups.get(event.record.date);
+      const { date } = event.record;
+      if (phase.id === focusPhase && date <= today && date > latestEventDate) latestEventDate = date;
+      if (!containsDay(range, date)) continue;
+      const group = groups.get(date);
       if (group) group.push(event);
-      else groups.set(event.record.date, [event]);
+      else groups.set(date, [event]);
     }
     if (groups.size) eventDays.set(phase.id, [...groups].sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, entries]) => ({ point: position(date, 0.5) / 100, entries: entries.sort(sortEntries) })));
+      .map(([date, entries]) => ({ point: position(date, 0.5) / 100, entries: entries.sort(sortEntries), latest: date === latestEventDate })));
     const left = Math.max(0, position(span.start)), right = Math.max(0, 100 - position(span.end, 1));
     const status = group === 'ongoing' ? ht("进行中") : group === 'ended' ? ht("已结束") : ht("未开始");
     const progress = update?.excerpt || update?.record.title || phase.description;
@@ -1310,7 +1314,7 @@ export class ResearchWorkspace {
       }
     }
     if (table) cards.push(`<article class="research-proof-card research-proof-table" data-record-kind="file">
-      <button type="button" class="research-proof-open" data-research-progress-link="${escape(table.id)}">${icon('table', 16)}<strong>${escape(table.title)}</strong>${icon('chevron', 14)}</button>
+      <button type="button" class="research-proof-open" data-research-progress-link="${escape(table.id)}">${recordMark('file', 16, 'table')}<strong>${escape(table.title)}</strong>${icon('chevron', 14)}</button>
       <div class="research-sample-table" data-research-sample="${escape(table.id)}"></div></article>`);
     const links = refs.filter(file => !featuredComparisons.has(file.id) && file !== table && file.id !== trial?.record.id).map(file => {
       const item = entries.get(file.id)?.record;
