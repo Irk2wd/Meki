@@ -71,6 +71,7 @@ document.querySelector('#app')!.innerHTML = `
     <header class="research-reader-header">
       <div class="research-reader-identity">
         ${button('research-reader-back', ht("返回研究列表"), 'back')}
+        <span id="research-reader-mark" aria-hidden="true"></span>
         <div class="research-reader-heading"><span id="research-reader-context"></span><h2 id="research-reader-title" tabindex="-1"></h2></div>
       </div>
       <div class="research-reader-utilities"><button type="button" id="research-field-toggle" aria-haspopup="dialog" hidden>${icon('list', 15)}<span>${ht("字段口径")}</span></button><button type="button" id="research-reference-toggle" aria-expanded="false" aria-controls="research-reader-related" hidden>${icon('link', 15)}<span>${ht("证据与关联")}</span>${icon('down', 12)}</button></div>
@@ -282,6 +283,7 @@ function updateStatus() {
     researchFieldToggle.hidden = !label?.hasFields;
     researchUI.selectReaderItem(label?.id, label?.linkedProject);
     el('#research-reader-title').textContent = label?.title || current.name;
+    el('#research-reader-mark').innerHTML = label?.mark || '';
     el('#research-reader-context').textContent = [label?.context || t("资料"), dirty() ? t("未保存") : ''].filter(Boolean).join(' · ');
     const back = el<HTMLButtonElement>('[data-action="research-reader-back"]');
     const backLabel = previousResearchStep() ? t("返回上一份文档") : t("返回研究列表");

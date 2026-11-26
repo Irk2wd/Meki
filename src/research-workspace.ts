@@ -11,7 +11,8 @@ import type { EditorView } from '@milkdown/kit/prose/view';
 import { TimelineEventLayout, timelineEventButton, type TimelineEventDay } from './research-timeline-events';
 import { adjustDays, brushDays, datesForDays, dayNumber, isoDay, shiftRange, timelineOverview, type RangeHandle, type TimelineWindow } from './research-timeline-range';
 import { reportReferences } from './research-report-links';
-import { escapeResearch as escape, fieldRuleDetails, fieldValue, relationLabels, researchOption as option, ResearchTools, runFields, timelineIcon, type ResearchWidths } from './research-tools';
+import { recordKind, recordMark } from './research-record-mark';
+import { escapeResearch as escape, fieldRuleDetails, fieldValue, relationLabels, researchOption as option, ResearchTools, runFields, type ResearchWidths } from './research-tools';
 import './research-workspace.css';
 
 const errorText = (error: unknown) => String(error).replace(/^Error: (?:Error invoking remote method '[^']+': Error: )?/, '');
@@ -183,10 +184,10 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
   const pageCount = Math.max(1, Math.ceil(ordered.length / limit));
   const page = selectedIndex >= 0 ? Math.floor(selectedIndex / limit) + 1 : Math.max(1, Math.min(requestedPage, pageCount));
   const usedTypes = new Set(phases.flatMap(phase => (eventsByPhase.get(phase.id) || []).map(({ record }) => record.type)));
-  const legendKey = (glyph: string, label: string) => `<span class="research-key-event">${icon(glyph, 13)}${escape(label)}</span>`;
+  const legendKey = (type?: ResearchType) => `<span class="research-key-event">${recordMark(type?.kind ?? 'comparison', 13, type?.icon)}${escape(type?.label || t("可视化展示"))}</span>`;
   const eventKeys = new Set([...types.values()].filter(type => usedTypes.has(type.id))
-    .map(type => legendKey(timelineIcon(type), type.label)));
-  if ([...usedTypes].some(id => !types.has(id))) eventKeys.add(legendKey(timelineIcon(undefined, true), t("可视化展示")));
+    .map(legendKey));
+  if ([...usedTypes].some(id => !types.has(id))) eventKeys.add(legendKey());
   const eventDays = new Map<string, TimelineEventDay[]>();
   const phaseRows = ordered.slice((page - 1) * limit, page * limit).map(({ phase, span, group, latest, assigned, update }) => {
     const activity = new Map<string, ResearchEntry[]>();
@@ -218,10 +219,11 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
     const left = Math.max(0, position(span.start)), right = Math.max(0, 100 - position(span.end, 1));
     const status = group === 'ongoing' ? ht("进行中") : group === 'ended' ? ht("已结束") : ht("未开始");
     const progress = update?.excerpt || update?.record.title || phase.description;
+    const updateType = update && types.get(update.record.type);
     return `<div class="research-timeline-row" data-status="${group}">
       <button type="button" class="research-timeline-label" data-research-phase="${phase.id}" aria-pressed="${activePhase === phase.id}">
         <strong>${escape(phase.title)} <span class="research-phase-status${group === 'ongoing' ? ' research-phase-ongoing' : ''}">${status}</span></strong>
-        ${progress ? `<span class="research-phase-progress" title="${escape(progress)}">${escape(progress)}</span>` : ''}
+        ${progress ? `<span class="research-phase-progress" title="${escape(progress)}">${update ? recordMark(recordKind(updateType, update.record), 12, updateType?.icon) : ''}${escape(progress)}</span>` : ''}
         <small class="research-phase-facts"><span>${escape(phaseDates(phase, today, true))} · ${ht("{0} 条实验", assigned.length)}</span>${latest ? `<span>${ht("最近进展 {0}", escape(formatDay(dayNumber(latest), latest.slice(0, 4) !== today.slice(0, 4))))}</span>` : ''}</small></button>
       <div class="research-timeline-track" data-research-track${fullRange ? '' : ' data-research-pan'}${phaseEvents.length ? ' data-research-has-events' : ''}>${overlaps(span, range) ? `<i aria-hidden="true" class="research-timeline-bar" style="--left:${left}%;--right:${right}%"></i>` : ''}${dots}
         ${groups.size ? `<div class="research-timeline-events" data-phase="${phase.id}"></div>` : ''}</div>
@@ -638,7 +640,7 @@ export class ResearchWorkspace {
     const phase = state.project.phases.find(item => item.id === entry?.phaseId);
     const type = state.project.recordTypes.find(item => item.id === entry?.type);
     const sourceProject = this.snapshot?.root !== state.root ? state.project.title : '';
-    return { id: reference.id, linkedProject: sourceProject ? state.project.id : '', hasFields: Boolean(entry && Object.keys(entry.fields).length), title: reference.title, context: [sourceProject, phase?.title, type?.label || t("资料"), entry?.date,
+    return { id: reference.id, linkedProject: sourceProject ? state.project.id : '', mark: recordMark(recordKind(type, entry), 16, type?.icon), hasFields: Boolean(entry && Object.keys(entry.fields).length), title: reference.title, context: [sourceProject, phase?.title, type?.label || t("资料"), entry?.date,
       entry?.run?.missing.includes('RUN.md') ? t("待补报告") : ''].filter(Boolean).join(' · ') };
   }
 
@@ -1055,8 +1057,11 @@ export class ResearchWorkspace {
     const phases = state ? rankPhases(state.project.phases, state.records, this.renderedDay, state.project.recordTypes) : [];
     const listed = new Set(reading ? [...this.content.querySelectorAll<HTMLButtonElement>(peekItems)].map(item => item.dataset.researchRecord) : []);
     const stageRecords = listed.size && state ? `<div class="research-nav-records">${state.records.filter(item => listed.has(item.record.id))
-      .sort((a, b) => sortEntries(b, a)).map(({ record }) => `<button type="button" data-research-stage-record="${escape(record.id)}"
-      title="${escape(record.title)}"${this.readerItem === '/' + record.id ? ' aria-current="page"' : ''}>${escape(record.title)}</button>`).join('')}</div>` : '';
+      .sort((a, b) => sortEntries(b, a)).map(({ record }) => {
+        const type = state.project.recordTypes.find(item => item.id === record.type);
+        return `<button type="button" data-research-stage-record="${escape(record.id)}"
+          title="${escape(record.title)}"${this.readerItem === '/' + record.id ? ' aria-current="page"' : ''}>${recordMark(recordKind(type, record), 13, type?.icon)}${escape(record.title)}</button>`;
+      }).join('')}</div>` : '';
     const shelves = (['ongoing', 'ended', 'upcoming'] as const).map(status => {
       const items = phases.filter(item => item.group === status);
       if (!items.length) return '';
@@ -1234,7 +1239,7 @@ export class ResearchWorkspace {
   private renderPhaseEvents(entries: ResearchEntry[], types: Map<string, ResearchType>) {
     if (!entries.length) return '';
     return `<section class="research-phase-summaries"><h3>${ht("阶段事件")}</h3><ul>${entries.map(({ record }) =>
-      `<li class="research-summary-item"><button type="button" data-research-record="${record.id}">${icon(timelineIcon(types.get(record.type)), 17)}
+      `<li class="research-summary-item"><button type="button" data-research-record="${record.id}">${recordMark('event', 17, types.get(record.type)?.icon)}
       <span><strong>${escape(record.title)}</strong><small>${record.date} · ${escape(types.get(record.type)?.label || record.type)}</small></span>${icon('chevron', 14)}</button>
       <button type="button" class="icon-button research-summary-properties" data-research-edit="${record.id}" aria-label="${ht("编辑记录属性")}" title="${ht("编辑记录属性")}">${icon('settings', 15)}</button></li>`).join('')}</ul></section>`;
   }
@@ -1247,9 +1252,12 @@ export class ResearchWorkspace {
     const row = (entry: ResearchEntry, featured = false) => {
       const { record, excerpt } = entry;
       const isExperiment = entry === experiment;
-      return `<li class="research-summary-item">
+      const type = state.project.recordTypes.find(type => type.id === record.type);
+      const kind = recordKind(type, record);
+      return `<li class="research-summary-item" data-record-kind="${kind}">
       <button type="button" ${isExperiment ? 'data-research-progress-link' : 'data-research-record'}="${record.id}">
-        ${icon(isExperiment ? 'page' : 'report', 18)}<span>${featured && excerpt ? `<strong class="research-progress-conclusion">${escape(excerpt)}</strong>` : ''}
+        ${featured ? '' : recordMark(kind, 17, type?.icon)}<span>${featured ? `<span class="research-finding-kind">${recordMark(kind, 15, type?.icon)}${escape(type?.label || record.type)}</span>` : ''}
+          ${featured && excerpt ? `<strong class="research-progress-conclusion">${escape(excerpt)}</strong>` : ''}
           <strong class="research-summary-title">${escape(record.title)}</strong>
           ${!featured && excerpt ? `<span class="research-summary-lede">${escape(excerpt)}</span>` : ''}
           <small class="research-summary-dates">${record.coverage ? `<span>${ht("覆盖 {0}", escape(rangeText(record.coverage)))}</span>` : ''}<span>${isExperiment ? ht("实验日期 {0}", latestActivity(entry, '', today)) : ht("撰写于 {0}", escape(record.date))}</span></small></span>${icon('chevron', 14)}</button>
@@ -1294,7 +1302,7 @@ export class ResearchWorkspace {
     return `<section class="research-phase-summaries" aria-labelledby="research-linked-summaries-title">
       <h3 id="research-linked-summaries-title">${ht("跨项目总结")}</h3>
       <ul>${entries.map(({ project, record }) => `<li><button type="button" data-research-record="${record.id}" data-research-linked-project="${project.id}">
-        ${icon('report', 18)}<span><strong>${escape(record.title)}</strong>
+        ${recordMark('summary', 18)}<span><strong>${escape(record.title)}</strong>
         <small>${ht("原项目 {0}", escape(project.title))} · ${ht("撰写于 {0}", escape(record.date))}${record.coverage ? ` · ${ht("覆盖 {0}", escape(rangeText(record.coverage)))}` : ''}</small></span>${icon('chevron', 14)}</button></li>`).join('')}</ul>
     </section>`;
   }
@@ -1384,8 +1392,8 @@ export class ResearchWorkspace {
           .filter(id => Object.hasOwn(record.fields, id) && (!view?.fieldIds || view.fieldIds.includes(id)));
         const sources = [...new Set([...(record.sources || []), ...(record.evidence || [])])].filter(id => titles.has(id));
         return `<li class="research-entry">
-          <div class="research-entry-title"><span class="research-entry-type${record.coverage ? ' summary' : ''}">${escape(type?.label || record.type)}</span>
-            ${record.run?.missing.includes('RUN.md') ? `<span class="research-entry-type summary">${ht("待补报告")}</span>` : ''}
+          <div class="research-entry-title"><span class="research-entry-type" data-record-kind="${recordKind(type, record)}">${recordMark(recordKind(type, record), 13, type?.icon)}${escape(type?.label || record.type)}</span>
+            ${record.run?.missing.includes('RUN.md') ? `<span class="research-entry-type" data-record-kind="warning">${recordMark('warning', 13)}${ht("待补报告")}</span>` : ''}
             <button type="button" data-research-record="${record.id}">${escape(record.title)}</button>
             <button type="button" class="research-edit" data-research-edit="${record.id}" title="${ht("编辑记录属性")}" aria-label="${ht("编辑记录属性")}">${icon('settings', 15)}</button>
           </div>

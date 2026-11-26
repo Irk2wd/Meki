@@ -496,9 +496,15 @@ try {
   const tilePreview = command('list', ['--phase', 'exploration']).records.find(item => item.record.id === 'tile-culling');
   assert.equal(await experimentRow.locator('.research-entry-conclusion').textContent(), tilePreview.excerpt);
   await phaseSummary.locator('.research-progress-conclusion').getByText(explorationFinding).waitFor();
+  const experimentMark = experimentRow.locator('.research-entry-type .research-kind-mark');
+  const summaryMark = phaseSummary.locator('.research-kind-mark');
+  assert.equal(await experimentMark.getAttribute('data-record-kind'), 'entry');
+  assert.equal(await summaryMark.getAttribute('data-record-kind'), 'summary');
+  assert.notEqual(await experimentMark.evaluate(el => getComputedStyle(el).color), await summaryMark.evaluate(el => getComputedStyle(el).color));
   const progressSource = page.locator('[data-research-progress-link=tile-culling]');
   await progressSource.click();
   await page.locator('#research-reader-title').getByText(tileTitle).waitFor();
+  assert.equal(await page.locator('#research-reader-mark svg').innerHTML(), await experimentMark.locator('svg').innerHTML());
   await closeReader();
   await progressSource.and(page.locator(':focus')).waitFor();
   assert.deepEqual(await phaseSummary.locator('.research-summary-dates > span').allTextContents(), ['覆盖 2026-11-05 – 2026-11-13', '撰写于 2026-11-16']);
@@ -814,6 +820,7 @@ try {
   await idle();
   await page.locator('[data-research-destination=entries]').click();
   await page.getByText('待补报告', { exact: true }).waitFor();
+  assert.equal(await page.getByText('待补报告', { exact: true }).getAttribute('data-record-kind'), 'warning');
   await page.locator('[data-research-filter]').click();
   await tools.getByLabel('关键词').fill('Electric Dreams ＋ 性能 ＋ 11 月');
   await tools.getByRole('button', { name: '添加字段条件' }).click();

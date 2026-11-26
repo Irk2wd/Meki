@@ -1,7 +1,7 @@
 import { ht } from '../electron/i18n.mjs';
 import type { ResearchEntry, ResearchType } from '../shared/research';
-import { icon } from './icons';
-import { escapeResearch as escape, timelineIcon } from './research-tools';
+import { escapeResearch as escape } from './research-tools';
+import { recordKind, recordMark } from './research-record-mark';
 
 export interface TimelineEventDay {
   point: number;
@@ -40,7 +40,7 @@ function rememberPositions(layer: HTMLElement, positions: MarkerPositions) {
 }
 
 function symbols(glyphs: string[], extra: number) {
-  return glyphs.map(glyph => icon(glyph, 14)).join('') + (extra ? `<small aria-hidden="true">+${extra}</small>` : '');
+  return glyphs.join('') + (extra ? `<small aria-hidden="true">+${extra}</small>` : '');
 }
 
 function measureMarkers(layer: HTMLElement) {
@@ -53,7 +53,7 @@ function measureMarkers(layer: HTMLElement) {
     probe.className = 'research-timeline-event';
     probe.style.cssText = 'visibility:hidden;max-width:none';
     probe.setAttribute('aria-hidden', 'true');
-    probe.innerHTML = symbols(Array<string>(iconCount).fill('calendar'), extra);
+    probe.innerHTML = symbols(Array<string>(iconCount).fill(recordMark('event', 14)), extra);
     layer.append(probe);
     const width = probe.offsetWidth;
     probe.remove();
@@ -155,9 +155,10 @@ export class TimelineEventLayout {
       this.widths.set(layer, width);
       const focused = document.activeElement;
       const focusKey = focused instanceof HTMLButtonElement && layer.contains(focused) && focused.dataset.researchTimelineEvents;
-      const glyphs = days.map(({ entries }) => [...new Map(entries.map(({ record }) => [
-        record.type, timelineIcon(this.types.get(record.type), Boolean(record.comparison)),
-      ])).values()].slice(0, 2));
+      const glyphs = days.map(({ entries }) => [...new Map(entries.map(({ record }) => {
+        const type = this.types.get(record.type);
+        return [record.type, recordMark(recordKind(type, record), 14, type?.icon)] as const;
+      })).values()].slice(0, 2));
       const placed = placeMarkers(days, glyphs, width, measure);
       layer.innerHTML = placed.map(({ first, last, left }) => {
         const entries = days.slice(first, last + 1).flatMap(day => day.entries);

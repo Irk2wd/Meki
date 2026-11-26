@@ -2,6 +2,7 @@ import { ht, t } from '../electron/i18n.mjs';
 import eventIcons from '../electron/research-event-icons.json';
 import type { ResearchDocument, ResearchEntry, ResearchEvidenceFile, ResearchField, ResearchFilter, ResearchGoalMode, ResearchImportPreview, ResearchPhase, ResearchReference, ResearchRelationKind, ResearchSnapshot, ResearchType, ResearchValue, ResearchWidth } from '../shared/research';
 import { icon } from './icons';
+import { recordKind, recordMark } from './research-record-mark';
 import { ResearchReportPreview } from './research-report-preview';
 import { showEvidenceTable } from './research-evidence-table';
 
@@ -215,7 +216,7 @@ export class ResearchTools {
         const type = types.get(record.type);
         const label = type?.label || record.type;
         return `<li><button type="button" data-research-event-choice="${record.id}"${index === 0 ? ' autofocus' : ''}>
-          ${icon(experiments ? 'page' : timelineIcon(type, Boolean(record.comparison)), 17)}<span><strong>${escape(record.title)}</strong>
+          ${recordMark(recordKind(type, record), 17, type?.icon)}<span><strong>${escape(record.title)}</strong>
           <small${multipleDays ? '' : ' aria-hidden="true"'}>${escape(multipleDays ? `${record.date} · ${label}` : label)}</small></span></button></li>`;
       }).join('')}</ul>`);
     this.dialog.querySelectorAll<HTMLButtonElement>('[data-research-event-choice]').forEach(button => {
