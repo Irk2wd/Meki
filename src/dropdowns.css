@@ -1,0 +1,161 @@
+/* Single-choice fields share the native picker, including fields supplied by a project.
+   A size greater than one is an always-visible list (for example the font library). */
+:root {
+  --dropdown-line: color-mix(in srgb, var(--text) 18%, var(--surface));
+  --dropdown-highlight: color-mix(in srgb, var(--text) 13%, var(--surface));
+  --dropdown-shadow: 0 6px 20px rgb(0 0 0 / 15%), 0 1px 3px rgb(0 0 0 / 8%);
+  --dropdown-chevrons: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 16' fill='none' stroke='%23888888' stroke-width='1.65' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 6 3-3 3 3m-6 4 3 3 3-3'/%3E%3C/svg%3E");
+}
+
+:is(#app, dialog) select:not([multiple], [size]:not([size="0"], [size="1"])) {
+  appearance: base-select;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .65em;
+  min-block-size: 2.1em;
+  padding: .22em .62em .22em .72em;
+  border: 1px solid var(--dropdown-line);
+  border-radius: 7px;
+  background: linear-gradient(var(--surface), color-mix(in srgb, var(--text) 4%, var(--surface)));
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+
+  &:enabled:is(:hover, :open) { background: color-mix(in srgb, var(--text) 7%, var(--surface)); }
+  &:disabled { cursor: default; opacity: .55; }
+  &:focus { outline: none; }
+  &:focus-visible { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: .22em; }
+
+  &::picker-icon {
+    content: "";
+    inline-size: .8em;
+    block-size: 1em;
+    flex: none;
+    background: var(--soft);
+    mask: var(--dropdown-chevrons) center / contain no-repeat;
+  }
+  &:is(:focus-visible, :open)::picker-icon { background: currentColor; }
+
+  &::picker(select) {
+    appearance: base-select;
+    position-area: var(--dropdown-area, block-end span-inline-end);
+    justify-self: var(--dropdown-align, start);
+    position-try: normal flip-block, flip-inline, flip-block flip-inline, --dropdown-scroll;
+    min-inline-size: min(max(anchor-size(width), 9em), calc(100vi - 16px));
+    max-inline-size: calc(100vi - 16px);
+    block-size: max-content;
+    max-block-size: min(22em, calc(100dvh - 16px));
+    margin: 4px 0;
+    padding: 4px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    border: 1px solid var(--dropdown-line);
+    border-radius: 10px;
+    outline: none;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--dropdown-shadow);
+    font: var(--ui-text-size, 13px)/1.4 var(--ui);
+  }
+
+  & hr { margin: 3px 6px; border: 0; border-block-start: 1px solid var(--dropdown-line); }
+  & option {
+    position: relative;
+    min-block-size: 2em;
+    padding: .25em .7em .25em 1.9em;
+    border-radius: 5px;
+    background: transparent;
+    color: inherit;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    cursor: pointer;
+  }
+  & option::checkmark { position: absolute; inset-inline-start: .52em; }
+  & option:enabled:is(:hover, :focus-visible) { outline: none; background: var(--dropdown-highlight); }
+  & option:disabled { opacity: .5; cursor: default; }
+}
+
+@position-try --dropdown-scroll { max-block-size: stretch; }
+
+select:is([multiple], [size]:not([size="0"], [size="1"])):focus-visible {
+  outline: none; box-shadow: inset 0 -2px var(--soft);
+}
+
+:is(#app, dialog) input[data-suggestions] {
+  padding-inline-end: 2em;
+  background-image: var(--dropdown-chevrons);
+  background-repeat: no-repeat;
+  background-position: right .62em center;
+  background-size: .8em 1em;
+  &:focus { outline: none; border-color: var(--dropdown-line); }
+  &:focus-visible { box-shadow: inset 0 -2px var(--soft); }
+  &[aria-expanded="true"] { anchor-name: --suggestions-input; }
+}
+
+#field-suggestions {
+  position: fixed;
+  position-anchor: --suggestions-input;
+  position-area: block-end span-inline-end;
+  justify-self: start;
+  position-try: normal flip-block, flip-inline, flip-block flip-inline, --dropdown-scroll;
+  min-inline-size: min(anchor-size(width), calc(100vi - 16px));
+  max-inline-size: min(max(anchor-size(width), 26em), calc(100vi - 16px));
+  max-block-size: min(18em, calc(100dvh - 16px));
+  margin: 4px 0;
+  padding: 4px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  border: 1px solid var(--dropdown-line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--dropdown-shadow);
+  font: var(--ui-text-size, 13px)/1.4 var(--ui);
+  & [role="option"] { padding: .3em .7em; border-radius: 5px; overflow-wrap: anywhere; cursor: pointer; }
+  & [role="option"]:is(:hover, [aria-selected="true"]) { background: var(--dropdown-highlight); }
+  & small { display: block; color: var(--soft); }
+}
+
+.milkdown .milkdown-code-block {
+  & .language-button:focus-visible { outline: none; text-decoration: underline; text-underline-offset: .22em; }
+  & .language-picker .list-wrapper {
+    border: 1px solid var(--dropdown-line); border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: var(--dropdown-shadow);
+  }
+  & .language-picker .search-box,
+  & .language-picker .search-box:focus-within { outline: none; border: 1px solid var(--dropdown-line); border-radius: 6px; }
+  & .language-picker .search-box:has(input:focus-visible) { box-shadow: inset 0 -2px var(--soft); }
+  & .language-picker .search-input:focus { outline: none; }
+  & .language-picker .language-list-item:is(:hover, :focus-visible) { outline: none; background: var(--dropdown-highlight); color: var(--text); }
+}
+
+:is(.popover[role="menu"], .format-menu) {
+  border-color: var(--dropdown-line); border-radius: 10px; box-shadow: var(--dropdown-shadow);
+  & button:enabled:is(:hover, :focus-visible) { outline: none; background: var(--dropdown-highlight); }
+}
+:is(button[aria-haspopup="menu"], #format-menu-button):focus-visible {
+  outline: none; box-shadow: inset 0 -2px var(--soft);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  select::picker(select), #field-suggestions { transition: opacity 110ms ease-out; }
+  @starting-style {
+    select:open::picker(select), #field-suggestions:popover-open { opacity: 0; }
+  }
+}
+@media (forced-colors: active) {
+  :is(#app, dialog) select:not([multiple], [size]:not([size="0"], [size="1"])) {
+    &::picker-icon, &:is(:focus-visible, :open)::picker-icon { forced-color-adjust: none; background: ButtonText; }
+    & option:enabled:is(:hover, :focus-visible) { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  }
+  :is(.popover[role="menu"], .format-menu) button:enabled:focus-visible,
+  #field-suggestions [role="option"]:is(:hover, [aria-selected="true"]) {
+    forced-color-adjust: none; background: Highlight; color: HighlightText;
+  }
+  #field-suggestions [role="option"]:is(:hover, [aria-selected="true"]) small { color: inherit; }
+  select:is([multiple], [size]:not([size="0"], [size="1"])):focus-visible,
+  :is(#app, dialog) input[data-suggestions]:focus-visible,
+  :is(button[aria-haspopup="menu"], #format-menu-button):focus-visible { border-block-end: 2px solid Highlight; }
+}

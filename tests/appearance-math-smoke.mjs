@@ -90,7 +90,14 @@ try {
   await page.waitForSelector('#installed-fonts option', {state:'attached'});
   assert.equal(await page.locator('#custom-font').inputValue(), '');
   const totalFonts = await page.locator('#installed-fonts option').count();
-  await page.locator('.font-filters select').selectOption('mono');
+  const category = page.locator('.font-filters select');
+  assert.ok(await page.locator('#installed-fonts').evaluate(list => list.size > 1 && getComputedStyle(list).appearance !== 'base-select'));
+  await category.press('Space');
+  await page.keyboard.press('Escape');
+  assert.ok(await category.isVisible());
+  assert.ok(await category.evaluate(select => select.matches(':focus-visible') && getComputedStyle(select).outlineStyle === 'none'));
+  await category.click();
+  await category.locator('option[value="mono"]').click();
   // The first category selection examines the fonts installed on this machine.
   await page.waitForFunction(() => {
     const status = document.querySelector('.font-results output').textContent;

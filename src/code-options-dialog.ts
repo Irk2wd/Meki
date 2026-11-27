@@ -1,5 +1,6 @@
 import { ht, t } from '../electron/i18n.mjs';
 import type { Settings } from '../shared/meki';
+import { suggestionAttributes } from './input-suggestions';
 import { validCodeLanguage } from './code-options';
 
 export class CodeOptionsDialog {
@@ -13,7 +14,7 @@ export class CodeOptionsDialog {
 <label>${ht("缩进字符")}<select id="code-indent-kind"><option value="spaces">${ht("Spaces · 空格")}</option><option value="tabs">${ht("Tabs · 制表符")}</option></select></label>
 <label class="code-check"><input id="code-auto-indent" type="checkbox">${ht("回车自动缩进")}</label>
 <label>${ht("新建代码块的语言")}<select id="code-language-mode"><option value="plain">${ht("纯文本（默认）")}</option><option value="default">${ht("指定默认语言")}</option><option value="last">${ht("沿用上次使用的语言")}</option></select></label>
-<label id="code-default-label">${ht("默认语言")}<input id="code-default-language" list="code-language-list" maxlength="40" autocomplete="off" placeholder="${ht("例如 javascript、python、cpp")}"></label>
+<label id="code-default-label">${ht("默认语言")}<input id="code-default-language" ${suggestionAttributes('code-language-list')} maxlength="40" placeholder="${ht("例如 javascript、python、cpp")}"></label>
 <datalist id="code-language-list">${['javascript', 'typescript', 'python', 'cpp', 'c', 'csharp', 'java', 'rust', 'go', 'json', 'html', 'css', 'sql', 'bash', 'powershell', 'yaml', 'markdown'].map(value => `<option value="${value}">`).join('')}</datalist>
 <p id="code-last-language"></p><p>${ht("不改动已存在或粘贴的代码围栏。源码视图保持 Markdown 文本；HTML 跟随换行设置，PDF 打印始终换行。")}</p>
 <p id="code-options-error" role="status"></p><div class="dialog-actions"><button value="cancel" class="secondary-button">${ht("取消")}</button><button type="submit" value="apply" class="primary-button">${ht("应用")}</button></div></form>`;

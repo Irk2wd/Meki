@@ -37,6 +37,10 @@ import './formula.css';
 import './settings.css';
 import './writing-tools.css';
 import './editing-tools.css';
+import './dropdowns.css';
+import { installInputSuggestions } from './input-suggestions';
+
+installInputSuggestions();
 
 const escapeHTML = (text: string) => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const el = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -576,7 +580,7 @@ el<HTMLSelectElement>('#heading-format').addEventListener('change', event => { e
 el('#math-input').addEventListener('input', updateMathPreview);
 el('#math-kind').addEventListener('change', updateMathPreview);
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && !event.isComposing && !document.querySelector('dialog[open]')) { closePopovers(); if (!el('#find-panel').hidden) { writingTools?.close(); editor.focus(); } }
+  if (event.key === 'Escape' && !event.isComposing && !document.querySelector('dialog[open], select:open')) { closePopovers(); if (!el('#find-panel').hidden) { writingTools?.close(); editor.focus(); } }
 }, true);
 
 async function start() {
