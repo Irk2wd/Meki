@@ -11,6 +11,55 @@
 .research-search-input input[type=search] { border: 0; outline: none; box-shadow: none; background: transparent; flex: 1; min-width: 0; }
 .research-search-input:has(input:focus-visible) > svg { color: var(--text); stroke-width: 2.25; }
 .research-search-controls { margin-top: 10px; flex-wrap: wrap; justify-content: space-between; }
+.research-search-format, .research-search-format::picker(select) {
+  appearance: base-select;
+  color: var(--text);
+  font: var(--ui-text-size)/1.4 var(--ui);
+}
+.research-search-format {
+  align-items: center; justify-content: space-between; gap: .7em;
+  min-inline-size: 7.6em; max-inline-size: 100%; min-block-size: 2.1em;
+  padding: .22em .6em .22em .75em;
+  border: 1px solid var(--border); border-radius: 7px; cursor: pointer;
+  background: linear-gradient(var(--surface), color-mix(in srgb, var(--surface) 70%, var(--side)));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+}
+.research-search-format:is(:hover, :open) { background: var(--hover); }
+.research-search-format:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); outline-offset: 2px;
+}
+.research-search-format::picker-icon {
+  content: ""; inline-size: .85em; block-size: 1em; flex: none;
+  background: var(--soft);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 16' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 6 3-3 3 3m-6 4 3 3 3-3'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.research-search-format::picker(select) {
+  position-area: block-end span-inline-start; justify-self: end;
+  position-try: normal flip-block, flip-inline, flip-block flip-inline, --research-format-scroll;
+  min-inline-size: max(anchor-size(width), 10em); max-inline-size: calc(100vw - 16px);
+  block-size: max-content; max-block-size: calc(100dvh - 16px);
+  margin: 4px 0; padding: 4px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); box-shadow: 0 6px 20px rgb(0 0 0 / 14%), 0 1px 3px rgb(0 0 0 / 8%);
+}
+@position-try --research-format-scroll { max-block-size: stretch; }
+.research-search-format hr { margin: 3px 6px; border: 0; border-block-start: 1px solid var(--border); }
+.research-search-format option {
+  position: relative; align-items: center; min-block-size: 2em;
+  padding: .22em .7em .22em 1.9em; border-radius: 5px; cursor: pointer;
+}
+.research-search-format option::checkmark { position: absolute; inset-inline-start: .52em; }
+.research-search-format option:is(:hover, :focus-visible) {
+  outline: none; background: var(--accent); color: var(--logo-ink);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .research-search-format::picker(select) { transition: opacity 110ms ease-out; }
+  @starting-style { .research-search-format:open::picker(select) { opacity: 0; } }
+}
+@media (forced-colors: active) {
+  .research-search-format::picker-icon { forced-color-adjust: none; background: ButtonText; }
+  .research-search-format option:is(:hover, :focus-visible) { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+}
 .research-search-mode { padding: 2px; gap: 2px; border: 1px solid var(--border); border-radius: 7px; }
 .research-search-mode label { display: block; position: relative; cursor: pointer; }
 .research-search-mode input { position: absolute; opacity: 0; width: 1px; height: 1px; }

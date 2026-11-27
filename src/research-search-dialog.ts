@@ -94,7 +94,7 @@ export class ResearchSearchDialog {
         '<label><input type="radio" name="mode" value="keyword" checked><span>' + ht("关键词") + '</span></label>' +
         '<label><input type="radio" name="mode" value="concept"><span>' + ht("概念") + '</span></label><label><input type="radio" name="mode" value="smart" aria-describedby="research-ai-access-note"><span>'+ht("智能检索")+'</span></label></div>' +
         '<button type="button" class="research-ai-settings-link" data-model-settings hidden>'+ht("模型设置")+'</button>' +
-        '<select name="format" aria-label="' + ht("资料类型") + '"><option value="all">' + ht("所有资料") + '</option>' +
+        '<select class="research-search-format" name="format" aria-label="' + ht("资料类型") + '"><option value="all">' + ht("所有资料") + '</option><hr>' +
         Object.entries(formats()).map(([key,label]) => '<option value="' + key + '">' + escape(label) + '</option>').join('') + '</select></div>' +
         '<p id="research-ai-access-note" class="research-ai-access-note" hidden>'+smartSearchAccessNotice()+'</p>' +
         '<details class="research-search-range"><summary>' + ht("限定阶段和日期") + '</summary><div><label>' + ht("研究阶段") + '<select name="phase"></select></label>' +

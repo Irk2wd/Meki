@@ -38,6 +38,7 @@ try {
   await page.waitForSelector('#shell[data-ready="true"]');
   const search = page.locator('#research-search-dialog');
   const queryInput = search.getByRole('searchbox');
+  const formatFilter = search.getByRole('combobox', { name: '资料类型', exact: true });
   await page.locator('[data-research-search]').click();
   await queryInput.click();
   assert.equal(await queryInput.evaluate(input => getComputedStyle(input).outlineStyle), 'none');
@@ -46,12 +47,23 @@ try {
     button.matches(':focus-visible') && getComputedStyle(button).outlineStyle !== 'none'));
   await page.keyboard.press('Shift+Tab');
   assert.ok(await queryInput.evaluate(input => input === document.activeElement));
+  await formatFilter.press('Space');
+  await formatFilter.locator('option:checked').waitFor({ state: 'visible' });
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Escape');
+  assert.ok(await search.isVisible());
+  assert.equal(await formatFilter.inputValue(), 'all');
+  await formatFilter.press('Space');
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  assert.equal(await formatFilter.inputValue(), 'file');
   await page.keyboard.press('Escape');
 
   async function find(query, format, mode = 'keyword') {
     await page.locator('[data-research-search]').click();
     await queryInput.fill(query);
-    await search.locator('select[name=format]').selectOption(format);
+    await formatFilter.click();
+    await formatFilter.locator(`option[value="${format}"]`).click();
     await search.locator('label:has(input[value='+mode+'])').click();
     await search.locator('button[type=submit]').click();
     await search.locator('.research-search-results:not([aria-busy]) article').first().waitFor({ timeout: 120000 });
