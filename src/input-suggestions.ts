@@ -40,6 +40,9 @@ export function installInputSuggestions() {
     if (!(source instanceof HTMLDataListElement)) { close(); return; }
     const text = input.value.slice(...tokenBounds(input));
     const query = filter ? text.trim().toLowerCase() : '';
+    // A cleared or completed evidence token has no prefix to suggest. The
+    // user can still browse all IDs by clicking the field or pressing an arrow.
+    if (filter && !query && input.hasAttribute('data-suggestion-tokens')) { close(); return; }
     const choices = Array.from(source.options).filter(option => option.value && !option.disabled &&
       (option.value.toLowerCase().includes(query) || option.label.toLowerCase().includes(query)));
     if (!choices.length) { close(); return; }
