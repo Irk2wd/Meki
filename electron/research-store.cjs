@@ -12,14 +12,14 @@ const { captureFieldRules, readFieldOrigins, saveFieldRules } = require('./resea
 const { planArchive, MAX_RUNS } = require('./research-import.cjs');
 const { comparisonImages } = require('./research-comparison.mjs');
 const {
-  METADATA, MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, DOCUMENT_SCHEME, RECORDS, RECORD_FILE, REVISION,
+  METADATA, MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, DOCUMENT_SCHEME, RECORDS, RECORD_FILE, REVISION, RECORD_TIERS,
   assert, object, array, id, validateProject, validateRecord,
   validateSource, validateEvidence, validateFilter,
   comparisonType,
   relationshipIssues, fieldIssues, validateChange, parseMarkdown, formatMarkdown, fileName, templateBody,
 } = require('./research-model.cjs');
 
-const { localSearchGuide, smartSearchGuide, filingSection, upgradeGuideText, upgradeProjectRules } = require('./research-guidance.cjs');
+const { localSearchGuide, smartSearchGuide, filingSection, detectGuidanceConflicts, upgradeGuideText, upgradeProjectRules } = require('./research-guidance.cjs');
 const { readTrialLog } = require('./research-trials.cjs');
 
 const MAX_JSON_BYTES = 512 * 1024;
@@ -102,6 +102,136 @@ function validateIndexPath(relativePath) {
     && !/[\\:\x00-\x1f]/.test(relativePath)
     && relativePath.split('/').every(part => part && part !== '.' && part !== '..' && part.toLowerCase() !== METADATA),
   'Use a project-relative Markdown or text path with / separators.');
+}
+
+const operationalNoisePattern = /(?:^|[-_\s])(?:smoke|invalid|fail(?:ed|ure)?|abort(?:ed)?|broken|crash(?:ed)?)(?:[-_\s]|$)|试跑|采集无效|无效运行|初[次轮]失败|首轮失败|失败后修复|中止|中断/i;
+const retrySuffixPattern = /^(.*?)(?:[-_](?:v[2-9]|v\d{2,}|retry\d*|rerun\d*|smoke(?:[-_]v\d+)?|invalid(?:[-_]v\d+)?))$/i;
+const setupFirstHeadingPattern = /^(?:背景|前置条件|实验背景|实验设置|实验配置|实验条件|评测协议|协议与设置|参数设置|参数配置|配置|环境|测试环境|setup|protocol|background|configuration|environment|experimental setup)$/i;
+
+function firstResultVisualOffset(body) {
+  const image = body.search(/!\[[^\]]*\]\([^)]+\)/);
+  const table = body.search(/^\|[^\n]+\|\s*\n\|[\s:|-]+\|/m);
+  const candidates = [image, table].filter(index => index >= 0);
+  return candidates.length ? Math.min(...candidates) : -1;
+}
+
+function hasBuriedResults(body) {
+  if (!body || body.length < 600) return false;
+  const firstHeading = body.match(/^##\s+([^\n]+)/m)?.[1]?.trim() || '';
+  const visualIndex = firstResultVisualOffset(body);
+  if (setupFirstHeadingPattern.test(firstHeading) && (visualIndex >= 0 || /^##\s+(?:结论|主要结论|关键图表|核心数据|结果|conclusions?|results?|findings?)/im.test(body))) {
+    return true;
+  }
+  if (visualIndex >= 800) {
+    const lead = body.slice(0, visualIndex).replace(/^#[^\n]*\n+/m, '').trim();
+    if (lead.length >= 650) return true;
+  }
+  return false;
+}
+
+function normalizeTitleForMatch(title) {
+  return String(title || '').normalize('NFKC').toLowerCase()
+    .replace(/\b(?:v\d+|smoke|invalid|retry\d*|rerun\d*)\b/g, ' ')
+    .replace(/(?:试跑|复测|复跑|重跑|采集无效|首轮失败|初次失败)/g, ' ')
+    .replace(/[\s·\-_/()（）\[\]【】:：,，。.?？!！]+/g, ' ').trim();
+}
+
+function batchWarnings(inputRecords, changes, existingItems, project) {
+  const warnings = [];
+  const kinds = new Map(project.recordTypes.map(type => [type.id, type.kind]));
+  const createdEntries = [];
+  let createdComparisons = 0;
+  const knownByPhase = new Map();
+  const knownIds = new Set();
+  for (const item of existingItems.values()) {
+    const rec = item.record;
+    knownIds.add(rec.id);
+    if (kinds.get(rec.type) !== 'entry' || rec.tier === 'log') continue;
+    const key = rec.phaseId || '';
+    const norm = normalizeTitleForMatch(rec.title);
+    if (!norm) continue;
+    if (!knownByPhase.has(key)) knownByPhase.set(key, []);
+    knownByPhase.get(key).push({ id: rec.id, title: rec.title, norm });
+  }
+  for (let i = 0; i < inputRecords.length; i++) {
+    const change = inputRecords[i];
+    const item = changes[i];
+    if (!item) continue;
+    const record = item.record;
+    const kind = kinds.get(record.type);
+    const tier = record.tier || 'standard';
+    if (kind === 'entry' && tier !== 'log' && change.body !== undefined && hasBuriedResults(item.body)) {
+      warnings.push({
+        code: 'RESULTS_BURIED',
+        recordId: record.id,
+        message: `记录「${record.title}」前部铺垫了过多前置条件或背景，关键图表与核心数据表出现过晚。`,
+        suggestion: '请将 1–3 句核心结论和最能直观体现效果的关键图表、对比数据表放在正文最前面；把相机/光照/参数/环境/审计等实验设置后置到「实验设置与适用范围」。',
+      });
+    }
+    if (existingItems.has(change.id)) continue;
+    if (kind === 'comparison') { createdComparisons++; continue; }
+    if (kind !== 'entry' || tier === 'log') continue;
+    createdEntries.push(record);
+    if (operationalNoisePattern.test(record.id) || operationalNoisePattern.test(record.title)) {
+      warnings.push({
+        code: 'OPERATIONAL_NOISE',
+        recordId: record.id,
+        message: `新记录「${record.title}」像是一次试跑、工程故障或无效采集，但层级为 ${tier}。`,
+        suggestion: '纯工程报错或作废试跑不建议单独建顶层实验；若确需保留过程日志，请将 tier 设为 "log" 并用 relations (part-of) 挂到主问题记录，或合并进母记录的「实验试次」表。',
+      });
+    }
+    if (!record.phaseId && project.phases.length > 0) {
+      warnings.push({
+        code: 'MISSING_PHASE',
+        recordId: record.id,
+        message: `新记录「${record.title}」未指定 phaseId。`,
+        suggestion: '请参考 describe.phaseContext 归入对应阶段，或将原始过程归档设为 tier: "log"。',
+      });
+    }
+    const norm = normalizeTitleForMatch(record.title);
+    const siblings = new Set();
+    for (const candidate of knownByPhase.get(record.phaseId || '') || []) {
+      if (candidate.id !== record.id && norm && candidate.norm === norm) siblings.add(candidate.id);
+    }
+    const baseMatch = retrySuffixPattern.exec(record.id);
+    if (baseMatch && baseMatch[1].length >= 6) {
+      const prefix = baseMatch[1];
+      for (const existingId of knownIds) {
+        if (existingId !== record.id && (existingId === prefix || existingId.startsWith(`${prefix}-`))) siblings.add(existingId);
+      }
+    }
+    if (siblings.size) {
+      const relatedIds = [...siblings].slice(0, 5);
+      warnings.push({
+        code: 'POSSIBLE_DUPLICATE_OR_RETRY',
+        recordId: record.id,
+        relatedIds,
+        message: `新记录「${record.title}」与已有记录高度相似或带有迭代后缀，疑似同一研究问题的复测/重跑。`,
+        suggestion: `优先复用已有记录（${relatedIds.join(', ')}），在「实验试次」表追加新行并更新顶部结论；如确为独立子问题，请用标题明确区分检验的变量。`,
+      });
+    }
+    if (norm) {
+      const key = record.phaseId || '';
+      if (!knownByPhase.has(key)) knownByPhase.set(key, []);
+      knownByPhase.get(key).push({ id: record.id, title: record.title, norm });
+    }
+    knownIds.add(record.id);
+  }
+  if (createdEntries.length >= 5) {
+    warnings.push({
+      code: 'BULK_FRAGMENTATION',
+      message: `本批次一次新建了 ${createdEntries.length} 条非 log 级实验记录。`,
+      suggestion: '同一研究问题的多组参数、子步骤或逐模型运行应合并到主记录的「实验试次」表；若是批量过程日志，请将 tier 设为 "log"。',
+    });
+  }
+  if (createdComparisons >= 3) {
+    warnings.push({
+      code: 'EXCESSIVE_COMPARISONS',
+      message: `本批次一次新建了 ${createdComparisons} 条顶层可视化展示（comparison）记录。`,
+      suggestion: '常规诊断图请直接嵌入实验记录正文，仅对关键定稿或跨方案核心结论建立顶层可视化展示。',
+    });
+  }
+  return warnings;
 }
 
 class ResearchStore {
@@ -524,9 +654,12 @@ class ResearchStore {
       const registerType = input.records.some(record => record.comparison && record.type === type.id) &&
         !project.recordTypes.some(existing => existing.id === type.id);
       const next = registerType ? validateProject({ ...project, recordTypes: [...project.recordTypes, type] }) : project;
+      const prior = new Map(items);
       const changes = this.prepareBatch(input.records, next, items, documents);
+      const warnings = batchWarnings(input.records, changes, prior, next);
       const projectRevision = registerType ? await this.writeManifest(next, current) : revision;
-      return { projectRevision, records: await this.writeChanges(changes) };
+      const records = await this.writeChanges(changes);
+      return { projectRevision, records, ...(warnings.length ? { warnings } : {}) };
     });
   }
 
@@ -622,13 +755,15 @@ class ResearchStore {
     const file = path.join(this.root, 'AGENTS.md');
     const entry = await statIfPresent(file);
     let guide;
+    let content = '';
     if (entry?.isFile() && entry.size <= MAX_JSON_BYTES) {
       const { bytes, mode } = await readBytes(file, MAX_JSON_BYTES);
-      const content = bytes.toString('utf8');
+      content = bytes.toString('utf8');
       const updated = upgradeGuideText(content);
       if (updated !== content && Buffer.from(content).equals(bytes)) guide = { file, mode, before: digest(bytes), bytes: Buffer.from(updated) };
     }
-    return { project, guide, files: [...(project !== current.project ? [this.manifestFile] : []), ...(guide ? ['AGENTS.md'] : [])] };
+    const conflicts = detectGuidanceConflicts(content, current.project);
+    return { project, guide, conflicts, files: [...(project !== current.project ? [this.manifestFile] : []), ...(guide ? ['AGENTS.md'] : [])] };
   }
 
   async upgradeGuidance() {
@@ -681,7 +816,7 @@ class ResearchStore {
     const seen = new Set();
     const pending = new Set(input.map(change => change.id));
     return input.map(change => {
-      object(change, 'record change', ['id', 'ifRevision', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'body', 'evidence', 'relations', 'run', 'relatedProjects', 'comparison']);
+      object(change, 'record change', ['id', 'ifRevision', 'type', 'title', 'date', 'tier', 'phaseId', 'coverage', 'sources', 'fields', 'body', 'evidence', 'relations', 'run', 'relatedProjects', 'comparison']);
       id(change.id, 'record ID');
       assert(!seen.has(change.id), `Use one change per record in a batch: ${change.id}.`);
       seen.add(change.id);
@@ -700,7 +835,9 @@ class ResearchStore {
           else merged.set(key, value);
         }
       }
-      const record = validateRecord({ ...existing?.record, ...metadata, fields: Object.fromEntries(merged) }, change.id);
+      const combined = { ...existing?.record, ...metadata, fields: Object.fromEntries(merged) };
+      if (combined.tier === null) delete combined.tier;
+      const record = validateRecord(combined, change.id);
       if (body !== undefined) assert(typeof body === 'string' && !body.includes('\0'), 'body must be Markdown text.');
       validateChange(record, existing?.record, project, documents, pending);
       const markdown = body?.replace(/\r\n/g, '\n') ?? existing?.body ?? templateBody(record, project, documents, this.sourceHref);
@@ -739,7 +876,7 @@ function encodeJson(value, limit = MAX_JSON_BYTES) {
 }
 
 const comparisonTableGuide = '比较不同方案、轮次或条件下的数值时，优先用 Markdown 表格。标明比较对象，在表头写清指标和单位。正文解释差异对研究问题意味着什么，避免逐项复述表中数值。单个独立读数可以直接写在正文中。';
-const reportWritingGuide = `实验记录和阶段总结都从证据已支持的结论写起。首句回答本轮研究疑问，再按重要性写出其他已确认的发现。交代测量对象、对照和适用范围，并链接原始证据。${comparisonTableGuide}缺少对照时先写本轮实测值或直接观察。把推测、待补的对照和下一次要做的验证集中放在文末「待验证」。没有遗留问题时可以省略这一节。`;
+const reportWritingGuide = `实验记录和阶段总结采用“结论与关键图表前置、实验条件后置”的结构：1）开头用 1–3 句直接给出证据支持的结论和核心效果（涨/跌/持平及幅度），不要先铺垫背景、环境配置、脚本参数或前置条件；2）紧跟结论立刻放最能一眼看出效果的关键对比图、曲线和核心实测表格（${comparisonTableGuide}），引用可视化展示时放在首屏可直观查看的位置；3）多轮或跨日测量写在「实验试次」表；4）测量对象、相机/光照/分辨率、协议口径、审计回执与复现细节一律后置到「实验设置与适用范围」并链接原始证据，避免挤占首屏；5）缺少对照时先写本轮实测观察，把推测、待补对照和下一步验证放在文末「待验证」（无遗留时省略）。`;
 
 const projectGuide = `# mekiR 研究项目的 Agent 指引
 
@@ -762,7 +899,7 @@ ${filingSection}
 读取历史字段时，先核对 read 或 list 给出的 fieldOrigins。rule 是该值写入时采用的定义，source 为 record（明确写入）或 default（创建时采用项目默认值）。用 read.currentFields 对照当前定义。缺少来源时把历史口径记为未知。通过 batch 更新实际改变的字段，保留项目内 field-rules 快照和文稿中的引用。
 
 1. 用 \`list\` 查找已有问题和试次，复用稳定记录 ID。用 \`read <目录> <ID>\` 获取已有的字段、正文和 \`revision\`。发生日期采用项目时区的实际日期。
-2. 用 \`batch <目录> --input <文件或 ->\` 提交 \`ifProjectRevision\` 和 \`records\`。前者取自 \`describe.revision\`。新记录提交 \`id\`、\`ifRevision: null\`、\`type\`、\`title\`、\`date\` 及所需属性。已有记录提交 \`id\`、\`read.revision\` 作为 \`ifRevision\`，以及要修改的内容。
+2. 用 \`batch <目录> --input <文件或 ->\` 提交 \`ifProjectRevision\` 和 \`records\`。前者取自 \`describe.revision\`。新记录提交 \`id\`、\`ifRevision: null\`、\`type\`、\`title\`、\`date\` 及所需属性（按重要层级设置 \`tier\`: \`key\` / \`standard\` / \`log\`）。已有记录提交 \`id\`、\`read.revision\` 作为 \`ifRevision\`，以及要修改的内容。写入后检查返回的 \`warnings\`，若提示疑似重复试跑、工程故障或过度碎片化，应合并到母记录的「实验试次」表或调低层级。
 3. 新建时，省略已配置默认值的字段会使用默认值，省略 \`body\` 会套用模板。更新时，省略的字段和正文保留原值。要主动清除可选字段，在 \`fields\` 中把该字段设为 \`null\`。收到 \`RESEARCH_CONFLICT\` 后重新读取规则和相关记录，再合并重试。
 
 ## 实验报告和阶段总结怎么写

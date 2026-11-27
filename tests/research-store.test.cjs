@@ -465,3 +465,114 @@ test('only summaries can name multiple other project IDs and expose their metada
   assert.deepEqual(paper[0].record.relatedProjects, ['paper', 'reference-runs']);
   assert.deepEqual(await store.linkedSummaries('unrelated', exampleProject), []);
 });
+
+test('record tiers, part-of relations, view tiers, list --tier and archive log defaults work cleanly', async t => {
+  const { store, directory } = await archiveProject(t);
+  const invoke = (name, args = [], input) => JSON.parse(require('node:child_process').execFileSync(process.execPath,
+    [require.resolve('../electron/research-cli.cjs'), name, store.root, ...args, ...(input ? ['--input', '-'] : [])],
+    { encoding: 'utf8', input: input && JSON.stringify(input), env: { ...process.env, MEKIR_LOCAL_STATE: path.join(directory, 'local-state') } }));
+
+  const tile = await store.read('tile-culling');
+  const depth = await store.read('conservative-depth');
+  const promoted = await store.writeBatch({ records: [
+    { id: tile.record.id, ifRevision: tile.revision, tier: 'key' },
+    { id: depth.record.id, ifRevision: depth.revision, tier: 'log', relations: [{ kind: 'part-of', target: tile.record.id, note: '参数排查日志' }] },
+  ] });
+  assert.equal(promoted.warnings, undefined);
+  assert.equal((await store.read('tile-culling')).record.tier, 'key');
+  assert.equal((await store.read('conservative-depth')).record.tier, 'log');
+  assert.equal((await store.read('conservative-depth')).record.relations[0].kind, 'part-of');
+
+  assert.deepEqual(invoke('list', ['--tier', 'key']).records.map(r => r.record.id), ['tile-culling']);
+  assert.deepEqual(invoke('list', ['--tier', 'log']).records.map(r => r.record.id), ['conservative-depth']);
+  assert.deepEqual(invoke('list', ['--field', 'tier=核心']).records.map(r => r.record.id), ['tile-culling']);
+
+  const described = invoke('describe');
+  const exploration = described.phaseContext.find(p => p.phaseId === 'exploration');
+  assert.deepEqual(exploration.counts, { key: 1, standard: 0, log: 1 });
+  assert.deepEqual(exploration.activeQuestions.map(q => q.id), ['tile-culling']);
+  assert.equal(exploration.activeQuestions[0].tier, 'key');
+
+  const proj = structuredClone(described.project);
+  proj.views.push({ id: 'core-only', label: '核心主线', layout: 'journal', order: 'newest', tiers: ['key', 'standard'] });
+  assert.equal(validateProject(proj).views.at(-1).tiers.length, 2);
+  proj.views.at(-1).tiers = ['invalid-tier'];
+  assert.throws(() => validateProject(proj), /tiers must use/);
+
+  const tileAgain = await store.read('tile-culling');
+  await store.writeBatch({ records: [{ id: tileAgain.record.id, ifRevision: tileAgain.revision, tier: null }] });
+  assert.equal((await store.read('tile-culling')).record.tier, undefined);
+
+  const archive = path.join(directory, 'tier-archive');
+  const runDir = path.join(archive, 'diagnostics', '20261125_probe');
+  await fs.mkdir(runDir, { recursive: true });
+  await fs.writeFile(path.join(runDir, 'RUN.md'), '# Probe\n\n- Run ID: probe-1\n');
+  await store.bindEvidenceSource('diag', archive, '诊断归档');
+  const preview = await store.importArchive('diag');
+  const imported = await store.importArchive('diag', preview.token);
+  const recId = imported.records[0].id;
+  assert.equal((await store.read(recId)).record.tier, 'log');
+  const beforePromote = await store.read(recId);
+  await store.writeBatch({ records: [{ id: recId, ifRevision: beforePromote.revision, tier: 'key' }] });
+  await fs.writeFile(path.join(runDir, 'RUN.md'), '# Probe\n\n- Run ID: probe-1\n\nUpdated body.\n');
+  const preview2 = await store.importArchive('diag');
+  await store.importArchive('diag', preview2.token);
+  assert.equal((await store.read(recId)).record.tier, 'key');
+});
+
+test('batch returns structured guard warnings and describe detects conflicting project guidance', async t => {
+  const root = await projectFolder(t);
+  const project = structuredClone(exampleProject);
+  const store = await ResearchStore.initialize(root, project, exampleRecords);
+  const guidePath = path.join(root, 'AGENTS.md');
+  const originalGuide = await fs.readFile(guidePath, 'utf8');
+  await fs.writeFile(guidePath, originalGuide + '\n每次实验都要在本项目登记，包括试跑、复测、失败和中止的运行。\n');
+
+  const invoke = (name, args = [], input) => JSON.parse(require('node:child_process').execFileSync(process.execPath,
+    [require.resolve('../electron/research-cli.cjs'), name, root, ...args, ...(input ? ['--input', '-'] : [])],
+    { encoding: 'utf8', input: input && JSON.stringify(input) }));
+
+  const described = invoke('describe');
+  assert.ok(described.guidanceConflicts?.items.length >= 1);
+  assert.equal(described.guidanceConflicts.items[0].file, 'AGENTS.md');
+  assert.ok(described.format.rules.tier.includes('key'));
+  assert.match(described.format.rules.experimentReport, /关键图表前置/);
+
+  const noisy = await store.writeBatch({ records: [
+    { id: 'tile-culling-smoke-v2', ifRevision: null, type: 'experiment', phaseId: 'exploration', date: '2026-11-12',
+      title: '分块遮挡剔除试跑失败', fields: { scene: 'City Block' }, body: '缺环境变量未出帧。' },
+    { id: 'tile-culling-v2', ifRevision: null, type: 'experiment', phaseId: 'exploration', date: '2026-11-12',
+      title: '开启分块遮挡剔除能缩短 GPU 帧时间吗？', fields: { scene: 'City Block' }, body: '复测一次。' },
+    { id: 'unassigned-exp-1', ifRevision: null, type: 'experiment', date: '2026-11-12',
+      title: '未分配阶段实验 1', fields: { scene: 'City Block' }, body: '记录 1。' },
+    { id: 'unassigned-exp-2', ifRevision: null, type: 'experiment', date: '2026-11-12',
+      title: '未分配阶段实验 2', fields: { scene: 'City Block' }, body: '记录 2。' },
+    { id: 'unassigned-exp-3', ifRevision: null, type: 'experiment', date: '2026-11-12',
+      title: '未分配阶段实验 3', fields: { scene: 'City Block' }, body: '记录 3。' },
+  ] });
+  const codes = new Set((noisy.warnings || []).map(w => w.code));
+  assert.ok(codes.has('OPERATIONAL_NOISE'));
+  assert.ok(codes.has('POSSIBLE_DUPLICATE_OR_RETRY'));
+  assert.ok(codes.has('MISSING_PHASE'));
+  assert.ok(codes.has('BULK_FRAGMENTATION'));
+
+  const quietLog = await store.writeBatch({ records: [
+    { id: 'probe-smoke-log', ifRevision: null, type: 'experiment', tier: 'log', date: '2026-11-12',
+      title: '环境冒烟日志', fields: { scene: 'City Block' }, body: '仅留存过程日志。' },
+  ] });
+  assert.equal(quietLog.warnings, undefined);
+
+  const buried = await store.writeBatch({ records: [
+    { id: 'buried-setup-exp', ifRevision: null, type: 'experiment', phaseId: 'exploration', date: '2026-11-12',
+      title: '前置条件过长的实验', fields: { scene: 'City Block' },
+      body: `# 前置条件过长的实验\n\n## 实验设置\n\n${'这里堆叠了很多环境配置、脚本参数、路径、相机与协议细节。'.repeat(28)}\n\n## 结论\n\n开启后帧时间下降 18%。\n\n| 方案 | GPU (ms) |\n| --- | ---: |\n| 基线 | 12.8 |\n| 新方案 | 10.5 |\n` },
+  ] });
+  assert.ok((buried.warnings || []).some(w => w.code === 'RESULTS_BURIED'));
+
+  const resultsFirst = await store.writeBatch({ records: [
+    { id: 'results-first-exp', ifRevision: null, type: 'experiment', phaseId: 'exploration', date: '2026-11-12',
+      title: '结论和图表前置的实验', fields: { scene: 'City Block' },
+      body: `# 结论和图表前置的实验\n\n## 结论\n\n开启新策略后，GPU 帧时间中位数从 12.8 ms 降至 10.5 ms（-18%）。\n\n## 关键图表与数据\n\n| 方案 | GPU (ms) |\n| --- | ---: |\n| 基线 | 12.8 |\n| 新方案 | 10.5 |\n\n## 实验设置与适用范围\n\n${'详细相机、光照、分辨率和复现参数放在后部。'.repeat(28)}\n` },
+  ] });
+  assert.equal(resultsFirst.warnings, undefined);
+});

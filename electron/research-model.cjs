@@ -15,9 +15,10 @@ const RECORD_FILE = /^r-([a-z][a-z0-9_-]{0,63})\.md$/;
 const REVISION = /^[a-f0-9]{64}$/;
 const FIELD_TYPES = ['text', 'number', 'boolean', 'date', 'choice'];
 const TEMPLATE_KEYS = ['title', 'date', 'phase', 'coverage_start', 'coverage_end', 'sources'];
-const RELATION_KINDS = ['retest', 'replaces', 'compares', 'paper-adopted', 'paper-version'];
+const RECORD_TIERS = ['key', 'standard', 'log'];
+const RELATION_KINDS = ['retest', 'replaces', 'compares', 'part-of', 'paper-adopted', 'paper-version'];
 const RUN_CONTEXT = ['question', 'models', 'scene', 'method', 'camera', 'protocol', 'paper_version', 'conclusion'];
-const RUN_FILTER_FIELDS = ['run.id', 'run.category', 'run.status', ...RUN_CONTEXT.map(field => `run.${field}`)];
+const RUN_FILTER_FIELDS = ['tier', 'run.id', 'run.category', 'run.status', ...RUN_CONTEXT.map(field => `run.${field}`)];
 const TOKEN = /\{\{\s*([\w.-]+)\s*\}\}/g;
 
 function assert(condition, message) {
@@ -244,7 +245,7 @@ function validateProject(project) {
 
   array(project.views, 'project.views', 24);
   for (const view of project.views) {
-    object(view, 'view', ['id', 'label', 'layout', 'order', 'typeIds', 'phaseIds', 'fieldIds']);
+    object(view, 'view', ['id', 'label', 'layout', 'order', 'typeIds', 'phaseIds', 'fieldIds', 'tiers']);
     id(view.id, 'view.id');
     string(view.label, `views.${view.id}.label`);
     assert(['timeline', 'journal'].includes(view.layout), `views.${view.id}.layout must be timeline or journal.`);
@@ -261,6 +262,11 @@ function validateProject(project) {
       listOfIds(view.fieldIds, `views.${view.id}.fieldIds`, 32);
       const types = project.recordTypes.filter(type => !view.typeIds || view.typeIds.includes(type.id));
       assert(view.fieldIds.every(key => types.some(type => type.fields.some(rule => rule.id === key))), `views.${view.id}.fieldIds must name fields in this view's record types.`);
+    }
+    if (view.tiers !== undefined) {
+      array(view.tiers, `views.${view.id}.tiers`, RECORD_TIERS.length);
+      assert(view.tiers.length && view.tiers.every(tier => RECORD_TIERS.includes(tier)), `views.${view.id}.tiers must use: ${RECORD_TIERS.join(', ')}.`);
+      unique(view.tiers, `views.${view.id}.tiers`);
     }
   }
   unique(project.views.map(view => view.id), 'project.views');
@@ -303,7 +309,7 @@ function validateComparison(grid) {
 }
 
 function validateRecord(record, expectedId) {
-  object(record, 'record', ['id', 'type', 'title', 'date', 'phaseId', 'coverage', 'sources', 'fields', 'evidence', 'relations', 'run', 'relatedProjects', 'comparison', 'fieldRules']);
+  object(record, 'record', ['id', 'type', 'title', 'date', 'tier', 'phaseId', 'coverage', 'sources', 'fields', 'evidence', 'relations', 'run', 'relatedProjects', 'comparison', 'fieldRules']);
   if (record.fieldRules !== undefined) assert(typeof record.fieldRules === 'string' && REVISION.test(record.fieldRules), 'record.fieldRules must be a field definitions digest.');
   id(record.id, 'record.id');
   assert(record.id === expectedId, `record.id must match the filename r-${expectedId}.md.`);
@@ -311,6 +317,7 @@ function validateRecord(record, expectedId) {
   string(record.title, 'record.title');
   assert(!/[\r\n]/.test(record.title), 'record.title must be a single line.');
   date(record.date, 'record.date');
+  if (record.tier !== undefined) assert(RECORD_TIERS.includes(record.tier), `record.tier must be one of: ${RECORD_TIERS.join(', ')}.`);
   if (record.phaseId != null) id(record.phaseId, 'record.phaseId');
   if (record.coverage != null) {
     object(record.coverage, 'record.coverage', ['start', 'end']);
@@ -456,7 +463,7 @@ function templateBody(record, project, documents, sourceHref) {
 
 module.exports = {
   METADATA, MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, RECORDS, DOCUMENT_SCHEME,
-  RECORD_FILE, REVISION, FIELD_TYPES, TEMPLATE_KEYS,
+  RECORD_FILE, REVISION, FIELD_TYPES, TEMPLATE_KEYS, RECORD_TIERS,
   RELATION_KINDS, RUN_CONTEXT, RUN_FILTER_FIELDS, validateSource, validateEvidencePath, validateEvidence, validateFilter,
   assert, object, array, id, date, isDate, listOfIds, validateProject, validateRecord, relationshipIssues,
   comparisonType,

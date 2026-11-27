@@ -1,4 +1,5 @@
 export type ResearchValue = string | number | boolean;
+export type ResearchTier = 'key' | 'standard' | 'log';
 
 export interface ResearchRange { start: string; end: string }
 export type ResearchSearchFormat = 'markdown' | 'pptx' | 'pdf' | 'file';
@@ -67,6 +68,7 @@ export interface ResearchView {
   typeIds?: string[];
   phaseIds?: string[];
   fieldIds?: string[];
+  tiers?: ResearchTier[];
 }
 
 export interface ResearchSource { id: string; label: string }
@@ -80,7 +82,7 @@ export interface ResearchFilter {
 
 export interface SavedResearchFilter extends ResearchFilter { id: string; label: string }
 
-export type ResearchRelationKind = 'retest' | 'replaces' | 'compares' | 'paper-adopted' | 'paper-version';
+export type ResearchRelationKind = 'retest' | 'replaces' | 'compares' | 'part-of' | 'paper-adopted' | 'paper-version';
 export interface ResearchRelation { kind: ResearchRelationKind; target: string; note?: string }
 
 export interface ResearchRun {
@@ -155,6 +157,7 @@ export interface ResearchRecord {
   type: string;
   title: string;
   date: string;
+  tier?: ResearchTier;
   phaseId?: string | null;
   coverage?: ResearchRange | null;
   sources?: string[];
@@ -212,15 +215,25 @@ export interface ResearchSnapshot {
 
 export interface ResearchBatch {
   ifProjectRevision?: string;
-  records: Array<Partial<Omit<ResearchRecord, 'fields' | 'fieldRules'>> & {
+  records: Array<Partial<Omit<ResearchRecord, 'fields' | 'fieldRules' | 'tier'>> & {
     id: string;
     ifRevision?: string | null;
+    tier?: ResearchTier | null;
     body?: string;
     fields?: Record<string, ResearchValue | null>;
   }>;
 }
 
+export interface ResearchBatchWarning {
+  code: string;
+  recordId?: string;
+  message: string;
+  suggestion?: string;
+  relatedIds?: string[];
+}
+
 export interface ResearchWriteResult {
   projectRevision: string;
   records: Array<{ id: string; revision: string; relativePath: string; changed: boolean }>;
+  warnings?: ResearchBatchWarning[];
 }

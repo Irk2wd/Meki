@@ -841,8 +841,10 @@ try {
   await page.getByRole('button', { name: '刷新项目', exact: true }).click();
   await idle();
   await page.locator('[data-research-destination=entries]').click();
+  await page.locator('[data-research-tier=all]').click();
   await page.getByText('待补报告', { exact: true }).waitFor();
   assert.equal(await page.getByText('待补报告', { exact: true }).getAttribute('data-record-kind'), 'warning');
+  await page.locator('[data-research-tier=main]').click();
   await page.locator('[data-research-filter]').click();
   await tools.getByLabel('关键词').fill('Electric Dreams ＋ 性能 ＋ 11 月');
   await tools.getByRole('button', { name: '添加字段条件' }).click();

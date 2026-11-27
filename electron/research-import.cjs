@@ -258,7 +258,7 @@ async function planArchive({ directory, sourceId, current, items, index, problem
     changes.push(existing ? { id, ifRevision: existing.revision, run,
       ...(old?.title === existing.record.title ? { title } : {}),
       ...(date && old?.date === existing.record.date ? { date } : {}) }
-      : { id, ifRevision: null, type: archiveType.id, title, date, run });
+      : { id, ifRevision: null, type: archiveType.id, tier: 'log', title, date, run });
   }
   const token = digest(Buffer.from(JSON.stringify([directory, sourceId, current.revision, index.revision, runs, changes, [...references]])));
   return { preview: { sourceId, token, runs }, changes, references, bodies, proposed: !existingType && changes.some(change => change.type === archiveType.id)

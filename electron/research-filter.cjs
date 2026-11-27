@@ -7,6 +7,12 @@ const categoryLabels = {
   reconstruction_compare: '重建 对照', diagnostics: '诊断', legacy_archive: '历史 归档',
 };
 
+const tierLabels = {
+  key: 'key 核心 关键',
+  standard: 'standard 常规 主线',
+  log: 'log 过程 归档 日志',
+};
+
 function researchMatcher(filter, project) {
   const categories = normalize(filter.query);
   const accepts = monthFilter(filter);
@@ -22,7 +28,9 @@ function researchMatcher(filter, project) {
     const category = run?.category ? `${run.category} ${Object.hasOwn(categoryLabels, run.category) ? categoryLabels[run.category] : ''}` : '';
     const status = [run?.status, run?.missing.includes('RUN.md') ? '待补报告 report pending' : ''].filter(Boolean).join(' ');
     const runFields = { ...run?.context, id: run?.id, category, status };
+    const tier = record.tier || 'standard';
     if (!fields.every(({ field, value }) => {
+      if (field === 'tier') return normalize(tierLabels[tier] || tier).includes(value);
       const source = field.startsWith('run.') ? runFields : record.fields;
       const key = field.replace(/^run\./, '');
       return Object.hasOwn(source, key) && normalize(source[key]).includes(value);

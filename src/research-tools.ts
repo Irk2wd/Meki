@@ -1,6 +1,6 @@
 import { ht, t } from '../electron/i18n.mjs';
 import eventIcons from '../electron/research-event-icons.json';
-import type { ResearchDocument, ResearchEntry, ResearchEvidenceFile, ResearchField, ResearchFilter, ResearchGoalMode, ResearchImportPreview, ResearchPhase, ResearchReference, ResearchRelationKind, ResearchSearchLocator, ResearchSnapshot, ResearchType, ResearchValue, ResearchWidth } from '../shared/research';
+import type { ResearchDocument, ResearchEntry, ResearchEvidenceFile, ResearchField, ResearchFilter, ResearchGoalMode, ResearchImportPreview, ResearchPhase, ResearchReference, ResearchRelationKind, ResearchSearchLocator, ResearchSnapshot, ResearchTier, ResearchType, ResearchValue, ResearchWidth } from '../shared/research';
 import { icon } from './icons';
 import { recordKind, recordMark } from './research-record-mark';
 import { revealEvidenceLine } from './research-search-location';
@@ -20,7 +20,11 @@ export interface ResearchWidths { workspace: ResearchWidth; comparison: Research
 const goalModes = ['hidden', 'list', 'checklist'] as const;
 
 export function relationLabels(): Record<ResearchRelationKind, string> {
-  return { retest: t("复测"), replaces: t("替代"), compares: t("候选对照"), 'paper-adopted': t("论文采用"), 'paper-version': t("论文版本") };
+  return { retest: t("复测"), replaces: t("替代"), compares: t("候选对照"), 'part-of': t("归属于"), 'paper-adopted': t("论文采用"), 'paper-version': t("论文版本") };
+}
+
+export function tierLabels(): Record<ResearchTier, string> {
+  return { key: t("核心"), standard: t("常规"), log: t("过程") };
 }
 
 export function runFields(): Record<string, string> {
@@ -555,6 +559,7 @@ export class ResearchTools {
 
   filter(state: ResearchSnapshot, current: ResearchFilter | undefined, apply: (filter?: ResearchFilter) => Promise<void>) {
     const fields = new Map(state.project.recordTypes.flatMap(type => type.fields.map(field => [field.id, field.label] as const)));
+    fields.set('tier', t("重要层级"));
     Object.entries(runFields()).forEach(([id, label]) => fields.set(`run.${id}`, label));
     const presets = state.project.savedFilters || [];
     this.show(`<form>${heading(t("研究筛选"))}

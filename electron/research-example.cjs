@@ -57,15 +57,17 @@ const exampleProject = {
 
 ${experimentPrompt}
 
-${trialTable}
+## 关键图表与数据
 
-## 对照与依据
-
-<!-- ${comparisonTableGuide} -->
+<!-- 紧跟结论放置最能一眼看出效果的对比图、曲线与核心数据表。${comparisonTableGuide} -->
 
 {{sources}}
 
-## 实验设置
+${trialTable}
+
+## 实验设置与适用范围
+
+<!-- 前置条件、环境参数、相机/分辨率与复现细节后置在此，不要压在结论和关键图表前面。 -->
 
 - 场景：{{field.scene}}
 - 显卡：{{field.gpu}}

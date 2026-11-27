@@ -6,8 +6,8 @@ const path = require('node:path');
 const { parseArgs } = require('node:util');
 const { projectToday, latestActivity, monthFilter, summaryCoversPhase } = require('./research-phases.mjs');
 const { ResearchStore, reportWritingGuide } = require('./research-store.cjs');
-const { phaseFilingGuide, recordFilingGuide, continuationGuide, titleGuide, trialGuide } = require('./research-guidance.cjs');
-const { MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, DOCUMENT_SCHEME, RECORDS, FIELD_TYPES, TEMPLATE_KEYS, RELATION_KINDS, RUN_FILTER_FIELDS, assert, date, id, comparisonType } = require('./research-model.cjs');
+const { phaseFilingGuide, recordFilingGuide, continuationGuide, tierGuide, titleGuide, trialGuide } = require('./research-guidance.cjs');
+const { MANIFEST, LEGACY_MANIFEST, INDEX, SUMMARIES, DOCUMENT_SCHEME, RECORDS, FIELD_TYPES, TEMPLATE_KEYS, RECORD_TIERS, RELATION_KINDS, RUN_FILTER_FIELDS, assert, date, id, comparisonType } = require('./research-model.cjs');
 const { comparisonLimits } = require('./research-comparison.mjs');
 const { createExampleProject } = require('./research-example.cjs');
 const { PRODUCT_NAME } = require('./app-identity.cjs');
@@ -18,7 +18,7 @@ const usage = `${PRODUCT_NAME} research projects
   init <folder> --input <project.json|->
   describe <folder>
   upgrade-guidance <folder>
-  list <folder> [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--phase ID] [--type ID]
+  list <folder> [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--phase ID] [--type ID] [--tier key|standard|log]
                 [--query TERMS] [--month YYYY-MM] [--field FIELD=VALUE]... [--filter ID]
   read <folder> <record-id>
   search <folder> --query TEXT [--mode keyword|concept] [--format markdown|pptx|pdf|file]
@@ -53,21 +53,52 @@ function phaseContext(project, items) {
   const kinds = new Map(project.recordTypes.map(type => [type.id, type.kind]));
   const day = entry => latestActivity(entry, '', today);
   const entries = [...items.values()].filter(day).sort((a, b) => day(b).localeCompare(day(a)) || b.record.id.localeCompare(a.record.id));
-  const summaries = entries.filter(({ record }) => record.coverage || kinds.get(record.type) === 'summary');
-  const recent = new Map();
-  const brief = entry => ({ id: entry.record.id, title: entry.record.title, date: entry.record.date,
-    ...(entry.trials && { lastActivity: day(entry) }), ...(entry.excerpt && { excerpt: entry.excerpt }) });
-  for (const entry of entries) {
-    const { phaseId, type, coverage } = entry.record;
-    if (!phaseId || coverage || kinds.get(type) !== 'entry') continue;
-    if (!recent.has(phaseId)) recent.set(phaseId, []);
-    const group = recent.get(phaseId);
-    if (group.length < 3) group.push(brief(entry));
+  const superseded = new Set();
+  for (const { record } of items.values()) {
+    for (const relation of record.relations || []) {
+      if (relation.kind === 'replaces') superseded.add(relation.target);
+    }
   }
+  const summaries = entries.filter(({ record }) => record.coverage || kinds.get(record.type) === 'summary');
+  const recentPrimary = new Map();
+  const recentFallback = new Map();
+  const activeQuestions = new Map();
+  const counts = new Map();
+  const brief = entry => ({ id: entry.record.id, title: entry.record.title, date: entry.record.date,
+    ...(entry.record.tier && { tier: entry.record.tier }),
+    ...(entry.trials && { lastActivity: day(entry), trialCount: entry.trials.length }),
+    ...(entry.excerpt && { excerpt: entry.excerpt }) });
+  for (const entry of entries) {
+    const { phaseId, type, coverage, id: recordId } = entry.record;
+    if (!phaseId || coverage || kinds.get(type) !== 'entry') continue;
+    const tier = entry.record.tier || 'standard';
+    const tally = counts.get(phaseId) || { key: 0, standard: 0, log: 0 };
+    tally[tier] = (tally[tier] || 0) + 1;
+    counts.set(phaseId, tally);
+    const isMain = tier !== 'log' && !superseded.has(recordId);
+    if (isMain) {
+      if (!recentPrimary.has(phaseId)) recentPrimary.set(phaseId, []);
+      if (recentPrimary.get(phaseId).length < 3) recentPrimary.get(phaseId).push(brief(entry));
+      if (!activeQuestions.has(phaseId)) activeQuestions.set(phaseId, []);
+      activeQuestions.get(phaseId).push({ entry, tier, last: day(entry) });
+    } else {
+      if (!recentFallback.has(phaseId)) recentFallback.set(phaseId, []);
+      if (recentFallback.get(phaseId).length < 3) recentFallback.get(phaseId).push(brief(entry));
+    }
+  }
+  const tierRank = { key: 0, standard: 1, log: 2 };
   return project.phases.map(phase => {
     const summary = summaries.find(({ record }) => summaryCoversPhase(record, phase, project.phases, today));
+    const primary = recentPrimary.get(phase.id) || [];
+    const fallback = recentFallback.get(phase.id) || [];
+    const recent = [...primary, ...fallback].slice(0, 3);
+    const questions = (activeQuestions.get(phase.id) || [])
+      .sort((a, b) => tierRank[a.tier] - tierRank[b.tier] || b.last.localeCompare(a.last) || b.entry.record.id.localeCompare(a.entry.record.id))
+      .slice(0, 12)
+      .map(({ entry }) => brief(entry));
     return { phaseId: phase.id, title: phase.title, ...(phase.description && { description: phase.description }),
-      latestSummary: summary ? brief(summary) : null, recentExperiments: recent.get(phase.id) || [] };
+      counts: counts.get(phase.id) || { key: 0, standard: 0, log: 0 },
+      latestSummary: summary ? brief(summary) : null, recentExperiments: recent, activeQuestions: questions };
   });
 }
 
@@ -76,7 +107,7 @@ async function main(args) {
     args, allowPositionals: true,
     options: {
       help: { type: 'boolean', short: 'h' }, input: { type: 'string' }, path: { type: 'string' },
-      from: { type: 'string' }, to: { type: 'string' }, phase: { type: 'string' }, type: { type: 'string' },
+      from: { type: 'string' }, to: { type: 'string' }, phase: { type: 'string' }, type: { type: 'string' }, tier: { type: 'string' },
       source: { type: 'string' }, label: { type: 'string' }, local: { type: 'boolean' }, confirm: { type: 'string' },
       query: { type: 'string' }, month: { type: 'string' }, field: { type: 'string', multiple: true }, filter: { type: 'string' },
       mode: { type: 'string' }, format: { type: 'string' }, limit: { type: 'string' },
@@ -87,7 +118,7 @@ async function main(args) {
   assert(['init-demo', 'init', 'describe', 'upgrade-guidance', 'list', 'search', 'smart-search', 'smart-config', 'smart-models', 'read', 'index', 'resolve', 'batch', 'configure', 'sources', 'bind-source', 'import-archive', 'save-filter'].includes(command), `Unknown command: ${command}. Run --help.`);
   const needsId = ['read', 'index', 'resolve', 'bind-source', 'import-archive'].includes(command);
   assert(folder && !extra.length && Boolean(documentId) === needsId, needsId ? 'Provide the project folder and an ID.' : 'Provide the project folder.');
-  const optionsByCommand = { list: ['from', 'to', 'phase', 'type', 'query', 'month', 'field', 'filter'], init: ['input'], batch: ['input'], configure: ['input'],
+  const optionsByCommand = { list: ['from', 'to', 'phase', 'type', 'tier', 'query', 'month', 'field', 'filter'], init: ['input'], batch: ['input'], configure: ['input'],
     search: ['query','mode','format','from','to','phase','limit'],
     'smart-search': ['query','format','from','to','phase'], 'smart-config':['input'],
     index: ['path', 'source', 'label'], 'bind-source': ['path', 'label'], resolve: ['local'], 'import-archive': ['confirm'], 'save-filter': ['input', 'label'] };
@@ -110,16 +141,18 @@ async function main(args) {
   }
   if (command === 'describe') {
     const { project, revision } = await store.manifest();
-    const { files } = await store.guidanceChanges({ project });
+    const { files, conflicts } = await store.guidanceChanges({ project });
     const { items, problems } = await store.catalog(new Set(), undefined, new Map(project.recordTypes.map(type => [type.id, type])));
     return {
       root: store.root, revision, project, phaseContext: phaseContext(project, items), problems,
       ...(files.length && { guidanceUpgrade: { files, command: 'upgrade-guidance', instructions: '项目使用了旧版内置归档规则。写入前运行 upgrade-guidance <项目目录>，再重新 describe。项目自订内容会保留。' } }),
+      ...(conflicts.length && { guidanceConflicts: { items: conflicts, instructions: '项目自订规则与按问题聚合、区分工程失败的归档规则存在冲突，请先清理冲突条款再写入新实验。' } }),
       format: {
         manifest: store.manifestFile, recordPath: `${RECORDS}/r-<id>.md`,
         summaryPath: `${store.summaryPath ? SUMMARIES : RECORDS}/r-<id>.md`,
         ...(store.indexPath ? { index: INDEX, documentLink: `${DOCUMENT_SCHEME}<id>` } : {}),
         dateFormat: 'YYYY-MM-DD',
+        tiers: RECORD_TIERS,
         smartSearch: { command: 'smart-search <project> --query TEXT', settings: 'smart-config <project>',
           depth: 'Read depths with smart-config. Set depth to quick, standard or deep in the connection JSON to apply that preset, or set custom rounds and tokenBudget.',
           access: 'All research records and indexed materials in the current project are available by default. Submitting a query sends the question and relevant excerpts to the configured model.',
@@ -134,6 +167,7 @@ async function main(args) {
           phaseSelection: phaseFilingGuide,
           filing: recordFilingGuide,
           continuation: continuationGuide,
+          tier: tierGuide,
           trials: trialGuide,
           title: titleGuide,
           experimentReport: reportWritingGuide,
@@ -167,10 +201,11 @@ async function main(args) {
       },
       writes: {
         batch: {
-          input: { ifProjectRevision: 'revision from describe (optional)', records: [{ id: 'stable record ID', ifRevision: 'revision from read or null for creation', type: 'configured type ID', title: 'single line', date: 'date of record', phaseId: 'configured phase ID or null', coverage: 'summary interval or null', sources: 'document IDs', fields: 'patch keyed by field ID; null clears a value', body: 'Markdown; omission keeps the existing body or applies the template on creation' }] },
+          input: { ifProjectRevision: 'revision from describe (optional)', records: [{ id: 'stable record ID', ifRevision: 'revision from read or null for creation', type: 'configured type ID', title: 'single line', date: 'date of record', tier: 'key, standard (default), log, or null to reset', phaseId: 'configured phase ID or null', coverage: 'summary interval or null', sources: 'document IDs', fields: 'patch keyed by field ID; null clears a value', body: 'Markdown; omission keeps the existing body or applies the template on creation' }] },
           fieldRules: 'Defaults fill omitted fields on creation only. Omitted fields on update keep their current values. Use null to clear an optional value. New or changed values must meet the current rules. List records to see issues on historical values.',
           revisionConflict: 'On RESEARCH_CONFLICT, run describe again, read affected records, and merge changes before retrying.',
           relationships: 'Use evidence: [indexed file ID], relations: [{kind, target, note?}], and relatedProjects: [other project IDs] for summaries. Place new source records before summaries that cite them.',
+          warnings: 'Check batch.warnings after writes. Consolidate duplicate retries, operational failures, or bulk micro-steps into a parent record trial table or mark supporting runs tier: "log". Put 1–3 sentence findings and key charts/tables first before setup details.',
         },
         configure: {
           input: { ifRevision: 'revision from describe', project: 'updated copy of project' },
@@ -216,6 +251,7 @@ async function main(args) {
   if (values.from && values.to) assert(values.from <= values.to, '--from must be on or before --to.');
   if (values.phase !== undefined) id(values.phase, '--phase');
   if (values.type !== undefined) id(values.type, '--type');
+  if (values.tier !== undefined) assert(RECORD_TIERS.includes(values.tier), `--tier must be one of: ${RECORD_TIERS.join(', ')}.`);
   let saved;
   if (values.filter) {
     saved = (await store.manifest()).project.savedFilters?.find(filter => filter.id === values.filter);
@@ -239,7 +275,8 @@ async function main(args) {
   const accepts = monthFilter(filter);
   const day = entry => latestActivity(entry, values.from, values.to, accepts);
   return { projectRevision: revision, problems, documents, records: records.filter(entry => day(entry) &&
-    (!values.phase || entry.record.phaseId === values.phase) && (!values.type || entry.record.type === values.type) && (!matched || matched.has(entry.record.id)))
+    (!values.phase || entry.record.phaseId === values.phase) && (!values.type || entry.record.type === values.type) &&
+    (!values.tier || (entry.record.tier || 'standard') === values.tier) && (!matched || matched.has(entry.record.id)))
     .sort((a, b) => day(b).localeCompare(day(a)) || a.record.id.localeCompare(b.record.id)) };
 }
 

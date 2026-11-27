@@ -3,7 +3,7 @@ import { getLocale, ht, t } from '../electron/i18n.mjs';
 import { activityDates, latestActivity, monthFilter, overlaps, phaseSpan, projectToday, sortEntries, summaryCoversPhase } from '../electron/research-phases.mjs';
 import { comparisonImages } from '../electron/research-comparison.mjs';
 import { researchReportFormat } from '../electron/research-report-format.mjs';
-import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSearchLocator, ResearchSnapshot, ResearchType, ResearchValue, ResearchView } from '../shared/research';
+import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSearchLocator, ResearchSnapshot, ResearchTier, ResearchType, ResearchValue, ResearchView } from '../shared/research';
 import { icon } from './icons';
 import { ComparisonGridEditor, ComparisonViewer } from './research-comparison';
 import { ResearchAISettingsDialog } from './research-ai-settings';
@@ -17,7 +17,7 @@ import { reportReferences } from './research-report-links';
 import { recordKind, recordMark } from './research-record-mark';
 import { StageRecordPages } from './research-stage-pages';
 import { comparisonSample, EvidenceSamples } from './research-evidence-samples';
-import { escapeResearch as escape, fieldRuleDetails, fieldValue, relationLabels, researchOption as option, ResearchTools, runFields, type ResearchWidths } from './research-tools';
+import { escapeResearch as escape, fieldRuleDetails, fieldValue, relationLabels, researchOption as option, ResearchTools, runFields, tierLabels, type ResearchWidths } from './research-tools';
 import './research-workspace.css';
 
 const errorText = (error: unknown) => String(error).replace(/^Error: (?:Error invoking remote method '[^']+': Error: )?/, '');
@@ -111,6 +111,36 @@ function fieldControl(rule: ResearchField, value: ResearchValue | undefined, val
   return `<input ${name} type="${rule.type}" value="${escape(text)}" maxlength="1000"${number}>`;
 }
 
+type TierScope = 'key' | 'main' | 'all';
+const recordTier = (record: ResearchEntry['record']): ResearchTier => record.tier ?? 'standard';
+const invalidStatuses = new Set(['invalid', '无效', 'cancelled', 'canceled', 'aborted', '已取消', '已中止']);
+
+function isInvalidRecord(record: ResearchEntry['record']) {
+  for (const status of [record.fields.status, record.fields.outcome, record.run?.status]) {
+    if (typeof status !== 'string') continue;
+    const value = status.trim().toLowerCase().replace(/[-_]/g, ' ');
+    if (invalidStatuses.has(value)) return true;
+  }
+  return false;
+}
+
+function supersededIds(records: ResearchEntry[]) {
+  const targets = new Set<string>();
+  for (const { record } of records) {
+    for (const relation of record.relations || []) {
+      if (relation.kind === 'replaces') targets.add(relation.target);
+    }
+  }
+  return targets;
+}
+
+function isPrimaryProgress(entry: ResearchEntry, recordTypes: ResearchType[], superseded: Set<string>) {
+  const { record } = entry;
+  const kind = recordTypes.find(type => type.id === record.type)?.kind;
+  if (record.coverage || kind === 'summary' || kind === 'event' || Boolean(record.comparison)) return true;
+  return recordTier(record) !== 'log' && !superseded.has(record.id) && !isInvalidRecord(record);
+}
+
 interface TimelineOptions {
   revealPhase?: string;
   activePhase: string;
@@ -124,6 +154,8 @@ interface TimelineOptions {
   canCreatePhase: boolean;
   canCreateEvent: boolean;
   types: Map<string, ResearchType>;
+  superseded: Set<string>;
+  tierSwitch?: string;
 }
 
 const phaseGroupOrder = { ongoing: 0, ended: 1, upcoming: 2 } as const;
@@ -140,15 +172,20 @@ function experimentEnded({ fields, run }: ResearchEntry['record'], phaseEnded: b
   return phaseEnded;
 }
 
-function comparePhaseProgress(a: ResearchEntry, b: ResearchEntry, recordTypes: ResearchType[], today: string) {
+function comparePhaseProgress(a: ResearchEntry, b: ResearchEntry, recordTypes: ResearchType[], today: string, superseded: Set<string>) {
+  const byPrimary = Number(isPrimaryProgress(a, recordTypes, superseded)) - Number(isPrimaryProgress(b, recordTypes, superseded));
+  if (byPrimary) return byPrimary;
   const byDate = latestActivity(a, '', today).localeCompare(latestActivity(b, '', today));
   if (byDate) return byDate;
   const isSummary = ({ record }: ResearchEntry) => Boolean(record.coverage) ||
     recordTypes.some(type => type.id === record.type && type.kind === 'summary');
-  return Number(isSummary(a)) - Number(isSummary(b)) || a.record.id.localeCompare(b.record.id);
+  const bySummary = Number(isSummary(a)) - Number(isSummary(b));
+  if (bySummary) return bySummary;
+  const tierWeight: Record<ResearchTier, number> = { log: 0, standard: 1, key: 2 };
+  return tierWeight[recordTier(a.record)] - tierWeight[recordTier(b.record)] || a.record.id.localeCompare(b.record.id);
 }
 
-function rankPhases(phases: ResearchPhase[], entries: ResearchEntry[], today: string, recordTypes: ResearchType[], progressByPhase?: Map<string, ResearchEntry[]>) {
+function rankPhases(phases: ResearchPhase[], entries: ResearchEntry[], today: string, recordTypes: ResearchType[], progressByPhase?: Map<string, ResearchEntry[]>, superseded = new Set<string>()) {
   const byPhase = groupByPhase(entries);
   const reportTypes = new Set(recordTypes.filter(type => type.kind === 'entry' || type.kind === 'summary').map(type => type.id));
   return phases.map(phase => {
@@ -162,7 +199,7 @@ function rankPhases(phases: ResearchPhase[], entries: ResearchEntry[], today: st
       if (!day) continue;
       if (day > latest) latest = day;
       if (!excerpt && (record.coverage || reportTypes.has(record.type))) continue;
-      if (!update || comparePhaseProgress(update, item, recordTypes, today) < 0) update = item;
+      if (!update || comparePhaseProgress(update, item, recordTypes, today, superseded) < 0) update = item;
     }
     const group: keyof typeof phaseGroupOrder = today < span.start ? 'upcoming' : today > span.end ? 'ended' : 'ongoing';
     return { phase, span, group, latest, assigned, update };
@@ -175,7 +212,7 @@ function rankPhases(phases: ResearchPhase[], entries: ResearchEntry[], today: st
 }
 
 function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByPhase: Map<string, ResearchEntry[]>, eventsByPhase: Map<string, ResearchEntry[]>,
-  { activePhase, today, range, bounds, selectedRange, presetId, page: requestedPage, pageSize, revealPhase, canCreatePhase, canCreateEvent, types }: TimelineOptions) {
+  { activePhase, today, range, bounds, selectedRange, presetId, page: requestedPage, pageSize, revealPhase, canCreatePhase, canCreateEvent, types, superseded, tierSwitch }: TimelineOptions) {
   const start = dayNumber(range.start), end = dayNumber(range.end), span = end - start + 1;
   const dayWidth = 100 / span;
   const fullRange = range.start === bounds.start && range.end === bounds.end;
@@ -184,7 +221,7 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
   const todayLine = containsDay(range, today) ? `<i class="research-today-line" style="--point:${position(today, 0.5)}%"></i>` : '';
   const ticks = [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(start + (end - start) * i / 4)))];
   const tickPosition = (day: number) => (day - start + .5) * 100 / span;
-  const ordered = rankPhases(phases, entries, today, [...types.values()], progressByPhase);
+  const ordered = rankPhases(phases, entries, today, [...types.values()], progressByPhase, superseded);
   const focusPhase = activePhase || ordered[0]?.phase.id;
   const selectedIndex = revealPhase ? ordered.findIndex(({ phase }) => phase.id === revealPhase) : -1;
   const limit = pageSize ?? Math.max(1, ordered.length);
@@ -256,7 +293,7 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
     </nav>` : '';
   const html = `<section class="research-timeline" aria-labelledby="research-range-title">
     <div class="research-section-heading"><h2 id="research-range-title">${ht("研究阶段")}</h2>
-      <div class="research-actions"><div class="research-range-presets" role="group" aria-label="${ht("快捷时间范围")}">${presetButtons}</div>
+      <div class="research-actions">${tierSwitch || ''}<div class="research-range-presets" role="group" aria-label="${ht("快捷时间范围")}">${presetButtons}</div>
         <button type="button" class="secondary-button" data-research-range data-start="${range.start}" data-end="${range.end}"
         title="${ht("选择时间范围")}" aria-label="${ht("选择时间范围")} · ${escape(rangeText(range))}">${icon('timeline', 14)}${escape(rangeText(range))}</button>
         ${selectedRange ? `<button type="button" class="text-button" data-research-reset-range>${ht("全部时段")}</button>` : ''}</div>
@@ -362,6 +399,7 @@ export class ResearchWorkspace {
   private stagePages = new StageRecordPages();
   private stageReaderIds?: string[];
   private recordFilter?: ResearchFilter;
+  private tierScope: TierScope = 'main';
   private axisDrag?: AxisDrag;
   private axisFrame = 0;
   private controlPress?: { pointerId: number; release: () => void };
@@ -838,6 +876,7 @@ export class ResearchWorkspace {
       this.timelineRange = undefined;
       this.phasePage = 1;
       this.recordFilter = undefined;
+      this.tierScope = 'main';
       this.clearAxisDrag();
       this.positions.clear();
       this.stagePages.reset();
@@ -1175,11 +1214,13 @@ export class ResearchWorkspace {
     const isSummary = ({ record }: ResearchEntry) => summaryTypes.has(record.type) || Boolean(record.coverage);
     const isEvent = ({ record }: ResearchEntry) => Boolean(record.comparison) || types.get(record.type)?.kind === 'event';
     const isExperiment = (item: ResearchEntry) => !isSummary(item) && !isEvent(item);
+    const superseded = supersededIds(records);
     const phases = project.phases.filter(phase => !view?.phaseIds || view.phaseIds.includes(phase.id));
     const summaries = records.filter(isSummary);
     const experiments = records.filter(isExperiment);
     const inView = records.filter(({ record }) => (!view?.typeIds || view.typeIds.includes(record.type)) &&
-      (!view?.phaseIds || (record.phaseId && view.phaseIds.includes(record.phaseId))));
+      (!view?.phaseIds || (record.phaseId && view.phaseIds.includes(record.phaseId))) &&
+      (!view?.tiers || isSummary({ record } as ResearchEntry) || isEvent({ record } as ResearchEntry) || view.tiers.includes(recordTier(record))));
     const eventsByPhase = groupByPhase(inView.filter(isEvent));
     const phase = phases.find(item => item.id === this.phaseId);
     if (!phase) this.phaseId = '';
@@ -1190,8 +1231,41 @@ export class ResearchWorkspace {
     const acceptsDay = monthFilter(this.recordFilter);
     const dayInView = (entry: ResearchEntry) => latestActivity(entry, this.date || dateRange?.start, this.date || dateRange?.end, acceptsDay);
     const compareRows = (a: ResearchEntry, b: ResearchEntry) => dayInView(a).localeCompare(dayInView(b)) || a.record.id.localeCompare(b.record.id);
-    const entries = projectPage && !phase ? [] : sequence.filter(item => (!phase || item.record.phaseId === phase.id) && dayInView(item) && matches(item))
+    const unfilteredEntries = projectPage && !phase ? [] : sequence.filter(item => (!phase || item.record.phaseId === phase.id) && dayInView(item) && matches(item));
+    const sequenceExperiments = sequence.filter(isExperiment);
+    const viewHasTiers = !view?.tiers && sequenceExperiments.some(({ record }) => recordTier(record) !== 'standard');
+    const stageEntryPool = unfilteredEntries.filter(isExperiment);
+    const stageKeyCount = stageEntryPool.filter(({ record }) => recordTier(record) === 'key').length;
+    const stageLogCount = stageEntryPool.filter(({ record }) => recordTier(record) === 'log').length;
+    const stageMainCount = stageEntryPool.length - stageLogCount;
+    const effectiveListScope: TierScope = view?.tiers ? 'all'
+      : this.tierScope === 'key' ? 'key'
+      : this.tierScope === 'all' ? 'all'
+      : (this.recordFilter || (stageMainCount === 0 && stageLogCount > 0)) ? 'all' : 'main';
+    const matchesTierScope = (item: ResearchEntry, scope: TierScope) => {
+      if (!isExperiment(item) || scope === 'all') return true;
+      const tier = recordTier(item.record);
+      return scope === 'key' ? tier === 'key' : tier !== 'log';
+    };
+    const entries = unfilteredEntries.filter(item => matchesTierScope(item, effectiveListScope))
       .sort((a, b) => view?.order === 'oldest' ? compareRows(a, b) : compareRows(b, a));
+    const renderTierSwitch = (scope: TierScope, keyCount: number, logCount: number, totalCount: number) => {
+      if (!viewHasTiers || (keyCount === 0 && logCount === 0)) return '';
+      const options: Array<[TierScope, string, string]> = [
+        ...(keyCount > 0 ? [['key', ht("核心"), ht("仅看核心实验 ({0})", keyCount)] as [TierScope, string, string]] : []),
+        ['main', ht("主线"), ht("主线实验（核心与常规，共 {0} 条）", totalCount - logCount)],
+        ...(logCount > 0 ? [['all', ht("全部"), ht("全部记录（含 {0} 条过程日志）", logCount)] as [TierScope, string, string]] : []),
+      ];
+      return `<div class="research-tier-switch" role="group" aria-label="${ht("按重要层级筛选")}">${options.map(([value, label, tip]) =>
+        `<button type="button" data-research-tier="${value}" aria-pressed="${scope === value}" aria-label="${tip}" title="${tip}">${label}</button>`).join('')}</div>`;
+    };
+    const projectKeyCount = sequenceExperiments.filter(({ record }) => recordTier(record) === 'key').length;
+    const projectLogCount = sequenceExperiments.filter(({ record }) => recordTier(record) === 'log').length;
+    const timelineTierScope: TierScope = view?.tiers ? 'all'
+      : this.tierScope === 'key' ? 'key'
+      : this.tierScope === 'all' ? 'all'
+      : (projectLogCount > 0 && projectLogCount === sequenceExperiments.length) ? 'all' : 'main';
+    const timelineSequence = sequence.filter(item => matchesTierScope(item, timelineTierScope));
     const linkedSummaries = active.page === 'summaries' ? (state.linkedSummaries || [])
       .filter(({ record }) => !this.date || record.date === this.date)
       .sort((a, b) => view?.order === 'oldest' ? sortEntries(a, b) : sortEntries(b, a)) : [];
@@ -1199,16 +1273,17 @@ export class ResearchWorkspace {
       summaries.filter(({ record }) => summaryCoversPhase(record, phase, project.phases, today))]) : []);
     const progressByPhase = new Map(projectPage ? phases.map(phase => [phase.id,
       [...(summariesByPhase.get(phase.id) || []), ...(eventsByPhase.get(phase.id) || [])]]) : []);
-    const timelineView = dateRange ? timeline(phases, sequence, progressByPhase, eventsByPhase, {
+    const timelineView = dateRange ? timeline(phases, timelineSequence, progressByPhase, eventsByPhase, {
       activePhase: phase?.id || '', today, range: dateRange, bounds, selectedRange: Boolean(selection),
-      presetId: selection && 'id' in selection ? selection.id : undefined, types,
+      presetId: selection && 'id' in selection ? selection.id : undefined, types, superseded,
+      tierSwitch: renderTierSwitch(timelineTierScope, projectKeyCount, projectLogCount, sequenceExperiments.length),
       page: this.phasePage, pageSize: this.phasePageSize, revealPhase, canCreatePhase: !view?.phaseIds,
       canCreateEvent: project.recordTypes.some(type => type.kind === 'event'),
     }) : undefined;
     if (timelineView) this.phasePage = timelineView.page;
     const latestExperiment = phase && projectPage ? sequence.filter(item =>
       item.record.phaseId === phase.id && latestActivity(item, '', today) && item.excerpt && matches(item)
-    ).sort((a, b) => comparePhaseProgress(b, a, project.recordTypes, today))[0] : undefined;
+    ).sort((a, b) => comparePhaseProgress(b, a, project.recordTypes, today, superseded))[0] : undefined;
     const phaseTitle = phase ? `<h2 id="research-journal-title">${escape(phase.title)}</h2><p class="research-phase-range">${escape(phaseDates(phase, today))}</p>`
       : `<h2 id="research-journal-title">${active.page === 'summaries' ? ht("已归档总结") : ht("实验记录")} <span>${entries.length + linkedSummaries.length}</span></h2>`;
     const lastExperiment = experiments.reduce((latest, item) => {
@@ -1222,7 +1297,7 @@ export class ResearchWorkspace {
     const stage = projectPage ? phase : undefined;
     const stageSummaries = stage ? (summariesByPhase.get(stage.id) || []).filter(matches).sort((a, b) => sortEntries(b, a)) : [];
     const summary = stageSummaries.find(item => item.record.date <= today && item.excerpt);
-    const latest = latestExperiment && (!summary || comparePhaseProgress(latestExperiment, summary, project.recordTypes, today) > 0) ? latestExperiment : summary;
+    const latest = latestExperiment && (!summary || comparePhaseProgress(latestExperiment, summary, project.recordTypes, today, superseded) > 0) ? latestExperiment : summary;
     const otherSummaries = stageSummaries.filter(item => item !== latest);
     this.stagePages.begin(stage ? `${active.key}/${stage.id}` : '');
     this.stageReaderIds = stage ? [
@@ -1261,14 +1336,15 @@ export class ResearchWorkspace {
           ${stage ? '<section class="research-stage-section" data-record-kind="entry" aria-labelledby="research-experiments-title">' : ''}
           <div class="research-record-filters">
             ${stage ? `<h3 id="research-experiments-title" tabindex="-1">${ht("实验记录")} <span>${entries.length}</span></h3>` : ''}
-            <div class="research-filters"><button type="button" class="secondary-button" data-research-filter aria-haspopup="dialog" aria-pressed="${Boolean(this.recordFilter)}">${icon('search', 14)} ${ht("研究筛选")}</button>
+            <div class="research-filters">${active.page !== 'summaries' ? renderTierSwitch(effectiveListScope, stageKeyCount, stageLogCount, stageEntryPool.length) : ''}
+              <button type="button" class="secondary-button" data-research-filter aria-haspopup="dialog" aria-pressed="${Boolean(this.recordFilter)}">${icon('search', 14)} ${ht("研究筛选")}</button>
               <label for="research-date">${ht("按日期筛选")}</label><input id="research-date" type="date" value="${escape(this.date)}"${dateRange ? ` min="${dateRange.start}" max="${dateRange.end}"` : ''}></div>
           </div>
           ${this.recordFilter ? `<p class="research-active-filter">${escape([
             this.recordFilter.query, this.recordFilter.month, ...(this.recordFilter.fields || []).map(({ field, value }) => `${this.filterFieldName(field, state)} = ${value}`),
           ].filter(Boolean).join(' · '))}</p>` : ''}
-          ${stage ? this.stagePages.list('entry', 'research-experiments-title', entries, rows => this.renderEntries(rows, view, state, dayInView))
-            : entries.length ? this.renderEntries(entries, view, state, dayInView) : ''}
+          ${stage ? this.stagePages.list('entry', 'research-experiments-title', entries, rows => this.renderEntries(rows, view, state, dayInView, superseded))
+            : entries.length ? this.renderEntries(entries, view, state, dayInView, superseded) : ''}
           ${linkedSummaries.length ? this.renderLinkedSummaries(linkedSummaries) : ''}
           ${entries.length || linkedSummaries.length ? '' : `<p class="research-empty-list">${ht("这个视图中没有符合条件的记录。")}</p>`}
           ${stage ? '</section>' : ''}
@@ -1433,6 +1509,7 @@ export class ResearchWorkspace {
   }
 
   private filterFieldName(field: string, state: ResearchSnapshot) {
+    if (field === 'tier') return t("重要层级");
     if (field.startsWith('run.')) return runFields()[field.slice(4)] || field;
     return state.project.recordTypes.flatMap(type => type.fields).find(rule => rule.id === field)?.label || field;
   }
@@ -1473,7 +1550,7 @@ export class ResearchWorkspace {
     </section>`;
   }
 
-  private renderEntries(entries: ResearchEntry[], view: ResearchView | undefined, state: ResearchSnapshot, dayInView: (entry: ResearchEntry) => string) {
+  private renderEntries(entries: ResearchEntry[], view: ResearchView | undefined, state: ResearchSnapshot, dayInView: (entry: ResearchEntry) => string, superseded = new Set<string>()) {
     const byDate = new Map<string, ResearchEntry[]>();
     for (const item of entries) {
       const day = dayInView(item);
@@ -1482,17 +1559,22 @@ export class ResearchWorkspace {
       else byDate.set(day, [item]);
     }
     const titles = new Map(state.documents.map(({ id, title }) => [id, title]));
+    const tiers = tierLabels();
     return Array.from(byDate, ([date, items]) => `<div class="research-date-group">
       <time datetime="${date}">${escape(date)}</time>
       <ul>${items.map(({ record, issues, fieldOrigins, excerpt }) => {
         const type = state.project.recordTypes.find(item => item.id === record.type);
         const phase = state.project.phases.find(item => item.id === record.phaseId);
+        const tier = recordTier(record);
+        const replaced = superseded.has(record.id);
         const current = new Map(type?.fields.map(rule => [rule.id, rule]));
         const fields = [...new Set([...current.keys(), ...Object.keys(record.fields)])]
           .filter(id => Object.hasOwn(record.fields, id) && (!view?.fieldIds || view.fieldIds.includes(id)));
         const sources = [...new Set([...(record.sources || []), ...(record.evidence || [])])].filter(id => titles.has(id));
-        return `<li class="research-entry">
+        return `<li class="research-entry" data-record-tier="${tier}"${replaced ? ' data-record-superseded' : ''}>
           <div class="research-entry-title"><span class="research-entry-type" data-record-kind="${recordKind(type, record)}">${recordMark(recordKind(type, record), 13, type?.icon)}${escape(type?.label || record.type)}</span>
+            ${type?.kind === 'entry' && tier !== 'standard' ? `<span class="research-entry-tier" data-tier="${tier}">${escape(tiers[tier])}</span>` : ''}
+            ${replaced ? `<span class="research-entry-tier" data-tier="superseded">${ht("已替代")}</span>` : ''}
             ${record.run?.missing.includes('RUN.md') ? `<span class="research-entry-type" data-record-kind="warning">${recordMark('warning', 13)}${ht("待补报告")}</span>` : ''}
             <button type="button" data-research-record="${record.id}">${escape(record.title)}</button>
             <button type="button" class="research-edit" data-research-edit="${record.id}" title="${ht("编辑记录属性")}" aria-label="${ht("编辑记录属性")}">${icon('settings', 15)}</button>
@@ -1619,6 +1701,15 @@ export class ResearchWorkspace {
     if (data.researchCopyEvidence) {
       await window.meki.writeClipboardText(`mekir:${data.researchCopyEvidence}`);
       this.hooks.notify(t("已复制证据链接"));
+      return;
+    }
+    if (data.researchTier) {
+      const next = data.researchTier as TierScope;
+      if (next !== this.tierScope) {
+        this.tierScope = next;
+        this.stagePages.reset('entry');
+        this.render();
+      }
       return;
     }
     if ('researchFilter' in data) { this.tools.filter(state, this.recordFilter, filter => this.setRecordFilter(filter)); return; }
@@ -1779,6 +1870,11 @@ export class ResearchWorkspace {
         <label class="wide">${ht("关联阶段")}<select name="phaseId">
           ${option('', t("未分配阶段"), record ? record.phaseId || '' : this.phaseId)}${project.phases.map(phase => option(phase.id, phase.title, record ? record.phaseId || '' : this.phaseId)).join('')}
         </select></label>
+        <label class="wide" data-research-tier-field>${ht("重要层级")}<select name="tier">
+          ${option('key', t("核心（关键结论与采用依据）"), record ? recordTier(record) : 'standard')}
+          ${option('standard', t("常规（默认）"), record ? recordTier(record) : 'standard')}
+          ${option('log', t("过程与归档（原始运行与排查日志）"), record ? recordTier(record) : 'standard')}
+        </select></label>
       </div>
       <div data-research-summary hidden>
         <div class="research-form-grid">
@@ -1854,6 +1950,8 @@ export class ResearchWorkspace {
     description.hidden = !type.description;
     this.dialog.querySelector<HTMLElement>('[data-research-date-label]')!.textContent = summary ? t("撰写日期") : t("发生日期");
     this.dialog.querySelector<HTMLElement>('[data-research-summary]')!.hidden = !summary;
+    const tierField = this.dialog.querySelector<HTMLElement>('[data-research-tier-field]');
+    if (tierField) tierField.hidden = type.kind !== 'entry';
     this.input('phaseId').required = type.kind === 'comparison' || type.kind === 'event';
     for (const key of ['start', 'end']) this.input(key).required = summary;
     const record = this.editing?.record;
@@ -1893,8 +1991,12 @@ export class ResearchWorkspace {
     });
     const comparison = this.comparisonGrid?.value();
     const caption = data.get('comparison-caption');
+    const selectedTier = type.kind === 'entry' ? this.input('tier').value as ResearchTier : undefined;
+    const tierPatch = type.kind === 'entry' && selectedTier && (original ? selectedTier !== recordTier(original.record) : selectedTier !== 'standard')
+      ? { tier: selectedTier } : {};
     const write: ResearchBatch = { ifProjectRevision: state.revision, records: [{
       id, ifRevision: original?.revision ?? null, type: type.id, title: this.input('title').value.trim(), date,
+      ...tierPatch,
       phaseId: this.input('phaseId').value || null, fields,
       ...(evidence.length || original?.record.evidence ? { evidence } : {}),
       ...(relations.length || original?.record.relations ? { relations } : {}),
