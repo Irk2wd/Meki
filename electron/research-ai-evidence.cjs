@@ -13,16 +13,10 @@ const clip=(value,n=1200)=>safeText(value).slice(0,n);
 const sameLocator=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 
 class Evidence {
-  constructor(store,snapshot,config,query,signal) {
-    this.store=store;this.snapshot=snapshot;this.config=config;this.query=query;this.signal=signal;
+  constructor(store,snapshot,query,signal) {
+    this.store=store;this.snapshot=snapshot;this.query=query;this.signal=signal;
     this.docs=new Map(snapshot.documents.map(d=>[d.id,d]));
     this.records=new Map(snapshot.records.map(e=>[e.record.id,e]));
-    const unavailable=[...this.docs.values()].filter(doc=>doc.sourceId && (!config.sourceIds.includes(doc.sourceId) ||
-      snapshot.project.search?.sourceIds && !snapshot.project.search.sourceIds.includes(doc.sourceId)));
-    // A permitted report can name an attachment in prose even when that attachment was excluded.
-    const hidden=new Set(unavailable.flatMap(doc=>[doc.title,doc.relativePath,path.posix.basename(doc.relativePath),'mekir:'+doc.id]).filter(Boolean));
-    const literals=[...hidden].sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
-    this.excludedNames=literals.length ? new RegExp(literals.join('|'),'gi') : null;
     this.members=new Map(); this.index=new Map();this.citations={};this.readRefs=new Set();this.sourceTables=new Map();this.tables=new Map();this.searches=[];
     for(const entry of snapshot.records){
       const rec=entry.record;
@@ -31,13 +25,8 @@ class Evidence {
       }
     }
   }
-  outbound(value) {
-    const text=safeText(value);
-    return this.excludedNames ? text.replace(this.excludedNames,'[excluded source]') : text;
-  }
   visible(id) {
-    const doc=this.docs.get(id);if(!doc)return false;
-    if(doc.sourceId ? (!this.config.sourceIds.includes(doc.sourceId) || this.snapshot.project.search?.sourceIds && !this.snapshot.project.search.sourceIds.includes(doc.sourceId)) : !this.config.allowRecords)return false;
+    if(!this.docs.has(id))return false;
     const q=this.query;
     if(!q.phase && !q.from && !q.to)return true;
     return (this.members.get(id)||[]).some(e=>(!q.phase || e.record.phaseId===q.phase) && activityDates(e).some(d=>this.date(d)));
@@ -52,15 +41,15 @@ class Evidence {
       ref='E'+(this.index.size+1);this.index.set(key,ref);const doc=this.docs.get(id);
       this.citations[ref]={id,title:doc.title,format:formatOf(doc.relativePath),locator,snippet:'',revision};
     }
-    if(content)this.citations[ref].snippet=this.outbound(content).slice(0,1400);
+    if(content)this.citations[ref].snippet=clip(content,1400);
     if(revision)this.citations[ref].revision=revision;
     return ref;
   }
-  card(ref){const c=this.citations[ref];return c && {ref,title:this.outbound(c.title).slice(0,180),format:c.format,text:c.snippet,
+  card(ref){const c=this.citations[ref];return c && {ref,title:clip(c.title,180),format:c.format,text:c.snippet,
     ...(c.locator.kind==='page'&&{page:c.locator.page}),...(c.locator.trialId&&{trial:c.locator.trialId,date:c.locator.date})};}
   async search(query) {
     this.signal?.throwIfAborted();
-    const search=await searchProject(this.store,{...this.query,query,mode:'concept',limit:100});
+    const search=await searchProject(this.store,{...this.query,query,mode:'concept',limit:100},{allProjectSources:true});
     this.signal?.throwIfAborted();this.searches.push(clip(query,160));
     const matches=[];
     for(const doc of search.results){

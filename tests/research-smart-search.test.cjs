@@ -2,9 +2,9 @@
 
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs/promises'),path=require('node:path'),os=require('node:os');
 const {createExampleProject}=require('../electron/research-example.cjs');
-const {Evidence}=require('../electron/research-ai-evidence.cjs');
+const {Evidence,safeText}=require('../electron/research-ai-evidence.cjs');
 const {smartSearch,validateAnswer}=require('../electron/research-smart-search.cjs');
-const {config,envKey}=require('../electron/research-ai-settings.cjs');
+const {config,save,settings}=require('../electron/research-ai-settings.cjs');
 const provider=require('../electron/research-ai-provider.cjs');
 const http=require('node:http');
 test('Codex resolves a Windows npm shim without executing a command shell',async t=>{
@@ -21,13 +21,21 @@ test('smart search resolves source IDs, tool output and explicit gaps for extern
   process.env.MEKIR_LOCAL_STATE=tmp;
   t.after(async()=>{if(previous===undefined)delete process.env.MEKIR_LOCAL_STATE;else process.env.MEKIR_LOCAL_STATE=previous;await fs.rm(tmp,{force:true,recursive:true});});
   const store=await createExampleProject(path.join(tmp,'project'));
-  const state=await store.snapshot();
-  const cfg=config({provider:'compatible',protocol:'chat',base:'http://127.0.0.1:8877/v1',model:'test',allowRecords:true,sourceIds:[]},state.project.evidenceSources.map(s=>s.id));
-  assert.throws(()=>config({...cfg,base:'http://insecure.example'},[]));
-  const e=new Evidence(store,state,cfg,{query:'基线'},undefined);
-  assert.equal(e.ref('forest-timings'),undefined);
-  const hidden=state.documents.find(d=>d.id==='forest-timings');
-  assert.equal(e.outbound('See '+hidden.title+' in '+hidden.relativePath+'.'),'See [excluded source] in [excluded source].');
+  const cfg=await save(store,{provider:'compatible',protocol:'chat',base:'http://127.0.0.1:8877/v1',model:'test'});
+  assert.throws(()=>config({...cfg,base:'http://insecure.example'}));
+  const configDir=path.join(tmp,'smart-search','projects'), [filename]=await fs.readdir(configDir);
+  await fs.writeFile(path.join(configDir,filename),JSON.stringify({...cfg,allowRecords:false,sourceIds:[]}));
+  assert.deepEqual((await settings(store)).value,cfg);
+  const directory=path.join(tmp,'later-source');
+  await fs.mkdir(directory); await fs.writeFile(path.join(directory,'later.md'),'补录的对照结果');
+  await store.bindEvidenceSource('later',directory,'后续登记的来源');
+  await store.indexEvidence('later-report',{sourceId:'later',relativePath:'later.md',title:'后续复测'});
+  const state=await store.snapshot(), e=new Evidence(store,state,{query:'基线'});
+  assert.ok((await e.read(e.ref('forest-timings'))).rows>0);
+  assert.match((await e.read(e.ref('later-report'))).context[0].text,/补录的对照结果/);
+  assert.equal(e.ref('unregistered'),undefined);
+  assert.equal(new Evidence(store,state,{phase:'exploration'}).ref('forest-validation'),undefined);
+  assert.equal(safeText('See /Users/example/data.csv'),'See [local path]');
   const id=e.ref('tile-culling'),read=await e.read(id);
   assert.ok(read.trials.some(r=>r.trial==='baseline-repeat'));
   const proof=read.context[0],answer={claims:[{text:'这条轨迹有遮挡剔除复测。',proofs:[{ref:proof.ref,quote:proof.text.slice(0,8)}]}],tables:[id],gaps:[]};
@@ -35,7 +43,7 @@ test('smart search resolves source IDs, tool output and explicit gaps for extern
   assert.throws(()=>validateAnswer(e,{...answer,claims:[{text:'Measured 9999 ms.',proofs:answer.claims[0].proofs}]}));
   assert.throws(()=>validateAnswer(e,{...answer,claims:[{text:'test',proofs:[{ref:'E999',quote:'fabricated'}]}]}));
   const local=await smartSearch(store,{query:'baseline-repeat'},null);
-  assert.equal(local.status,'local');assert.ok(local.results.length);
+  assert.equal(local.status,'local');assert.equal(local.reason,'not-configured');assert.ok(local.results.length);
 });
 test('provider adapters round-trip read-only calls and tool results without a cloud account',async t=>{
   const previous=process.env.NO_PROXY;process.env.NO_PROXY='127.0.0.1,localhost';

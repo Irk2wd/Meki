@@ -44,7 +44,7 @@ try {
   await store.writeBatch({records:[{id:record.record.id,ifRevision:record.revision,evidence:[...record.record.evidence,'trail-raw'],
     body:'# 步道次日复测\n\n补基线后在林间步道复测。\n\n## 实验试次\n\n| Trial ID | Date | 条件 | 中位数 | 对照 | 原始证据 |\n| --- | --- | --- | --- | --- | --- |\n| timing-repeat | 2026-11-14 | 步道次日复测 | 15.00 | 待补 | [原始计时](mekir:trail-raw) |\n'}]});
   const manifest = await store.manifest();
-  await store.configure({ifRevision:manifest.revision,project:{...manifest.project,search:{...manifest.project.search,
+  await store.configure({ifRevision:manifest.revision,project:{...manifest.project,search:{...manifest.project.search,sourceIds:[],
     measurements:[{recordId:'forest-validation',field:'中位数',column:'ms',where:{view:'trail'},statistic:'median'}]}}});
   const settings = new FileStore(profile);
   await settings.init(); await settings.changeRecentFolders('remember',project);
@@ -64,10 +64,20 @@ try {
   await config.locator('[data-model-list]').click();
   await config.locator('datalist option[value=evidence-test]').waitFor({state:'attached'});
   await config.locator('[name=model]').fill('evidence-test');
-  await config.locator('[name=records]').check(); await config.locator('[name=source][value=forest-samples]').check();
+  const accessNote=await config.locator('.research-ai-access-note').innerText();
+  assert.match(accessNote,/全部研究记录和已登记资料/);
+  assert.match(accessNote,/发送给所选模型/);
+  assert.equal(await config.locator('[name=records],[name=source]').count(),0);
   await config.locator('[type=submit]').click(); await config.waitFor({ state:'hidden' });
   await page.locator('[data-research-search]').click();
   const search = page.locator('#research-search-dialog');
+  const notice=search.locator('#research-ai-access-note');
+  assert.ok(await notice.isHidden());
+  await search.locator('label:has(input[value=smart])').click();
+  await notice.waitFor();
+  assert.equal(await notice.innerText(),accessNote);
+  await search.locator('label:has(input[value=concept])').click();
+  assert.ok(await notice.isHidden());
   await search.locator('label:has(input[value=smart])').click();
   await search.locator('[name=query]').fill('步道次日复测 timing-repeat');
   await search.locator('[type=submit]').click();

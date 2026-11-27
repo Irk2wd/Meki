@@ -41,6 +41,10 @@ test('rank tables, locate original pages and trials, and refresh modified or rem
   await store.configure({ifRevision:current.revision,project:{...current.project,search:{aliases:{'亮度读头':['Luminometer']},sourceIds:[]}}});
   assert.equal((await search('亮度读头')).results[0].id,'tile-culling');
   assert.deepEqual((await search('机位',{format:'pptx'})).results,[]);
+  const smart=spawnSync(process.execPath,[require.resolve('../electron/research-cli.cjs'),'smart-search',store.root,'--query','机位','--format','pptx'],{encoding:'utf8'});
+  assert.equal(smart.status,0,smart.stderr);
+  assert.equal(JSON.parse(smart.stdout).results[0].id,'forest-slides');
+  assert.deepEqual((await search('机位',{format:'pptx'})).results,[]);
   const cli=spawnSync(process.execPath,[require.resolve('../electron/research-cli.cjs'),'search',store.root,'--query','亮度读头','--limit','1'],{encoding:'utf8'});
   assert.equal(cli.status,0,cli.stderr); assert.equal(JSON.parse(cli.stdout).results[0].hits[0].locator.heading,'校验');
 });

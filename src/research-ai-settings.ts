@@ -5,6 +5,7 @@ import { escapeResearch as escape } from './research-tools';
 import './research-ai.css';
 
 const protocols: Record<AIProtocol,string> = { responses:'OpenAI Responses', chat:'OpenAI Chat Completions', messages:'Anthropic Messages', gemini:'Google Gemini', codex:'Codex CLI' };
+export const smartSearchAccessNotice = () => ht("智能检索可读取当前项目的全部研究记录和已登记资料。提交查询时，问题和相关证据片段会发送给所选模型。");
 
 export class ResearchAISettingsDialog {
   private dialog = document.createElement('dialog');
@@ -33,9 +34,7 @@ export class ResearchAISettingsDialog {
       '<label data-http>'+ht("API 密钥")+'<input type="password" name="key" autocomplete="new-password"></label>' +
       '<label data-cli>'+ht("Codex 可执行文件")+'<input name="cliPath" spellcheck="false" placeholder="codex"><small>'+ht("沿用本机 Codex 登录。若应用找不到命令，可填入完整路径。")+'</small></label>' +
       '<label>'+ht("模型 ID")+'<span class="research-ai-model-row"><input name="model" list="research-ai-model-list" spellcheck="false"><datalist id="research-ai-model-list"></datalist><button type="button" class="secondary-button" data-http data-model-list>'+ht("获取模型列表")+'</button></span></label>' +
-      '<fieldset><legend>'+ht("允许模型读取的项目资料")+'</legend><label><input type="checkbox" name="records"> '+ht("项目内文稿（含实验记录和阶段总结）")+'</label>' +
-      state.sources.map(s=>'<label><input type="checkbox" name="source" value="'+escape(s.id)+'"> '+escape(s.label)+'</label>').join('')+
-      '<small>'+ht("每次查询只发送所选范围内命中的片段和原始数据行。此设置保存在本机。")+'</small></fieldset>' +
+      '<p class="research-ai-access-note">'+smartSearchAccessNotice()+'</p>' +
       '<details><summary>'+ht("查询用量")+'</summary><div class="research-ai-fields"><label>'+ht("追加检索轮数")+'<input type="number" name="rounds" min="1" max="4" required></label>' +
       '<label>'+ht("单次 token 预算")+'<input type="number" name="budget" min="4000" max="120000" required></label></div></details>' +
       '<footer><span role="status" aria-live="polite"></span><button type="submit" class="primary-button">'+ht("保存")+'</button></footer></form>';
@@ -45,8 +44,6 @@ export class ResearchAISettingsDialog {
     const models = dlg.querySelector<HTMLDataListElement>('datalist')!;
     const listButton = dlg.querySelector<HTMLButtonElement>('[data-model-list]')!;
     field('provider').value = preset.id;
-    field('records').checked = current?.allowRecords || false;
-    for (const box of form.querySelectorAll<HTMLInputElement>('[name=source]')) box.checked = current?.sourceIds.includes(box.value) || false;
     field('rounds').value = String(current?.rounds ?? 2);
     field('budget').value = String(current?.tokenBudget ?? 36000);
     let changes = 0;
@@ -75,7 +72,6 @@ export class ResearchAISettingsDialog {
     const draft = ():ResearchAIConfig => ({
       provider:field('provider').value, protocol:field('protocol').value as AIProtocol,
       base:field('base').value.trim(), model:field('model').value.trim(), cliPath:field('cliPath').value.trim(),
-      allowRecords:field('records').checked, sourceIds:[...form.querySelectorAll<HTMLInputElement>('[name=source]:checked')].map(b=>b.value),
       rounds:Number(field('rounds').value), tokenBudget:Number(field('budget').value),
     });
     listButton.onclick = async () => {

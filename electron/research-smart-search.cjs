@@ -8,7 +8,7 @@ const string={type:'string'}, array=items=>({type:'array',items});
 const object=(properties)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const tool=(name,description,properties)=>({name,description,parameters:object(properties)});
 const tools=[
-  tool('search_project','Search the authorized project for a supplementary question, baseline, or conflicting result.',{query:string}),
+  tool('search_project','Search the current project for a supplementary question, baseline, or conflicting result.',{query:string}),
   tool('read_evidence','Read the original context, full trial table, or report page for a returned evidence reference.',{ref:string}),
   tool('follow_relations','Follow registered retests, replacements, adopted results, paper versions and sources.',{ref:string}),
   tool('measure_table','Verify one recorded numeric trial cell against a linked CSV/TSV column with explicit equality filters.',{
@@ -41,12 +41,12 @@ async function smartSearch(store,input,config,key='',options={}) {
   const {signal,onProgress=()=>{},ask=turn}=options;
   assert(typeof input.query==='string' && input.query.trim() && input.query.length<=500,'Enter a research question.');
   const query={query:input.query.trim(),format:input.format||'all',...(input.phase&&{phase:input.phase}),...(input.from&&{from:input.from}),...(input.to&&{to:input.to})};
-  const snapshot=await store.snapshot();
-  if(!config || !config.allowRecords && !config.sourceIds?.length){
-    const local=await searchProject(store,{...query,mode:'keyword'});
-    return {status:'local',reason:'scope',claims:[],tables:[],gaps:[],citations:{},results:local.results,searches:[],usage:0};
+  if(!config){
+    const local=await searchProject(store,{...query,mode:'keyword'},{allProjectSources:true});
+    return {status:'local',reason:'not-configured',claims:[],tables:[],gaps:[],citations:{},results:local.results,searches:[],usage:0};
   }
-  const evidence=new Evidence(store,snapshot,config,query,signal);
+  const snapshot=await store.snapshot();
+  const evidence=new Evidence(store,snapshot,query,signal);
   onProgress('search');
   const matches=await evidence.search(query.query), initial=[];
   let primary;
@@ -65,7 +65,8 @@ async function smartSearch(store,input,config,key='',options={}) {
   if(!matches.length)return partial('empty','');
   onProgress('evidence',partial('pending',''));
   const fields=snapshot.project.recordTypes.filter(t=>initial.some(ctx=>evidence.records.get(evidence.citations[ctx.ref]?.id)?.record.type===t.id)).map(t=>({type:t.label,fields:t.fields.map(f=>({label:f.label,unit:f.unit||'',description:f.description||''})).slice(0,16)}));
-  const question=JSON.stringify({question:query.query,fieldRules:fields,candidates:matches,evidence:initial},(_key,value)=>typeof value==='string'?evidence.outbound(value):value);
+  const redactLocalPaths=(_key,value)=>typeof value==='string'?safeText(value):value;
+  const question=JSON.stringify({question:query.query,fieldRules:fields,candidates:matches,evidence:initial},redactLocalPaths);
   const history=[];
   try{
     for(let i=0;i<config.rounds+2;i++){
@@ -94,7 +95,7 @@ async function smartSearch(store,input,config,key='',options={}) {
           else if(call.name==='follow_relations')data=evidence.follow(args.ref);
           else if(call.name==='measure_table')data=await evidence.measured(args);
           else throw Error('Invalid research tool or arguments.');
-          const visible=JSON.parse(JSON.stringify(data,(_key,value)=>typeof value==='string'?evidence.outbound(value):value));
+          const visible=JSON.parse(JSON.stringify(data,redactLocalPaths));
           results.push({id:call.id,nativeId:call.nativeId,name:call.name,data:visible});
         }catch(error){signal?.throwIfAborted();results.push({id:call.id,nativeId:call.nativeId,name:call.name,data:{error:safeText(error.message).slice(0,350)}});}
       }

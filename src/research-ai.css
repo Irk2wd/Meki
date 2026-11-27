@@ -1,12 +1,12 @@
 #research-ai-settings { width:min(540px, calc(100vw - 36px)); max-height:calc(100dvh - 88px); overflow:auto; }
 .research-ai-form, .research-ai-form > label, .research-ai-fields label { display:grid; gap:6px; }
 .research-ai-form { gap:14px; margin-top:16px; }
-.research-ai-form :is(input:not([type=checkbox]), select) { width:100%; min-width:0; box-sizing:border-box; }
+.research-ai-form :is(input, select) { width:100%; min-width:0; box-sizing:border-box; }
 .research-ai-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .research-ai-model-row { display:flex; gap:8px; align-items:center; }
 .research-ai-model-row input { flex:1; }
-.research-ai-form fieldset { display:grid; gap:6px; border:1px solid var(--border); border-radius:8px; padding:10px 12px; }
-.research-ai-form fieldset label { display:flex; align-items:center; gap:6px; }
+.research-ai-access-note { margin:0; color:var(--soft); font-size:.9em; line-height:1.5; }
+#research-search-dialog .research-ai-access-note { margin-block-start:8px; }
 .research-ai-form small, .research-ai-form footer span { color:var(--soft); }
 .research-ai-form footer { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .research-ai-form details summary { color:var(--soft); cursor:pointer; }

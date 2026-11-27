@@ -55,7 +55,7 @@ function remove(db, id) {
   db.prepare('DELETE FROM passages WHERE doc=?').run(id);
   db.prepare('DELETE FROM docs WHERE id=?').run(id);
 }
-async function sources(store, snap) {
+async function sources(store, snap, included) {
   const records = new Map(snap.records.map(entry => [entry.record.id, entry]));
   const associations = new Map();
   for (const entry of snap.records) {
@@ -66,7 +66,6 @@ async function sources(store, snap) {
     }
   }
   const result = new Map();
-  const included = snap.project.search?.sourceIds;
   for (const doc of snap.documents) {
     if (doc.sourceId && included && !included.includes(doc.sourceId)) continue;
     const entry = records.get(doc.id), format = formatOf(doc.relativePath);
@@ -94,7 +93,7 @@ async function sources(store, snap) {
   }
   return result;
 }
-async function refreshIndex(db, docs) {
+async function refreshIndex(db, docs, registeredIds) {
   const before = new Map(db.prepare('SELECT id,stamp,problem FROM docs').all().map(row => [row.id, row]));
   const insert = db.prepare('INSERT INTO passages(doc,text,locator,strength) VALUES(?,?,?,?)');
   const index = db.prepare('INSERT INTO words(rowid,title,body,metadata) VALUES(?,?,?,?)');
@@ -126,7 +125,8 @@ async function refreshIndex(db, docs) {
     });
   }
   transaction(db, () => {
-    for (const [id, row] of before) if (!docs.has(id) && db.prepare('SELECT stamp FROM docs WHERE id=?').get(id)?.stamp === row.stamp) remove(db, id);
+    // Both search modes share the cache. A narrower query may omit a still-registered document.
+    for (const [id, row] of before) if (!registeredIds.has(id) && db.prepare('SELECT stamp FROM docs WHERE id=?').get(id)?.stamp === row.stamp) remove(db, id);
   });
   return problems;
 }
@@ -219,7 +219,7 @@ function groupResults(rows, docs, rankings, opt) {
   }
   return [...groups.values()];
 }
-async function searchProject(store, input) {
+async function searchProject(store, input, { allProjectSources = false } = {}) {
   const opt = options(input), snap = await store.snapshot();
   if (opt.phase) assert(snap.project.phases.some(p => p.id === opt.phase), 'Unknown phase.');
   const folder = path.join(searchHome(), 'indexes');
@@ -227,12 +227,14 @@ async function searchProject(store, input) {
   const db = new DatabaseSync(path.join(folder, hash(pathKey(store.root)+'\n'+snap.project.id) + '-v1.sqlite'));
   try {
     catalog(db);
-    const docs = await sources(store,snap), problems = await refreshIndex(db,docs);
+    const docs = await sources(store,snap,allProjectSources ? undefined : snap.project.search?.sourceIds);
+    const problems = await refreshIndex(db,docs,new Set(snap.documents.map(doc=>doc.id)));
     const rows = new Map();
     for (const row of db.prepare('SELECT id,doc,text,locator,strength FROM passages ORDER BY id').iterate()) {
       const doc = docs.get(row.doc);
+      if (!doc) continue;
       row.locator = JSON.parse(row.locator);
-      if (doc && inRange(doc,row.locator,opt)) rows.set(row.id,row);
+      if (inRange(doc,row.locator,opt)) rows.set(row.id,row);
     }
     const rankings = [lexical(db,opt.query,snap.project.search?.aliases,rows)];
     let mode = opt.mode, warning;

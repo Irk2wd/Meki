@@ -24,7 +24,7 @@ const usage = `${PRODUCT_NAME} research projects
   search <folder> --query TEXT [--mode keyword|concept] [--format markdown|pptx|pdf|file]
                   [--phase ID] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--limit N]
   smart-search <folder> --query TEXT [--phase ID] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--format markdown|pptx|pdf|file]
-  smart-config <folder> [--input <connection-and-scope.json|->]
+  smart-config <folder> [--input <model-connection.json|->]
   smart-models <folder>
   sources <folder>
   bind-source <folder> <source-id> --path <local-folder> [--label <new-source-name>]
@@ -120,10 +120,12 @@ async function main(args) {
         summaryPath: `${store.summaryPath ? SUMMARIES : RECORDS}/r-<id>.md`,
         ...(store.indexPath ? { index: INDEX, documentLink: `${DOCUMENT_SCHEME}<id>` } : {}),
         dateFormat: 'YYYY-MM-DD',
-        smartSearch: { command: 'smart-search <project> --query TEXT', settings: 'smart-config <project>', result: 'claims[].refs, tables[].rows[].cells[].ref, citations, gaps, status; partial/local means the external answer was incomplete.', measurements: 'project.search.measurements map a trial table field to a CSV header, explicit filters and statistic.' },
+        smartSearch: { command: 'smart-search <project> --query TEXT', settings: 'smart-config <project>',
+          access: 'All research records and indexed materials in the current project are available by default. Submitting a query sends the question and relevant excerpts to the configured model.',
+          result: 'claims[].refs, tables[].rows[].cells[].ref, citations, gaps, status; partial/local means the external answer was incomplete.', measurements: 'project.search.measurements map a trial table field to a CSV header, explicit filters and statistic.' },
         search: { command: 'search <project> --query TEXT --mode keyword|concept', filters: ['--format','--phase','--from','--to','--limit'],
           result: 'Each result has a stable document or evidence ID and matched hits with original snippets. Markdown locators carry a body-relative line and anchor, trials also carry a trial ID and date, and PDF/PPTX pages are one-based. Inspect mode and warning if the local model is unavailable.',
-          configuration: 'project.search.aliases maps terms to equivalent spellings. project.search.sourceIds optionally limits indexed read-only sources.' },
+          configuration: 'project.search.aliases maps terms to equivalent spellings. project.search.sourceIds optionally limits the sources searched in keyword and concept modes.' },
         fieldTypes: FIELD_TYPES, templateVariables: [...TEMPLATE_KEYS, 'field.<id>'],
         rules: {
           guide: 'AGENTS.md in the project root, when present',

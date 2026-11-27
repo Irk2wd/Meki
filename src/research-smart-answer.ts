@@ -3,8 +3,8 @@ import { ht, t } from '../electron/i18n.mjs';
 import { escapeResearch as escape } from './research-tools';
 
 const reasons = () => ({
-  scope: t("在模型设置中选择服务和可读取的项目资料。"),
-  empty: t("所选资料中没有找到与问题相关的证据。"),
+  'not-configured': t("在模型设置中选择服务后即可生成带引用的回答。以下是本地搜索结果。"),
+  empty: t("当前查询范围内没有找到相关证据。"),
   budget: t("已达到查询预算，以下为本地核对的证据。"),
   validation: t("模型给出的引用未通过核对，以下为本地查到的证据。"),
   provider: t("模型连接未完成，以下为本地查到的证据。"),

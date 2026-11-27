@@ -708,14 +708,14 @@ function registerIpc() {
     return {...state,hasKey:Boolean(stored || state.value && preferences.envKey(state.value))};
   });
   register('save-research-ai-settings', async (root,value,key) => {
-    const store=await requireResearch(root), {project}=await store.manifest();
-    const selected=preferences.config(value,(project.evidenceSources||[]).map(s=>s.id));
+    const store=await requireResearch(root);
+    const selected=preferences.config(value);
     if(key!==undefined) await preferences.desktopKey(selected,key);
     return preferences.save(store,selected);
   });
   register('research-ai-models', async(root,value,key)=>{
-    const {project}=await (await requireResearch(root)).manifest();
-    const selected=preferences.config({...value,model:value.model || 'model-list'},(project.evidenceSources||[]).map(s=>s.id));
+    await requireResearch(root);
+    const selected=preferences.config({...value,model:value.model || 'model-list'});
     return require('./research-ai-provider.cjs').listModels(selected,key || await preferences.desktopKey(selected) || preferences.envKey(selected));
   });
   register('smart-search-research', async (root,input,token) => {

@@ -1,7 +1,8 @@
 'use strict';
 
 const localSearchGuide = '查过去如何验证一个问题，用 `search <项目目录> --query "研究问题" --mode concept`。已知术语或运行编号时用 `--mode keyword`。用 `--format pptx` 或 `--format pdf` 查汇报和报告，用 `--phase`、`--from`、`--to` 限定实验时段。结果的 ID、正文段落或页码可用于核对原文。';
-const smartSearchGuide = '要跨试次核对基线、复测与报告时，用 `smart-search <项目目录> --query "研究问题"`。通过 `smart-config <项目目录>` 读取本机选定的模型和资料范围。用 `claims[].refs` 和表格单元格的 `ref` 查 `citations`，按文档 ID、页码或原表行号核对原文。`partial` 与 `local` 返回本轮可用的本地证据，缺项保留为待补。';
+const modelAccessGuide = '用 `smart-config <项目目录>` 查看本机选定的模型。智能检索可读取当前项目的全部研究记录和已登记资料，提交查询时会将问题和相关证据片段发送给所选模型。';
+const smartSearchGuide = '要跨试次核对基线、复测与报告时，用 `smart-search <项目目录> --query "研究问题"`。' + modelAccessGuide + '用 `claims[].refs` 和表格单元格的 `ref` 查 `citations`，按文档 ID、页码或原表行号核对原文。`partial` 与 `local` 返回本轮可用的本地证据，缺项保留为待补。';
 
 const phaseFilingGuide = '用 describe.phaseContext 找到本次研究决定所属的阶段。一个阶段可以容纳多个具体问题。只有研究要作的决定改变时才建阶段。';
 const recordFilingGuide = '先判断这次工作提供了什么研究证据。用已确认的数据更新论文全文、重绘已有图表、排版或按既定流程做例行检查，默认跳过实验归档。若作者作出新的采用决定，可在依据记录上关联论文版本并说明原因。项目明确要求跟踪写作时，使用该项目指定的记录类型。';
@@ -23,6 +24,8 @@ function upgradeGuideText(text) {
   if (!text.replace(/^\uFEFF/, '').startsWith('# mekiR 研究项目的 Agent 指引')) return text;
   const newline = text.includes('\r\n') ? '\r\n' : '\n';
   const section = filingSection.replaceAll('\n', newline);
+  const oldSmartGuide = smartSearchGuide.replace(modelAccessGuide,'通过 `smart-config <项目目录>` 读取本机选定的模型和资料范围。');
+  text = text.replace(oldSmartGuide,smartSearchGuide);
   if (!text.includes('smart-search <项目目录>')) text = text.replace(localSearchGuide,localSearchGuide+newline.repeat(2)+smartSearchGuide);
   const oldLookup = '查找同一轮运行，复用稳定记录 ID。';
   if (!text.includes(previousPhaseGuide) && !text.includes(phaseFilingGuide) && text.includes(oldLookup)) {

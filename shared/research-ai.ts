@@ -1,11 +1,11 @@
-import type { ResearchSearchDocument, ResearchSearchLocator, ResearchSearchQuery, ResearchSource } from './research';
+import type { ResearchSearchDocument, ResearchSearchLocator, ResearchSearchQuery } from './research';
 export type AIProtocol = 'responses' | 'chat' | 'messages' | 'gemini' | 'codex';
 export interface ResearchAIConfig {
   provider: string; protocol: AIProtocol; base: string; model: string; cliPath: string;
-  allowRecords: boolean; sourceIds: string[]; rounds: number; tokenBudget: number;
+  rounds: number; tokenBudget: number;
 }
 export interface ResearchAISettings {
-  value: ResearchAIConfig | null; hasKey: boolean; sources: ResearchSource[];
+  value: ResearchAIConfig | null; hasKey: boolean;
   presets: {id: string; name: string; protocol: AIProtocol; base: string; env: string}[];
 }
 export interface SmartCitation {

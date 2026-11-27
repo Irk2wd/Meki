@@ -1,6 +1,7 @@
 import type { ResearchPhase, ResearchSearchDocument, ResearchSearchHit, ResearchSearchQuery, ResearchSearchResponse } from '../shared/research';
 import type { SmartAnswer } from '../shared/research-ai';
 import { smartMarkup, smartStatus } from './research-smart-answer';
+import { smartSearchAccessNotice } from './research-ai-settings';
 import { ht, t } from '../electron/i18n.mjs';
 import { icon } from './icons';
 import { escapeResearch as escape } from './research-tools';
@@ -66,7 +67,9 @@ export class ResearchSearchDialog {
   }
 
   private updateMode() {
-    this.dialog.querySelector<HTMLButtonElement>('[data-model-settings]')!.hidden = !this.dialog.querySelector('input[value=smart]:checked');
+    const smart = Boolean(this.dialog.querySelector('input[value=smart]:checked'));
+    this.dialog.querySelector<HTMLButtonElement>('[data-model-settings]')!.hidden = !smart;
+    this.dialog.querySelector<HTMLElement>('#research-ai-access-note')!.hidden = !smart;
   }
 
   private cancel() {
@@ -89,10 +92,11 @@ export class ResearchSearchDialog {
         '<form><div class="research-search-input">' + icon('search',18) + '<input name="query" type="search" maxlength="500" required autofocus aria-label="' + ht("搜索内容") + '" placeholder="' + ht("搜索实验、汇报或研究问题") + '"><button type="submit" class="primary-button">' + ht("搜索") + '</button><button type="button" data-search-cancel hidden>'+ht("取消")+'</button></div>' +
         '<div class="research-search-controls"><div class="research-search-mode" role="radiogroup" aria-label="' + ht("匹配方式") + '">' +
         '<label><input type="radio" name="mode" value="keyword" checked><span>' + ht("关键词") + '</span></label>' +
-        '<label><input type="radio" name="mode" value="concept"><span>' + ht("概念") + '</span></label><label><input type="radio" name="mode" value="smart"><span>'+ht("智能检索")+'</span></label></div>' +
+        '<label><input type="radio" name="mode" value="concept"><span>' + ht("概念") + '</span></label><label><input type="radio" name="mode" value="smart" aria-describedby="research-ai-access-note"><span>'+ht("智能检索")+'</span></label></div>' +
         '<button type="button" class="research-ai-settings-link" data-model-settings hidden>'+ht("模型设置")+'</button>' +
         '<select name="format" aria-label="' + ht("资料类型") + '"><option value="all">' + ht("所有资料") + '</option>' +
         Object.entries(formats()).map(([key,label]) => '<option value="' + key + '">' + escape(label) + '</option>').join('') + '</select></div>' +
+        '<p id="research-ai-access-note" class="research-ai-access-note" hidden>'+smartSearchAccessNotice()+'</p>' +
         '<details class="research-search-range"><summary>' + ht("限定阶段和日期") + '</summary><div><label>' + ht("研究阶段") + '<select name="phase"></select></label>' +
         '<label>' + ht("开始日期") + '<input type="date" name="from"></label><label>' + ht("结束日期") + '<input type="date" name="to"></label></div></details></form>' +
         '<p class="research-search-status" role="status"></p><div class="research-search-results"></div>';

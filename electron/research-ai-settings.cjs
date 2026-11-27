@@ -27,28 +27,26 @@ function baseUrl(value) {
   return url.href.replace(/\/+$/,'');
 }
 
-function config(input, sourceIds) {
+function config(input) {
   const p=presetFor(input.provider);
   assert(protocols.includes(input.protocol) && (input.protocol==='codex')===(p.id==='codex'),'Invalid API protocol.');
   const model=String(input.model || '').trim();
   assert(model.length<=180 && !/[\r\n\0]/.test(model) && (model || p.id==='codex'),'Specify a model ID.');
   const cliPath=String(input.cliPath || '').trim();
   assert(!cliPath || path.isAbsolute(cliPath) && /^codex(?:\.exe|\.cmd)?$/i.test(path.basename(cliPath)),'Choose the Codex executable.');
-  assert(typeof input.allowRecords==='boolean' && Array.isArray(input.sourceIds) && input.sourceIds.every(id=>sourceIds.includes(id)), 'Select registered project sources.');
   const rounds=input.rounds ?? 2, tokenBudget=input.tokenBudget ?? 36000;
   assert(Number.isInteger(rounds) && rounds>=1 && rounds<=4 && Number.isInteger(tokenBudget) && tokenBudget>=4000 && tokenBudget<=120000,'Invalid query budget.');
-  return {provider:p.id,protocol:input.protocol,base:p.id==='codex'?'':baseUrl(input.base || p.base),model,cliPath:p.id==='codex'?cliPath:'',allowRecords:input.allowRecords,sourceIds:[...new Set(input.sourceIds)],rounds,tokenBudget};
+  return {provider:p.id,protocol:input.protocol,base:p.id==='codex'?'':baseUrl(input.base || p.base),model,cliPath:p.id==='codex'?cliPath:'',rounds,tokenBudget};
 }
 function fileFor(store,project) {return path.join(configDir(),'projects',digest(Buffer.from(pathKey(store.root)+'\n'+project.id))+'.json');}
 async function settings(store) {
-  const {project}=await store.manifest(), sources=project.evidenceSources || [];
+  const {project}=await store.manifest();
   let value;
   try {value=JSON.parse(await fs.readFile(fileFor(store,project),'utf8'));} catch(e){if(e.code!=='ENOENT')throw e;}
-  if(value) value=config({...value,sourceIds:value.sourceIds.filter(id=>sources.some(s=>s.id===id))},sources.map(s=>s.id));
-  return { value:value || null, presets, sources };
+  return { value:value ? config(value) : null, presets };
 }
 async function save(store,input) {
-  const {project}=await store.manifest(), value=config(input,(project.evidenceSources || []).map(s=>s.id));
+  const {project}=await store.manifest(), value=config(input);
   const file=fileFor(store,project);
   await fs.mkdir(path.dirname(file),{recursive:true,mode:0o700});await atomicWrite(file,Buffer.from(JSON.stringify(value)));
   return value;
