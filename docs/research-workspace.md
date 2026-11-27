@@ -44,6 +44,8 @@ Markdown 用 `fieldRules` 引用 `.mekir/field-rules/` 中按内容摘要命名�
 
 「智能检索」默认可读取当前项目的全部研究记录和已登记资料。提交查询时，mekiR 会向所选模型发送问题和相关证据片段。后续登记的来源自动纳入检索。桌面设置或 `smart-config <项目目录>` 可配置模型、协议和端点。
 
+「检索深度」按研究问题选择。快速适合定位一条记录，标准适合核对基线与复测，深入适合追溯多轮实验。证据充分时模型可提前作答。Agent 可从 `smart-config` 返回的 `depths` 读取各档上限，在连接配置的 `depth` 中填写 `quick`、`standard` 或 `deep` 即可同时设置两项上限。自定义时把 `depth` 设为 `custom`，分别填写补查轮数 `rounds` 和每次提问的预算 `tokenBudget`。预算累计各轮输入和回复。
+
 Agent 运行 `node electron/research-cli.cjs smart-search "<项目目录>" --query "<问题>"`。返回的 `claims`、`tables` 和 `gaps` 共用 `citations`。状态 `partial` 或 `local` 时，按实际取得的原文核对结果。CLI 使用当前服务商的环境变量，兼容网关使用 `MEKIR_AI_API_KEY`。Codex CLI 可复用自己的登录。设置存于本机。
 
 项目可在 `project.search.measurements` 登记实验表与原始证据的对应关系。每条规则给出试次表列名 `field`、CSV/TSV 数值列 `column`、按原表列名和值筛选的 `where`，以及 `statistic`（median、mean、min、max、value）。可用 `recordId` 或 `recordType` 限定适用记录。例如把步道试次的“三层中位数（ms）”映射到 `cpu_draw_and_png_ms`，按 `camera=trail` 和 `canopy_layers=3` 过滤后求中位数。使用该试次链接的 CSV 验证记录精度，成功后数字可打开参与计算的原始行。缺项保留原文。

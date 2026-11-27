@@ -121,6 +121,7 @@ async function main(args) {
         ...(store.indexPath ? { index: INDEX, documentLink: `${DOCUMENT_SCHEME}<id>` } : {}),
         dateFormat: 'YYYY-MM-DD',
         smartSearch: { command: 'smart-search <project> --query TEXT', settings: 'smart-config <project>',
+          depth: 'Read depths with smart-config. Set depth to quick, standard or deep in the connection JSON to apply that preset, or set custom rounds and tokenBudget.',
           access: 'All research records and indexed materials in the current project are available by default. Submitting a query sends the question and relevant excerpts to the configured model.',
           result: 'claims[].refs, tables[].rows[].cells[].ref, citations, gaps, status; partial/local means the external answer was incomplete.', measurements: 'project.search.measurements map a trial table field to a CSV header, explicit filters and statistic.' },
         search: { command: 'search <project> --query TEXT --mode keyword|concept', filters: ['--format','--phase','--from','--to','--limit'],

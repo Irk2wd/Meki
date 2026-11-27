@@ -18,6 +18,11 @@ const presets = [
   {id:'codex',name:'OpenAI · Codex CLI',protocol:'codex',base:'',env:''},
 ];
 const protocols = ['responses','chat','messages','gemini','codex'];
+const depths = {
+  quick: { rounds: 1, tokenBudget: 16000 },
+  standard: { rounds: 2, tokenBudget: 36000 },
+  deep: { rounds: 4, tokenBudget: 80000 },
+};
 const configDir = () => path.join(process.env.MEKIR_LOCAL_STATE || path.join(os.homedir(),'.mekir'),'smart-search');
 function presetFor(id) { const p=presets.find(item=>item.id===id); assert(p,'Unknown model provider.'); return p; }
 function baseUrl(value) {
@@ -34,7 +39,10 @@ function config(input) {
   assert(model.length<=180 && !/[\r\n\0]/.test(model) && (model || p.id==='codex'),'Specify a model ID.');
   const cliPath=String(input.cliPath || '').trim();
   assert(!cliPath || path.isAbsolute(cliPath) && /^codex(?:\.exe|\.cmd)?$/i.test(path.basename(cliPath)),'Choose the Codex executable.');
-  const rounds=input.rounds ?? 2, tokenBudget=input.tokenBudget ?? 36000;
+  const depth = input.depth;
+  assert(depth === undefined || depth === 'custom' || typeof depth === 'string' && Object.hasOwn(depths, depth), 'Unknown search depth.');
+  const limits = depths[depth] ?? input;
+  const rounds = limits.rounds ?? depths.standard.rounds, tokenBudget = limits.tokenBudget ?? depths.standard.tokenBudget;
   assert(Number.isInteger(rounds) && rounds>=1 && rounds<=4 && Number.isInteger(tokenBudget) && tokenBudget>=4000 && tokenBudget<=120000,'Invalid query budget.');
   return {provider:p.id,protocol:input.protocol,base:p.id==='codex'?'':baseUrl(input.base || p.base),model,cliPath:p.id==='codex'?cliPath:'',rounds,tokenBudget};
 }
@@ -43,7 +51,7 @@ async function settings(store) {
   const {project}=await store.manifest();
   let value;
   try {value=JSON.parse(await fs.readFile(fileFor(store,project),'utf8'));} catch(e){if(e.code!=='ENOENT')throw e;}
-  return { value:value ? config(value) : null, presets };
+  return { value:value ? config(value) : null, presets, depths };
 }
 async function save(store,input) {
   const {project}=await store.manifest(), value=config(input);

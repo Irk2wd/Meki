@@ -4,8 +4,11 @@ export interface ResearchAIConfig {
   provider: string; protocol: AIProtocol; base: string; model: string; cliPath: string;
   rounds: number; tokenBudget: number;
 }
+export type ResearchDepthPreset = 'quick' | 'standard' | 'deep';
+export type ResearchQueryLimits = Pick<ResearchAIConfig, 'rounds' | 'tokenBudget'>;
 export interface ResearchAISettings {
   value: ResearchAIConfig | null; hasKey: boolean;
+  depths: Record<ResearchDepthPreset, ResearchQueryLimits>;
   presets: {id: string; name: string; protocol: AIProtocol; base: string; env: string}[];
 }
 export interface SmartCitation {

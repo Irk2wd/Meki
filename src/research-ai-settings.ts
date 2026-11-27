@@ -2,6 +2,7 @@ import type { AIProtocol, ResearchAIConfig } from '../shared/research-ai';
 import { ht, t } from '../electron/i18n.mjs';
 import { icon } from './icons';
 import { escapeResearch as escape } from './research-tools';
+import { bindSearchDepth, searchDepthFields } from './research-ai-depth';
 import './research-ai.css';
 
 const protocols: Record<AIProtocol,string> = { responses:'OpenAI Responses', chat:'OpenAI Chat Completions', messages:'Anthropic Messages', gemini:'Google Gemini', codex:'Codex CLI' };
@@ -35,8 +36,7 @@ export class ResearchAISettingsDialog {
       '<label data-cli>'+ht("Codex 可执行文件")+'<input name="cliPath" spellcheck="false" placeholder="codex"><small>'+ht("沿用本机 Codex 登录。若应用找不到命令，可填入完整路径。")+'</small></label>' +
       '<label>'+ht("模型 ID")+'<span class="research-ai-model-row"><input name="model" list="research-ai-model-list" spellcheck="false"><datalist id="research-ai-model-list"></datalist><button type="button" class="secondary-button" data-http data-model-list>'+ht("获取模型列表")+'</button></span></label>' +
       '<p class="research-ai-access-note">'+smartSearchAccessNotice()+'</p>' +
-      '<details><summary>'+ht("查询用量")+'</summary><div class="research-ai-fields"><label>'+ht("追加检索轮数")+'<input type="number" name="rounds" min="1" max="4" required></label>' +
-      '<label>'+ht("单次 token 预算")+'<input type="number" name="budget" min="4000" max="120000" required></label></div></details>' +
+      searchDepthFields() +
       '<footer><span role="status" aria-live="polite"></span><button type="submit" class="primary-button">'+ht("保存")+'</button></footer></form>';
     const form = dlg.querySelector<HTMLFormElement>('form')!;
     const field = <T extends HTMLInputElement | HTMLSelectElement = HTMLInputElement>(name: string) => form.elements.namedItem(name) as T;
@@ -44,8 +44,7 @@ export class ResearchAISettingsDialog {
     const models = dlg.querySelector<HTMLDataListElement>('datalist')!;
     const listButton = dlg.querySelector<HTMLButtonElement>('[data-model-list]')!;
     field('provider').value = preset.id;
-    field('rounds').value = String(current?.rounds ?? 2);
-    field('budget').value = String(current?.tokenBudget ?? 36000);
+    const queryLimits = bindSearchDepth(form, state);
     let changes = 0;
     const refreshProvider = () => {
       changes++;
@@ -72,7 +71,7 @@ export class ResearchAISettingsDialog {
     const draft = ():ResearchAIConfig => ({
       provider:field('provider').value, protocol:field('protocol').value as AIProtocol,
       base:field('base').value.trim(), model:field('model').value.trim(), cliPath:field('cliPath').value.trim(),
-      rounds:Number(field('rounds').value), tokenBudget:Number(field('budget').value),
+      ...queryLimits(),
     });
     listButton.onclick = async () => {
       const generation = changes;

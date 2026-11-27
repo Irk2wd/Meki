@@ -7,6 +7,20 @@ const {smartSearch,validateAnswer}=require('../electron/research-smart-search.cj
 const {config,save,settings}=require('../electron/research-ai-settings.cjs');
 const provider=require('../electron/research-ai-provider.cjs');
 const http=require('node:http');
+test('search depth presets share the default budget and preserve existing custom limits', () => {
+  const connection = { provider:'codex', protocol:'codex' };
+  const standard = config(connection);
+  assert.deepEqual([standard.rounds, standard.tokenBudget], [2, 36000]);
+  const existing = config({ ...connection, rounds:2, tokenBudget:110000 });
+  assert.equal(existing.tokenBudget, 110000);
+  for (const [depth, rounds, tokenBudget] of [['quick',1,16000], ['standard',2,36000], ['deep',4,80000]]) {
+    assert.deepEqual(config({ ...existing, depth }), { ...standard, rounds, tokenBudget });
+  }
+  assert.deepEqual(config({ ...existing, depth:'custom' }), existing);
+  assert.throws(() => config({ ...existing, depth:'constructor' }), /Unknown search depth/);
+  assert.throws(() => config({ ...existing, rounds:5 }), /Invalid query budget/);
+  assert.throws(() => config({ ...existing, tokenBudget:3999 }), /Invalid query budget/);
+});
 test('Codex resolves a Windows npm shim without executing a command shell',async t=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'mekir-codex-shim-'));
   t.after(()=>fs.rm(root,{recursive:true,force:true}));
