@@ -6,7 +6,9 @@ import { bindSearchDepth, searchDepthFields } from './research-ai-depth';
 import './research-ai.css';
 
 const protocols: Record<AIProtocol,string> = { responses:'OpenAI Responses', chat:'OpenAI Chat Completions', messages:'Anthropic Messages', gemini:'Google Gemini', codex:'Codex CLI' };
-export const smartSearchAccessNotice = () => ht("智能检索可读取当前项目的全部研究记录和已登记资料。提交查询时，问题和相关证据片段会发送给所选模型。");
+export function smartSearchAccessNotice() {
+  return `${icon('circle-alert')}<span>${ht("提交时，问题和相关证据片段会发送给所选模型。")}<small>${ht("智能检索可读取当前项目的全部研究记录和已登记资料。")}</small></span>`;
+}
 
 export class ResearchAISettingsDialog {
   private dialog = document.createElement('dialog');

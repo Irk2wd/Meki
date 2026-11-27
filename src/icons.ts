@@ -50,6 +50,7 @@ const paths: Record<string, string> = {
   bulb: '<path d="M9 18v-3a6 6 0 1 1 6 0v3M9 18h6m-5 3h4"/>',
   branch: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10m12-8a7 7 0 0 1-7 7H6"/>',
   warning: '<path d="M12 3 2 21h20zM12 9v4m0 4h.01"/>',
+  'circle-alert': '<circle cx="12" cy="12" r="9.5"/><path d="M12 7.5v5.5"/><circle cx="12" cy="16.5" r="1" fill="currentColor" stroke="none"/>',
 };
 export function icon(name: string, size = 18) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.page}</svg>`;

@@ -5,7 +5,12 @@
 .research-ai-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .research-ai-model-row { display:flex; gap:8px; align-items:center; }
 .research-ai-model-row input { flex:1; }
-.research-ai-access-note { margin:0; color:var(--soft); font-size:.9em; line-height:1.5; }
+.research-ai-access-note {
+  display:flex; align-items:flex-start; gap:.5em; margin:0;
+  color:var(--research-warning-ink); font-size:var(--ui-text-size); font-weight:550; line-height:1.5;
+}
+.research-ai-access-note > svg { flex:none; width:1.3em; height:1.3em; margin-block-start:.1em; }
+.research-ai-access-note small { display:block; color:var(--soft); font-size:var(--ui-small-size); font-weight:400; }
 #research-search-dialog .research-ai-access-note { margin-block-start:8px; }
 .research-ai-form small, .research-ai-form footer span { color:var(--soft); }
 .research-ai-form footer { display:flex; align-items:center; justify-content:space-between; gap:12px; }
