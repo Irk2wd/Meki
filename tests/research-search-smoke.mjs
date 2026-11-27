@@ -53,6 +53,7 @@ try {
   await page.keyboard.press('Escape');
   assert.ok(await search.isVisible());
   assert.equal(await formatFilter.inputValue(), 'all');
+  assert.ok(await formatFilter.evaluate(node => node.matches(':focus-visible') && getComputedStyle(node).outlineStyle === 'none'));
   await formatFilter.press('Space');
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');

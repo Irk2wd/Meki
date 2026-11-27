@@ -42,6 +42,10 @@ import './formula.css';
 import './settings.css';
 import './writing-tools.css';
 import './editing-tools.css';
+import './dropdowns.css';
+import { installInputSuggestions } from './input-suggestions';
+
+installInputSuggestions();
 
 const escapeHTML = (text: string) => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const el = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -906,7 +910,7 @@ el<HTMLSelectElement>('#heading-format').addEventListener('change', event => { i
 el('#math-input').addEventListener('input', updateMathPreview);
 el('#math-kind').addEventListener('change', updateMathPreview);
 document.addEventListener('keydown', event => {
-  if (event.key !== 'Escape' || event.isComposing || document.querySelector('dialog[open]')) return;
+  if (event.key !== 'Escape' || event.isComposing || document.querySelector('dialog[open], select:open')) return;
   const hadPopover = Boolean(document.querySelector('.popover:not([hidden])'));
   closePopovers();
   if (!hadPopover && researchUI.closeEvidence()) { event.preventDefault(); }

@@ -865,6 +865,15 @@ try {
   await page.locator('[data-research-destination=summaries]').click();
   await page.locator('[data-research-edit=paper-decision]').click();
   await dialog.getByText('原始证据与研究关系', { exact: true }).click();
+  const evidenceField = dialog.locator('[name=evidence-ids]');
+  const savedIds = await evidenceField.inputValue();
+  const [firstId, replacementId, lastId] = await dialog.locator('#research-evidence-ids option').evaluateAll(options => options.slice(0, 3).map(o => o.value));
+  await evidenceField.fill(firstId + ' ' + lastId);
+  await evidenceField.evaluate((input, end) => input.setSelectionRange(0, end), firstId.length);
+  await evidenceField.press('ArrowDown');
+  await dialog.locator('#field-suggestions [role=option]').nth(1).click();
+  assert.equal(await evidenceField.inputValue(), replacementId + ' ' + lastId);
+  await evidenceField.fill(savedIds);
   await dialog.getByRole('button', { name: '添加研究关系' }).click();
   await dialog.locator('[name=relation-kind]').last().selectOption('paper-version');
   await dialog.locator('[name=relation-target]').last().fill('paper-v3');

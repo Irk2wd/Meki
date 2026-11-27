@@ -1,3 +1,4 @@
+import { suggestionAttributes } from './input-suggestions';
 import DOMPurify from 'dompurify';
 import { ht, t } from '../electron/i18n.mjs';
 import { comparisonLimits, evidenceImageMime } from '../electron/research-comparison.mjs';
@@ -56,7 +57,7 @@ export class ComparisonGridEditor {
       <input data-grid-column required maxlength="120" aria-label="${escape(columnLabel(index))}" value="${escape(label)}">${remove('column', index, columns.length)}</div></th>`).join('')}</tr></thead>
       <tbody>${rows.map(({ label, images }, row) => `<tr><th><div class="research-comparison-axis-field">
         <input data-grid-row required maxlength="120" aria-label="${escape(rowLabel(row))}" value="${escape(label)}">${remove('row', row, rows.length)}</div></th>
-        ${images.map((image, column) => `<td><input data-grid-image maxlength="64" list="research-comparison-images"
+        ${images.map((image, column) => `<td><input data-grid-image maxlength="64" ${suggestionAttributes('research-comparison-images')}
           aria-label="${ht("第 {0} 行第 {1} 列原图", row + 1, column + 1)}" placeholder="${ht("证据 ID")}" value="${escape(image ?? '')}"></td>`).join('')}</tr>`).join('')}</tbody></table>`;
     this.controls.innerHTML = `<button type="button" class="secondary-button" data-grid-action="add-row"${rows.length >= comparisonLimits.rows ? ' disabled' : ''}>${ht("添加行")}</button>
       <button type="button" class="secondary-button" data-grid-action="add-column"${columns.length >= comparisonLimits.columns ? ' disabled' : ''}>${ht("添加列")}</button>`;

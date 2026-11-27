@@ -1,3 +1,4 @@
+import { suggestionAttributes } from './input-suggestions';
 import { getLocale, ht, t } from '../electron/i18n.mjs';
 import { activityDates, latestActivity, monthFilter, overlaps, phaseSpan, projectToday, sortEntries, summaryCoversPhase } from '../electron/research-phases.mjs';
 import { comparisonImages } from '../electron/research-comparison.mjs';
@@ -1803,7 +1804,7 @@ export class ResearchWorkspace {
         ${record ? '' : `<label class="research-comparison-caption-field">${ht("图注（Markdown）")}<textarea name="comparison-caption" rows="4"></textarea></label>`}</section>` : ''}
       <details class="research-related-form"><summary>${ht("原始证据与研究关系")}</summary>
         ${targets.some(target => target.sourceId) || record?.evidence?.length ? `<label>${ht("证据 ID")}
-          <input name="evidence-ids" value="${escape(record?.evidence?.join(' ') || '')}" placeholder="${ht("多个 ID 用空格分隔")}" list="research-evidence-ids"></label>
+          <input name="evidence-ids" value="${escape(record?.evidence?.join(' ') || '')}" placeholder="${ht("多个 ID 用空格分隔")}" ${suggestionAttributes('research-evidence-ids')} data-suggestion-tokens></label>
           <datalist id="research-evidence-ids">${targets.filter(target => target.sourceId).map(target => option(target.id, target.title, '')).join('')}</datalist>` : ''}
         <datalist id="research-relation-targets">${targets.map(target => option(target.id, target.title, '')).join('')}</datalist>
         <div data-research-relations>${(record?.relations || []).map(relation => this.relationRow(relation)).join('')}</div>
@@ -1825,7 +1826,7 @@ export class ResearchWorkspace {
   private relationRow(relation?: ResearchRelation) {
     return `<div class="research-relation-row">
       <select name="relation-kind" aria-label="${ht("关系类型")}">${Object.entries(relationLabels()).map(([kind, label]) => option(kind, label, relation?.kind || '')).join('')}</select>
-      <input name="relation-target" aria-label="${ht("关联记录或证据 ID")}" placeholder="${ht("关联记录或证据 ID")}" value="${escape(relation?.target || '')}" list="research-relation-targets" maxlength="64">
+      <input name="relation-target" aria-label="${ht("关联记录或证据 ID")}" placeholder="${ht("关联记录或证据 ID")}" value="${escape(relation?.target || '')}" ${suggestionAttributes('research-relation-targets')} maxlength="64">
       <button type="button" class="icon-button" data-remove-relation aria-label="${ht("移除研究关系")}">${icon('close', 14)}</button>
       <input name="relation-note" aria-label="${ht("采用依据或关系说明")}" placeholder="${ht("采用依据或关系说明")}" value="${escape(relation?.note || '')}" maxlength="1000">
     </div>`;
