@@ -36,8 +36,8 @@ export class ResearchAISettingsDialog {
       '<label>'+ht("连接协议")+'<select name="protocol">'+Object.entries(protocols).map(([id,label])=>'<option value="'+id+'">'+escape(label)+'</option>').join('')+'</select></label></div>' +
       '<label data-http>'+ht("API 根地址")+'<input type="url" name="base" spellcheck="false" placeholder="https://…"></label>' +
       '<label data-http>'+ht("API 密钥")+'<input type="password" name="key" autocomplete="new-password"></label>' +
-      '<label data-cli>'+ht("Codex 可执行文件")+'<input name="cliPath" spellcheck="false" placeholder="codex"><small>'+ht("沿用本机 Codex 登录。若应用找不到命令，可填入完整路径。")+'</small></label>' +
-      '<label>'+ht("模型 ID")+'<span class="research-ai-model-row"><input name="model" '+suggestionAttributes('research-ai-model-list')+' spellcheck="false"><datalist id="research-ai-model-list"></datalist><button type="button" class="secondary-button" data-http data-model-list>'+ht("获取模型列表")+'</button></span></label>' +
+      '<label data-cli>'+ht("Codex 可执行文件")+'<input name="cliPath" spellcheck="false" placeholder="codex" aria-describedby="research-ai-cli-hint"><small id="research-ai-cli-hint">'+ht("沿用本机 Codex 登录。若应用找不到命令，可填入完整路径。")+'</small></label>' +
+      '<div class="research-ai-model-field"><label for="research-ai-model-id">'+ht("模型 ID")+'</label><div class="research-ai-model-row"><input id="research-ai-model-id" name="model" '+suggestionAttributes('research-ai-model-list')+' spellcheck="false"><datalist id="research-ai-model-list"></datalist><button type="button" class="secondary-button" data-http data-model-list>'+ht("获取模型列表")+'</button></div></div>' +
       '<p class="research-ai-access-note">'+smartSearchAccessNotice()+'</p>' +
       searchDepthFields() +
       '<footer><span role="status" aria-live="polite"></span><button type="submit" class="primary-button">'+ht("保存")+'</button></footer></form>';
