@@ -7,7 +7,8 @@ export async function checkStagePages({ page, command, open, closeReader, archiv
   const phaseTitle = '树冠精度';
   command('init', [], {
     version: 1, id: 'stage-archive', title: '阶段分页验证', timezone: 'Asia/Shanghai',
-    phases: [{ id: phaseId, title: phaseTitle, start: '2026-11-01' }, { id: 'control', title: '对照', start: '2026-11-01' }],
+    phases: [{ id: phaseId, title: phaseTitle, start: '2026-11-01', description: '比较树冠近景的两种采样设置。', goals: [{text:'复测近景'}] },
+      { id: 'control', title: '对照', start: '2026-11-01' }],
     recordTypes: Object.entries(types).map(([kind, label]) => ({ id: kind, kind, label, template: '', fields: [] })),
     views: [{ id: 'timeline', label: '时间线', layout: 'timeline', order: 'newest' }], defaultView: 'timeline',
   });
@@ -20,6 +21,7 @@ export async function checkStagePages({ page, command, open, closeReader, archiv
       const date = kind === 'summary' ? '2026-11-19' : i === 0 ? '2026-11-17' : '2026-11-18';
       return { id: `${kind}-${number}`, type: kind, title: `${types[kind]} ${number}`, date, phaseId, body: `第 ${number} 轮的树冠观测。`,
         ...(kind === 'summary' && { coverage: { start: date, end: date } }),
+        ...(kind === 'summary' && i === count - 1 && { evidence: ['canopy-frame'] }),
         ...(kind === 'comparison' && { comparison: { columns: ['树冠'], rows: [{ label: '近景', images: ['canopy-frame'] }] } }),
       };
     }) });
@@ -32,6 +34,20 @@ export async function checkStagePages({ page, command, open, closeReader, archiv
   const turn = (kind, name) => list(kind).getByRole('button', { name, exact: true }).click();
   const size = (kind, value) => list(kind).getByRole('combobox').selectOption(value);
   const current = kind => list(kind).locator('[aria-current=page]').innerText();
+  const stage = page.locator('.research-stage-detail');
+  const header = id => stage.locator(`[data-research-section-toggle="${id}"]`);
+  const figures = header('research-phase-comparisons-title');
+  const experiments = header('research-experiments-title');
+  const allSections = await stage.locator('[data-research-section-toggle]').all();
+  assert.equal(allSections.length, 8);
+  for (const button of allSections) {
+    const panel = stage.locator('#' + await button.getAttribute('aria-controls'));
+    assert.ok(await panel.isVisible());
+    await button.press('Enter');
+    assert.ok(await panel.isHidden());
+    await button.press('Space');
+    assert.ok(await panel.isVisible());
+  }
   async function checkOnlyPage(kind) {
     const nav = list(kind).getByRole('navigation');
     assert.equal(await nav.getByRole('button').count(), 3);
@@ -57,6 +73,18 @@ export async function checkStagePages({ page, command, open, closeReader, archiv
   assert.equal(await rows('event').count(), 2);
   assert.equal(await rows('comparison').count(), 3);
   await list('comparison').locator('.research-sample-image img').first().waitFor();
+  await figures.click();
+  assert.ok(await list('comparison').isHidden());
+  assert.ok(await list('entry').isVisible());
+  await experiments.click();
+  await page.locator('[data-research-phase=control]').click();
+  assert.equal(await experiments.getAttribute('aria-expanded'), 'true');
+  await phase.click();
+  assert.equal(await experiments.getAttribute('aria-expanded'), 'false');
+  assert.ok(await list('comparison').isHidden());
+  await experiments.click();
+  await figures.click();
+  assert.equal(await current('comparison'), '2');
   assert.equal(await current('summary'), '2');
   assert.equal(await current('entry'), '9');
 
@@ -104,4 +132,15 @@ export async function checkStagePages({ page, command, open, closeReader, archiv
     await size(kind, 'all');
     await checkOnlyPage(kind);
   }
+  await figures.click();
+  await page.reload();
+  await page.waitForSelector('#shell[data-ready="true"]');
+  await phase.click();
+  assert.equal(await figures.getAttribute('aria-expanded'), 'false');
+  assert.ok(await list('comparison').isHidden());
+  assert.ok(await list('entry').isVisible());
+  await figures.click();
+  await phase.click();
+  await phase.click();
+  assert.ok(await list('comparison').isVisible());
 }

@@ -8,6 +8,7 @@ import { dayNumber, shiftRange } from './research-timeline-range';
 import { escapeResearch as esc } from './research-tools';
 import { TimelineEventLayout, type TimelineEventDay } from './research-timeline-events';
 import { recordMark } from './research-record-mark';
+import { StageSections } from './research-stage-sections';
 import { evidenceWipe, supportsWipe } from './research-wipe';
 import { icon } from './icons';
 import './research-remote-preview.css';
@@ -40,6 +41,7 @@ export class RemotePreviewUI {
   private rangeDays = 0;
   private rangeStart?: number;
   private selectedItem?: string;
+  private sections = new StageSections('h4');
   private urls = new Map<string,Promise<string | null>>();
 
   constructor() {
@@ -55,6 +57,10 @@ export class RemotePreviewUI {
     }
     this.viewer.addEventListener('close',() => { this.request++; this.active = undefined; this.state = undefined; this.urls.clear(); });
     this.viewer.addEventListener('click', e => { void this.click(e).catch(error => this.status(message(error))); });
+    this.viewer.addEventListener('toggle', e => {
+      const item = e.target;
+      if (item instanceof HTMLDetailsElement && item.open && item.matches('.remote-item')) this.loadItem(item);
+    }, true);
   }
 
   async publisher(state: ResearchSnapshot) {
@@ -220,11 +226,25 @@ export class RemotePreviewUI {
   }
   private details(p:PreviewPhase,items:PreviewItem[]) {
     const s = this.state!.snapshot;
+    this.sections.forPhase(this.active!.id, s.project.id, p.id);
+    const section = (id: string, title: string, body: string, count?: number) =>
+      `<section class="remote-stage-section" aria-labelledby="remote-${id}-title">${this.sections.render(`remote-${id}-title`, title, body, { count })}</section>`;
+    const groups: [PreviewItem['kind'], string][] = [
+      ['summary', ht("阶段总结")], ['comparison', ht("可视化展示")], ['event', ht("阶段事件")], ['entry', ht("实验记录")],
+    ];
+    const lists = groups.map(([kind, title]) => {
+      const rows = items.filter(item => (item.figure ? 'comparison' : item.kind) === kind);
+      return rows.length ? section(kind, title, rows.map(item => this.item(item)).join(''), rows.length) : '';
+    }).join('');
     return `<section class="remote-detail"><header><h3>${esc(p.title || t("未分阶段"))}</h3><small>${ht("{0} 条实验",p.records)}</small></header>
-      ${p.description ? `<p>${esc(p.description)}</p>` : ''}${p.finding ? `<div class="remote-finding"><small>${ht("最近结论")} · ${p.finding.date}</small><p>${esc(p.finding.text)}</p></div>` : ''}
-      ${p.goals.length && s.project.phaseGoals!=='hidden' ? `<ul class="remote-goals">${p.goals.map(g=>`<li>${s.project.phaseGoals==='checklist' ? (g.done?'☑ ':'☐ ') : ''}${esc(g.text)}</li>`).join('')}</ul>` : ''}
-      ${items.map(i=>`<details class="remote-item" data-item="${esc(i.id)}" ${this.selectedItem===i.id?'open':''}><summary>${recordMark(i.kind,16,i.icon)}<strong>${esc(i.title)}</strong><small>${esc(i.label)} · ${i.date}</small></summary>
-        ${i.coverage ? `<small>${i.coverage.start} – ${i.coverage.end}</small>` : ''}${i.text ? `<p>${esc(i.text)}</p>` : ''}${i.figure ? this.figure(i) : ''}${i.body ? `<article class="remote-body"></article>` : ''}</details>`).join('')}</section>`;
+      ${p.description ? section('question', ht("本阶段要判断什么"), `<p>${esc(p.description)}</p>`) : ''}
+      ${p.finding ? section('finding', ht("最近结论"), `<div class="remote-finding"><small>${p.finding.date}</small><p>${esc(p.finding.text)}</p></div>`) : ''}
+      ${p.goals.length && s.project.phaseGoals!=='hidden' ? section('goals', ht("阶段目标"), `<ul class="remote-goals">${p.goals.map(g=>`<li>${s.project.phaseGoals==='checklist' ? (g.done?'☑ ':'☐ ') : ''}${esc(g.text)}</li>`).join('')}</ul>`) : ''}
+      ${lists}</section>`;
+  }
+  private item(i: PreviewItem) {
+    return `<details class="remote-item" data-item="${esc(i.id)}" ${this.selectedItem===i.id?'open':''}><summary>${recordMark(i.kind,16,i.icon)}<strong>${esc(i.title)}</strong><small>${esc(i.label)} · ${i.date}</small></summary>
+      ${i.coverage ? `<small>${i.coverage.start} – ${i.coverage.end}</small>` : ''}${i.text ? `<p>${esc(i.text)}</p>` : ''}${i.figure ? this.figure(i) : ''}${i.body ? '<article class="remote-body"></article>' : ''}</details>`;
   }
   private figure(i:PreviewItem) {
     const grid = i.figure!;
@@ -237,36 +257,33 @@ export class RemotePreviewUI {
     return this.urls.get(hash)!;
   }
   private loadFigures() {
-    const items = this.state!.snapshot.items;
-    for (const details of this.viewer.querySelectorAll<HTMLDetailsElement>('.remote-item')) {
-      const load = () => {
-        if (!details.open || details.dataset.loaded) return;
-        details.dataset.loaded = 'true';
-        for (const img of details.querySelectorAll<HTMLImageElement>('[data-thumb]'))
-          void this.url(img.dataset.thumb!).then(url=>{ if (url && img.isConnected) img.src=url; }).catch(error=>this.status(message(error)));
-        const i = items.find(i=>i.id===details.dataset.item);
-        const body = details.querySelector('.remote-body');
-        if (body && i?.body) {
-          body.innerHTML = DOMPurify.sanitize(renderMarkdown(i.body).html, {
-            ALLOWED_TAGS:['p','h1','h2','h3','h4','h5','h6','ul','ol','li','blockquote','table','thead','tbody','tr','th','td','strong','em','del','pre','code','br','hr','sub','sup'],
-            ALLOWED_ATTR:[], ALLOW_DATA_ATTR:false, ALLOW_ARIA_ATTR:false,
-          });
-        }
-        const wipe = details.querySelector<HTMLDetailsElement>('.remote-wipe');
-        if (wipe && i?.figure) wipe.ontoggle = () => {
-          if (!wipe.open || wipe.querySelector('figure')) return;
-          wipe.append(evidenceWipe([{title:i.title,comparison:i.figure!}], {
-            preview:true, read:async id => {
-              const url = await this.url(id);
-              if (!url) throw Error(t("缩略图暂不可用。"));
-              return {id,title:i.title,relativePath:'',source:'',kind:'image',mime:url.slice(5,url.indexOf(';')),content:url.slice(url.indexOf(',')+1)};
-            },
-            open:async id=>this.enlarge(id,i.title),error:e=>this.status(message(e)),
-          }));
-        };
-      };
-      details.addEventListener('toggle',load); load();
+    for (const item of this.viewer.querySelectorAll<HTMLDetailsElement>('.remote-item[open]:not([data-loaded])')) this.loadItem(item);
+  }
+  private loadItem(details: HTMLDetailsElement) {
+    if (!this.state || !this.viewer.open || details.dataset.loaded || details.closest('[data-stage-section-body][hidden]')) return;
+    details.dataset.loaded = 'true';
+    for (const img of details.querySelectorAll<HTMLImageElement>('[data-thumb]'))
+      void this.url(img.dataset.thumb!).then(url=>{ if (url && img.isConnected) img.src=url; }).catch(error=>this.status(message(error)));
+    const i = this.state.snapshot.items.find(item => item.id === details.dataset.item);
+    const body = details.querySelector('.remote-body');
+    if (body && i?.body) {
+      body.innerHTML = DOMPurify.sanitize(renderMarkdown(i.body).html, {
+        ALLOWED_TAGS:['p','h1','h2','h3','h4','h5','h6','ul','ol','li','blockquote','table','thead','tbody','tr','th','td','strong','em','del','pre','code','br','hr','sub','sup'],
+        ALLOWED_ATTR:[], ALLOW_DATA_ATTR:false, ALLOW_ARIA_ATTR:false,
+      });
     }
+    const wipe = details.querySelector<HTMLDetailsElement>('.remote-wipe');
+    if (wipe && i?.figure) wipe.ontoggle = () => {
+      if (!wipe.open || wipe.querySelector('figure')) return;
+      wipe.append(evidenceWipe([{title:i.title,comparison:i.figure!}], {
+        preview:true, read:async id => {
+          const url = await this.url(id);
+          if (!url) throw Error(t("缩略图暂不可用。"));
+          return {id,title:i.title,relativePath:'',source:'',kind:'image',mime:url.slice(5,url.indexOf(';')),content:url.slice(url.indexOf(',')+1)};
+        },
+        open:async id=>this.enlarge(id,i.title),error:e=>this.status(message(e)),
+      }));
+    };
   }
   private async enlarge(hash:string,label:string) {
     const url = await this.url(hash);
@@ -278,14 +295,24 @@ export class RemotePreviewUI {
   private async click(e:Event) {
     const b = (e.target as Element).closest<HTMLButtonElement>('button');
     if (!b || !this.active) return;
-    if (b.hasAttribute('data-refresh')) await this.refresh();
+    if (b.dataset.researchSectionToggle) {
+      this.sections.toggle(b);
+      if (b.getAttribute('aria-expanded') === 'true') this.loadFigures();
+    } else if (b.hasAttribute('data-refresh')) await this.refresh();
     else if (b.hasAttribute('data-settings')) this.subscribe(this.active);
     else if (b.dataset.researchTimelineEvents) {
       const phase = b.closest<HTMLElement>('[data-phase]')!.dataset.phase!;
       const ids = b.dataset.researchTimelineEvents.split(' ');
       const openItem = (id:string) => {
         this.phase = phase; this.selectedItem = id; this.draw();
-        this.viewer.querySelector(`[data-item="${CSS.escape(id)}"]`)?.scrollIntoView({block:'nearest'});
+        const item = this.viewer.querySelector(`[data-item="${CSS.escape(id)}"]`);
+        const folded = item?.closest<HTMLElement>('[data-stage-section-body][hidden]');
+        if (folded) {
+          const toggle = this.viewer.querySelector<HTMLButtonElement>(`[aria-controls="${CSS.escape(folded.id)}"]`)!;
+          this.sections.toggle(toggle, false);
+          this.loadFigures();
+        }
+        item?.scrollIntoView({block:'nearest'});
       };
       if (ids.length === 1) { openItem(ids[0]); return; }
       const items = this.state!.snapshot.items.filter(i => ids.includes(i.id));

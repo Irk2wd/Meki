@@ -37,6 +37,8 @@
 .remote-dot { position: absolute; top: 17px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); transform: translateX(-50%); }
 .remote-track .research-timeline-event { top: -1px; height: 20px; }
 .remote-detail { border-top: 1px solid var(--border); padding-top: 20px; }
+.remote-stage-section { margin-block-start: 14px; }
+.remote-stage-section h4 { font: 600 var(--ui-text-size)/1.5 var(--ui); }
 .remote-detail p, .remote-body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; }
 .remote-finding { border-inline-start: 3px solid var(--accent); padding-inline-start: 12px; margin: 16px 0; }
 .remote-finding p { margin: 4px 0; }
