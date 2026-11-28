@@ -61,17 +61,22 @@ async function launch() {
 }
 async function exit() { if (app) { await app.evaluate(({app}) => app.exit(0)).catch(()=>{}); await app.close().catch(()=>{}); app = null; } }
 async function waitFile(file) { for (let i=0;i<100;i++) { const value=await fs.readFile(file).catch(()=>null); if(value?.length) return value; await new Promise(resolve=>setTimeout(resolve,50)); } throw Error(`Missing ${file}`); }
-async function linksResolve(target) {
-  return target.evaluate(() => [...document.querySelectorAll('.meki-document svg a[href^="#"]')].every(link => {
-    const id = link.getAttribute('href').slice(1); return document.getElementById(id) || document.getElementById(decodeURIComponent(id));
-  }));
+async function waitForEquationLinks(target, selector) {
+  await target.waitForFunction(selector => {
+    const scope = document.querySelector(selector);
+    const links = scope?.querySelectorAll('svg a[href^="#"]');
+    return links?.length > 0 && [...links].every(link => {
+      const id = link.getAttribute('href').slice(1);
+      return scope.querySelector('#' + CSS.escape(id)) || scope.querySelector('#' + CSS.escape(decodeURIComponent(id)));
+    });
+  }, selector);
 }
 try {
   await launch(); await action('open'); await action('style');
   await page.locator('#math-numbering').selectOption('ams');
   await page.locator('#math-physics').check();
   await page.waitForFunction(() => !document.querySelector('.ProseMirror .meki-math-error') && document.querySelectorAll('.ProseMirror mjx-container').length >= 7);
-  assert.ok(await linksResolve(page));
+  await waitForEquationLinks(page, '#visual-editor .ProseMirror');
   assert.equal(await page.locator('.ProseMirror [data-mml-node="mlabeledtr"]').count(),2);
   assert.ok(await page.locator('.ProseMirror path[data-c="E429"]').count());
   pass('AMS numbering, Unicode forward references, chemical glyphs and physics render offline');
@@ -176,7 +181,7 @@ try {
   assert.equal(await exported.locator('[id="write"]').count(),0);
   assert.equal(await exported.locator('.meki-math-error').count(),0);
   assert.equal(await exported.locator('[data-mml-node="mlabeledtr"]').count(),6);
-  assert.ok(await linksResolve(exported));
+  await waitForEquationLinks(exported, '.meki-document');
   assert.equal(await exported.locator('h1').evaluate(node=>getComputedStyle(node).color),'rgb(116, 61, 143)');
   assert.deepEqual(await exported.locator('.meki-document').evaluate(node=>({font:getComputedStyle(node).fontFamily,size:getComputedStyle(node).fontSize,background:getComputedStyle(node).backgroundColor})),live);
   await exported.close();
@@ -196,7 +201,7 @@ try {
   await page.waitForFunction(() =>
     document.querySelectorAll('.ProseMirror svg [id$="-fresh"] [data-c="31"]').length === 1 &&
     document.querySelectorAll('.ProseMirror [data-mml-node="mlabeledtr"]').length === 1);
-  assert.ok(await linksResolve(page));
+  await waitForEquationLinks(page, '#visual-editor .ProseMirror');
   await action('open');
   pass('new documents restart numbering and do not retain another document’s labels');
   await exit(); await launch(); await action('open');
