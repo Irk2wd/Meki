@@ -60,7 +60,7 @@ systemctl enable --now mekir-preview.service mekir-preview-prune.timer
 tailscale serve --bg --https=9443 http://127.0.0.1:17841
 ```
 
-把 `your-node.your-tailnet.ts.net` 换成服务器的实际 Tailscale DNS 名称。读者填 `https://your-node.your-tailnet.ts.net:9443/`，发布者填具体项目路径，例如 `https://your-node.your-tailnet.ts.net:9443/render-research/`。
+把 `your-node.your-tailnet.ts.net` 换成服务器的实际 Tailscale DNS 名称。读者可在管理后台的组详情复制「订阅服务器地址」，例如 `https://your-node.your-tailnet.ts.net:9443/`。Tailscale Serve 用完整域名建立 HTTPS 连接，直接填写内网 IP 可能在登录前遇到握手错误。发布者在项目详情复制具体的 WebDAV 发布地址，例如 `https://your-node.your-tailnet.ts.net:9443/render-research/`。
 
 ### 安装网页管理后台
 

@@ -4,7 +4,8 @@ import { escapeResearch as esc } from './research-tools';
 import { icon } from './icons';
 import './research-subscription-groups.css';
 
-const errorText = (error: unknown) => String(error).replace(/^Error: (?:Error invoking remote method '[^']+': Error: )?/, '');
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
+  .replace(/^(?:Error: )?Error invoking remote method '[^']+': /, '').replace(/^(?:Error|TypeError): /, '');
 
 export class SubscriptionGroups {
   private dialog = document.createElement('dialog');

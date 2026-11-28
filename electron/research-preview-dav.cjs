@@ -3,6 +3,7 @@
 const { randomUUID } = require('node:crypto');
 const { digest } = require('./file-store.cjs');
 const { assert } = require('./research-model.cjs');
+const { connectionMessage } = require('./research-preview-network.cjs');
 const { version, maxSnapshot, maxThumbnail, maxMediaBytes, validatePointer, validateSnapshot, mediaHashes, mediaName, imageFormat } = require('./research-preview-model.cjs');
 
 function endpoint(input) {
@@ -21,8 +22,13 @@ class PreviewDAV {
     if (username) this.headers.Authorization = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
   }
   async request(method, name, options = {}) {
-    const res = await fetch(new URL(name, this.base), {method, redirect:'error', signal:AbortSignal.timeout(30000),
-      headers:{...this.headers, ...options.headers}, body:options.body});
+    let res;
+    try {
+      res = await fetch(new URL(name, this.base), {method, redirect:'error', signal:AbortSignal.timeout(30000),
+        headers:{...this.headers, ...options.headers}, body:options.body});
+    } catch (error) {
+      throw new Error(await connectionMessage(error, new URL(this.base)), {cause:error});
+    }
     if (!res.ok && !options.allow?.includes(res.status)) {
       await res.body?.cancel();
       const message = res.status === 401 || res.status === 403 ? '请检查账号和目录权限。' : res.status === 412 ? '发布期间远端已更新，请刷新后重试。' : '';

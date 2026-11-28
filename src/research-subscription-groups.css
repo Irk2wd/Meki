@@ -63,6 +63,6 @@
 .groups-login, .groups-login label, .groups-saved { display: grid; gap: 6px; min-width: 0; }
 .groups-login { gap: 12px; }
 .groups-saved button { justify-self: start; }
-#research-subscription-groups [role=status] { white-space: pre-line; overflow-wrap: anywhere; color: var(--accent); font-size: var(--ui-small-size); }
+#research-subscription-groups [role=status] { white-space: pre-line; overflow-wrap: anywhere; user-select: text; color: var(--accent); font-size: var(--ui-small-size); }
 #research-subscription-groups footer { justify-content: flex-end; margin-top: 12px; }
 #research-subscription-groups footer > small, #research-subscription-groups [data-logout] { margin-inline-end: auto; }
