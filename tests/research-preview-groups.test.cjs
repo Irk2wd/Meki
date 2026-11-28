@@ -5,36 +5,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const dns = require('node:dns/promises');
-const {PreviewDAV} = require('../electron/research-preview-dav.cjs');
 const {PreviewService} = require('../electron/research-preview-service.cjs');
 const {validateCatalog} = require('../electron/research-preview-catalog.cjs');
 const {groupHost} = require('./research-group-host.cjs');
 
 const catalogPath = '/_mekir/accounts/member.json';
 
-test('a Tailscale TLS failure suggests the matching DNS address and never retries with account credentials', async t => {
-  const address = '100.70.1.8', name = 'host.example.ts.net';
-  const dav = new PreviewDAV('https://' + address + ':7443/lab/', 'member', 'test-only');
-  const routes = [];
-  const failure = new TypeError('fetch failed', {cause:Object.assign(new Error('TLS alert'), {code:'ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR'})});
-  const fetchStub = t.mock.method(globalThis, 'fetch', async url => { routes.push(url.href); throw failure; });
-  const reverse = t.mock.method(dns, 'lookupService', async () => ({hostname:name + '.'}));
-  const forward = t.mock.method(dns, 'lookup', async () => [{address, family:4}]);
-  await assert.rejects(dav.read('_mekir/accounts/member.json', 1000), error =>
-    error.message.includes('https://host.example.ts.net:7443/lab/') && !error.message.includes('test-only'));
-  assert.deepEqual(routes, ['https://100.70.1.8:7443/lab/_mekir/accounts/member.json']);
-  forward.mock.mockImplementation(async () => [{address:'100.70.1.9', family:4}]);
-  await assert.rejects(dav.read('latest.json', 1000), error => error.message.includes('完整订阅域名') && !error.message.includes(name));
-  reverse.mock.mockImplementation(async () => ({hostname:'host.example.org'}));
-  await assert.rejects(dav.read('latest.json', 1000), error => !error.message.includes('host.example.org'));
-  const lookups = reverse.mock.callCount();
-  fetchStub.mock.mockImplementation(async () => new Response('ok'));
-  assert.equal((await dav.read('latest.json',1000)).bytes.toString(),'ok');
-  fetchStub.mock.mockImplementation(async () => new Response(null,{status:401}));
-  await assert.rejects(dav.read('latest.json',1000), {status:401});
-  assert.equal(reverse.mock.callCount(), lookups);
-});
 async function setup(t) {
   const host = await groupHost();
   const dir = await fs.mkdtemp(path.join(os.tmpdir(),'mekir-selective-'));

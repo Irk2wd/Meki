@@ -1,15 +1,20 @@
 'use strict';
 
 const { randomUUID } = require('node:crypto');
+const { isIP } = require('node:net');
 const { digest } = require('./file-store.cjs');
 const { assert } = require('./research-model.cjs');
-const { connectionMessage } = require('./research-preview-network.cjs');
+const { tailnetIP, resolvePeer, peerRequest, connectionMessage } = require('./research-preview-network.cjs');
 const { version, maxSnapshot, maxThumbnail, maxMediaBytes, validatePointer, validateSnapshot, mediaHashes, mediaName, imageFormat } = require('./research-preview-model.cjs');
 
 function endpoint(input) {
-  const url = new URL(input);
-  const local = ['localhost','127.0.0.1','[::1]'].includes(url.hostname);
-  assert((url.protocol === 'https:' || (local && url.protocol === 'http:')) && !url.username && !url.password && !url.search && !url.hash,
+  let address = String(input ?? '').trim();
+  if (isIP(address) === 6) address = '[' + address + ']';
+  const host = address.match(/^\[([^\]]+)\](?=[:/]|$)|^([^:/]+)(?=[:/]|$)/);
+  if (host && isIP(host[1] || host[2])) address = 'https://' + address;
+  const url = URL.parse(address);
+  const local = url && ['localhost','127.0.0.1','[::1]'].includes(url.hostname);
+  assert(url && (url.protocol === 'https:' || (local && url.protocol === 'http:')) && !url.username && !url.password && !url.search && !url.hash,
     '请填写 HTTPS WebDAV 项目目录地址，账号和密码请单独填写。');
   url.pathname = url.pathname.replace(/\/?$/, '/');
   return url.href;
@@ -17,17 +22,24 @@ function endpoint(input) {
 
 class PreviewDAV {
   constructor(url, username, password) {
-    this.base = endpoint(url);
+    this.base = new URL(endpoint(url));
+    this.ip = tailnetIP(this.base);
     this.headers = { 'Cache-Control':'no-cache' };
     if (username) this.headers.Authorization = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
   }
   async request(method, name, options = {}) {
     let res;
+    const url = new URL(name, this.base);
+    assert(url.origin === this.base.origin && !url.username && !url.password, '远程预览请求超出服务器地址范围。');
     try {
-      res = await fetch(new URL(name, this.base), {method, redirect:'error', signal:AbortSignal.timeout(30000),
-        headers:{...this.headers, ...options.headers}, body:options.body});
+      const init = {method, redirect:'error', signal:AbortSignal.timeout(30000), headers:{...this.headers, ...options.headers}, body:options.body};
+      if (this.ip && !this.peer) {
+        this.peer = resolvePeer(this.base, this.ip, init.signal).catch(error => { this.peer = undefined; throw error; });
+      }
+      const peer = await this.peer;
+      res = peer ? await peerRequest(url, peer, init) : await fetch(url, init);
     } catch (error) {
-      throw new Error(await connectionMessage(error, new URL(this.base)), {cause:error});
+      throw new Error(await connectionMessage(error, this.base), {cause:error});
     }
     if (!res.ok && !options.allow?.includes(res.status)) {
       await res.body?.cancel();
@@ -80,7 +92,10 @@ class PreviewDAV {
       ...(before && {previous:before.pointer.revision})};
     const pending = `pending-${randomUUID()}.json`;
     await this.send('PUT', pending, {body:JSON.stringify(next), headers:{'Content-Type':'application/json'}});
-    const destination = new URL('latest.json', this.base).href;
+    const target = new URL('latest.json', this.base);
+    const peer = await this.peer;
+    if (peer) target.hostname = peer;
+    const destination = target.href;
     try {
       for (const [hash, data] of media) await this.immutable('media/'+mediaName(snapshot,hash), data, 'image/'+imageFormat(data));
       await this.immutable(`snapshots/${revision}.json`, bytes, 'application/json');

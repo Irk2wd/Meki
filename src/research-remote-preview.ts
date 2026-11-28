@@ -8,7 +8,7 @@ import './research-remote-preview.css';
 const message = (error: unknown) => String(error).replace(/^Error: (?:Error invoking remote method '[^']+': Error: )?/, '');
 const time = (value: string) => new Date(value).toLocaleString(getLocale(), {dateStyle:'medium',timeStyle:'short'});
 const close = () => `<button type="button" class="icon-button" data-remote-close aria-label="${ht("关闭")}">${icon('close',16)}</button>`;
-const loginFields = (c?: PreviewConnection | null) => `<label>${ht("WebDAV 项目目录地址")}<input name="url" type="url" required placeholder="https://dav.example.org/projects/…" value="${esc(c?.url || '')}"></label>
+const loginFields = (c?: PreviewConnection | null) => `<label>${ht("WebDAV 项目目录地址")}<input name="url" type="text" inputmode="url" autocomplete="url" required placeholder="https://dav.example.org/projects/…" value="${esc(c?.url || '')}"></label>
   <div class="remote-login"><label>${ht("用户名")}<input name="username" autocomplete="off" value="${esc(c?.username || '')}"></label>
   <label>${ht("密码")}<input name="password" type="password" autocomplete="new-password" placeholder="${c?.username ? ht("沿用已保存的密码") : ''}"></label></div>`;
 const readLogin = (data: FormData): PreviewLogin => ({url:String(data.get('url')).trim(),username:String(data.get('username')), password:String(data.get('password') || '') || undefined});

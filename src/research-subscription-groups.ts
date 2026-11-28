@@ -56,7 +56,7 @@ export class SubscriptionGroups {
     if (!this.dialog.open || seq !== this.session) return;
     this.dialog.innerHTML = `${this.header(t("登录订阅账号"))}
       <p class="groups-hint">${ht("登录后可浏览已加入的订阅组，勾选项目后才会下载快照。")}</p>
-      <form class="groups-login"><label>${ht("订阅服务器地址")}<input type="url" name="url" required autofocus placeholder="https://…" value="${esc(edit?.url || '')}"></label>
+      <form class="groups-login"><label>${ht("订阅服务器地址")}<input type="text" inputmode="url" autocomplete="url" name="url" required autofocus placeholder="100.70.1.8:9443" value="${esc(edit?.url || '')}"></label>
       <div class="remote-login"><label>${ht("用户名")}<input name="username" autocomplete="username" required ${edit ? 'readonly' : ''} value="${esc(edit?.username || '')}"></label>
       <label>${ht("密码")}<input name="password" type="password" autocomplete="current-password" ${edit ? 'placeholder="' + ht("沿用已保存的密码") + '"' : 'required'}></label></div>
       ${direct.length ? `<div class="groups-saved"><span>${ht("使用本机已保存的项目账号")}</span>${direct.map(c =>
