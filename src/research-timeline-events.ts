@@ -1,11 +1,14 @@
 import { ht } from '../electron/i18n.mjs';
-import type { ResearchEntry, ResearchType } from '../shared/research';
+import type { ResearchRecord, ResearchType } from '../shared/research';
 import { escapeResearch as escape } from './research-tools';
 import { recordKind, recordMark } from './research-record-mark';
 
+type MarkerEntry = {record: Pick<ResearchRecord,'id'|'title'|'date'|'type'|'comparison'|'coverage'>};
+type MarkerType = Pick<ResearchType,'kind'|'icon'>;
+
 export interface TimelineEventDay {
   point: number;
-  entries: ResearchEntry[];
+  entries: MarkerEntry[];
   latest: boolean;
 }
 
@@ -85,7 +88,7 @@ function placeMarkers(days: TimelineEventDay[], glyphs: string[][], width: numbe
   return placed;
 }
 
-function eventMarker(entries: ResearchEntry[], glyphs: string[], left: number, latest: boolean) {
+function eventMarker(entries: MarkerEntry[], glyphs: string[], left: number, latest: boolean) {
   const first = entries[0].record;
   const last = entries[entries.length - 1].record;
   const dates = first.date === last.date ? first.date : `${first.date} – ${last.date}`;
@@ -123,7 +126,7 @@ function animateMarkers(layer: HTMLElement, placed: Placement[], previous: Marke
 
 export class TimelineEventLayout {
   private daysByPhase?: Map<string, TimelineEventDay[]>;
-  private types = new Map<string, ResearchType>();
+  private types = new Map<string, MarkerType>();
   private widths = new WeakMap<HTMLElement, number>();
 
   constructor(private content: HTMLElement) {}
@@ -136,7 +139,7 @@ export class TimelineEventLayout {
     return positions;
   }
 
-  show(daysByPhase?: Map<string, TimelineEventDay[]>, types = new Map<string, ResearchType>(), previous?: MarkerPositions) {
+  show(daysByPhase?: Map<string, TimelineEventDay[]>, types = new Map<string, MarkerType>(), previous?: MarkerPositions) {
     this.daysByPhase = daysByPhase;
     this.types = types;
     this.layout(previous);

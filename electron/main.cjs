@@ -80,6 +80,7 @@ else {
     for (const [index, record] of records.entries()) await manager.open(record.id, { launchPaths: index ? [] : launchPaths.splice(0), legacyRecovery: index ? null : legacyRecovery });
     if (sessions.warning) manager.focused()?.sendCommand('window-notice', sessions.warning);
     initialized = true;
+    void require('./research-preview-service.cjs').desktopPreviews().catch(error => console.warn('Remote previews:', error.message));
     if (!TEST_MODE || process.env.MEKI_TEST_AUTO_UPDATE === '1') updates?.startAutomatic({ delay: TEST_MODE ? 500 : 15000 });
     app.on('will-quit', () => updates?.stopAutomatic());
     app.on('activate', () => { void reopen(); });

@@ -697,6 +697,16 @@ function registerIpc() {
   });
   register('refresh-workspace', refreshWorkspace);
   register('research-snapshot', researchSnapshot);
+  const {desktopPreviews} = require('./research-preview-service.cjs');
+  register('preview-publisher', async root => (await desktopPreviews()).publisher((await requireResearch(root)).root));
+  register('preview-publish', async (root,input) => (await desktopPreviews()).configurePublisher(await requireResearch(root),input));
+  register('preview-pause', async root => (await desktopPreviews()).pause((await requireResearch(root)).root));
+  register('preview-subscriptions', async () => (await desktopPreviews()).readers());
+  register('preview-subscribe', async (input,id) => (await desktopPreviews()).subscribe(input,id));
+  register('preview-cached', async id => (await desktopPreviews()).cached(id));
+  register('preview-refresh', async id => (await desktopPreviews()).refresh(id));
+  register('preview-image', async (id,hash) => (await desktopPreviews()).image(id,hash));
+  register('preview-unsubscribe', async id => (await desktopPreviews()).remove(id));
   const preferences = require('./research-ai-settings.cjs');
   const tokenFor = token => {
     if (typeof token!=='string' || !/^[a-zA-Z0-9-]{1,80}$/.test(token)) throw Error('Invalid search token.');

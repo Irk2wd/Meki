@@ -95,4 +95,4 @@ async function previewEvidence(file, reference, source) {
   return { ...result, kind: 'text', revision: digest(bytes), content: decodeDocument(bytes).content };
 }
 
-module.exports = { bindDirectory, boundSources, sourceDirectory, evidencePath, previewEvidence, knownEvidence };
+module.exports = { bindingPath, bindDirectory, boundSources, sourceDirectory, evidencePath, previewEvidence, knownEvidence };

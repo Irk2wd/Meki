@@ -1,0 +1,13 @@
+[Unit]
+Description=Prune retired mekiR preview files
+
+[Service]
+Type=oneshot
+User=mekir-preview
+Group=mekir-preview
+ExecStart=/usr/bin/python3 /etc/mekir-preview/prune.py /srv/mekir-previews
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ReadWritePaths=/srv/mekir-previews

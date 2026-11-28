@@ -1,3 +1,4 @@
+import type { RemotePreviewAPI } from './research-preview';
 import type { ExportRequest, ExportTools, ImportedDocument, DiagramSaveRequest } from './export';
 import type { UpdateState } from './updates';
 import type { ThemeManifest } from '../electron/theme-format.mjs';
@@ -102,7 +103,7 @@ export interface BootState {
   workspace: Workspace | null;
   session?: RestoredSession | null;
 }
-export interface MekiAPI {
+export interface MekiAPI extends RemotePreviewAPI {
   updateState(): Promise<UpdateState>;
   checkUpdate(): Promise<UpdateState>;
   setAutomaticUpdates(enabled: boolean): Promise<UpdateState>;

@@ -6,7 +6,7 @@ const glyphs: Record<RecordKind, string> = {
   entry: 'flask', summary: 'bookmark', comparison: 'image', event: 'calendar', file: 'page', warning: 'warning',
 };
 
-export function recordKind(type?: ResearchType, record?: ResearchRecord): RecordKind {
+export function recordKind(type?: Pick<ResearchType, 'kind'>, record?: Pick<ResearchRecord, 'comparison' | 'coverage'>): RecordKind {
   if (record?.comparison) return 'comparison';
   if (record?.coverage) return 'summary';
   return type?.kind ?? (record ? 'entry' : 'file');

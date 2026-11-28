@@ -8,6 +8,7 @@ import './research-wipe.css';
 interface WipeReport { title: string; comparison: ResearchComparison }
 export interface WipePosition { report?: string; row?: string; split?: number; columns?: number[] }
 interface WipeActions {
+  preview?: boolean;
   read(id: string): Promise<ResearchEvidenceFile>;
   open(id: string, origin: HTMLElement): Promise<void>;
   error(error: unknown): void;
@@ -89,14 +90,14 @@ export function evidenceWipe(reports: WipeReport[], actions: WipeActions, positi
   async function loadPair() {
     const ticket = ++request;
     stage.setAttribute('aria-busy', 'true');
-    status.textContent = t("正在读取原图…");
+    status.textContent = (actions.preview ? t("正在读取缩略图…") : t("正在读取原图…"));
     divider.hidden = true;
     sides.forEach(side => { side.hidden = true; side.replaceChildren(); });
     const ids = columns.map(column => row().images[column]!);
     try {
       const images = await Promise.all(ids.map(async id => {
         const file = await actions.read(id);
-        if (file.kind !== 'image') throw new Error(t("原图暂无法预览。"));
+        if (file.kind !== 'image') throw new Error((actions.preview ? t("缩略图暂不可用。") : t("原图暂无法预览。")));
         const image = new Image();
         image.alt = file.title;
         image.draggable = false;
@@ -107,12 +108,12 @@ export function evidenceWipe(reports: WipeReport[], actions: WipeActions, positi
       if (ticket !== request) return;
       const ratios = images.map(image => image.naturalWidth / image.naturalHeight);
       if (Math.abs(ratios[0] / ratios[1] - 1) > 0.01) {
-        status.textContent = t("两张原图的宽高比不同，请分别打开原图。");
+        status.textContent = actions.preview ? t("两张缩略图的宽高比不同，请分别放大查看。") : t("两张原图的宽高比不同，请分别打开原图。");
         return;
       }
       figure.style.setProperty('--wipe-aspect', String(ratios[0]));
       sides.forEach((side, i) => {
-        side.setAttribute('aria-label', t("打开原图 · {0}", images[i].alt));
+        side.setAttribute('aria-label', (actions.preview ? t("放大缩略图 · {0}", images[i].alt) : t("打开原图 · {0}", images[i].alt)));
         side.title = side.getAttribute('aria-label')!;
         side.replaceChildren(images[i]);
         side.hidden = false;
@@ -120,7 +121,7 @@ export function evidenceWipe(reports: WipeReport[], actions: WipeActions, positi
       divider.hidden = false;
       status.textContent = '';
     } catch {
-      if (ticket === request) status.textContent = t("原图暂无法预览。");
+      if (ticket === request) status.textContent = (actions.preview ? t("缩略图暂不可用。") : t("原图暂无法预览。"));
     } finally {
       if (ticket === request) stage.setAttribute('aria-busy', 'false');
     }
@@ -159,8 +160,8 @@ export function evidenceWipe(reports: WipeReport[], actions: WipeActions, positi
       const original = document.createElement('button');
       original.type = 'button';
       original.className = 'text-button';
-      original.textContent = t("打开原图");
-      original.setAttribute('aria-label', t("打开原图 · {0}", grid().columns[column]));
+      original.textContent = actions.preview ? t("放大缩略图") : t("打开原图");
+      original.setAttribute('aria-label', (actions.preview ? t("放大缩略图 · {0}", grid().columns[column]) : t("打开原图 · {0}", grid().columns[column])));
       original.onclick = () => openSide(side, original);
       group.append(original);
       labels.append(group);

@@ -7,6 +7,7 @@ import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField
 import { icon } from './icons';
 import { ComparisonGridEditor, ComparisonViewer } from './research-comparison';
 import { ResearchAISettingsDialog } from './research-ai-settings';
+import { RemotePreviewUI } from './research-remote-preview';
 import { ResearchSearchDialog } from './research-search-dialog';
 import { ResearchColumns } from './research-columns';
 import { evidenceWipe, placeReaderFigure, supportsWipe, type WipePosition } from './research-wipe';
@@ -382,6 +383,7 @@ export class ResearchWorkspace {
   private rangePicker = document.createElement('dialog');
   private tools: ResearchTools;
   private projectSearch: ResearchSearchDialog;
+  private remote = new RemotePreviewUI();
   private readonly aiSettings = new ResearchAISettingsDialog();
   private returnToSearch?: () => void;
   private comparisonViewer = new ComparisonViewer();
@@ -537,7 +539,18 @@ export class ResearchWorkspace {
     });
     this.dialog.addEventListener('submit', event => { event.preventDefault(); void this.submit(); });
     this.projectPicker.addEventListener('click', event => {
-      const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-research-project]');
+      const target = event.target as HTMLElement;
+      if (target.closest('[data-remote-subscribe]')) { this.projectPicker.close(); this.remote.subscribe(); return; }
+      const remote = target.closest<HTMLButtonElement>('[data-subscription]');
+      if (remote) {
+        this.projectPicker.close();
+        void window.meki.previewSubscriptions().then(list => {
+          const c = list.find(sub => sub.id === remote.dataset.subscription);
+          if (c) return this.remote.open(c);
+        }).catch(error => this.hooks.notify(errorText(error), true));
+        return;
+      }
+      const button = target.closest<HTMLButtonElement>('[data-research-project]');
       if (!button || this.hooks.blocked()) return;
       this.projectPicker.close();
       void this.hooks.openProject(button.dataset.researchProject!).catch(error => this.hooks.notify(errorText(error), true));
@@ -853,12 +866,13 @@ export class ResearchWorkspace {
   }
 
   async showProjects() {
-    const projects = await window.meki.listResearchProjects();
+    const [projects, subscriptions] = await Promise.all([window.meki.listResearchProjects(), window.meki.previewSubscriptions()]);
     if (this.projectPicker.open) return;
     this.projectPicker.innerHTML = `<div class="dialog-heading"><h2>${ht("科研项目")}</h2><form method="dialog"><button class="icon-button" aria-label="${ht("关闭")}">${icon('close', 16)}</button></form></div>
       ${projects.length ? `<ul class="research-project-list">${projects.map(project => `<li><button type="button" data-research-project="${escape(project.root)}"${project.root === this.root ? ' aria-current="true"' : ''}>
         ${icon('folder', 17)}<span><strong>${escape(project.title)}</strong><small>${escape(project.root)}</small></span></button></li>`).join('')}</ul>` : ''}
-      <div class="research-picker-actions"><button type="button" class="primary-button" data-action="research-open-project">${ht("打开科研项目")}</button>
+      ${subscriptions.length ? `<h3 class="remote-list-title">${ht("远程订阅")}</h3><ul class="research-project-list">${subscriptions.map(c => `<li><button type="button" data-subscription="${escape(c.id)}">${icon('link',17)}<span><strong>${escape(c.title)}</strong><small>${escape(c.url)}</small></span></button></li>`).join('')}</ul>` : ''}
+      <div class="research-picker-actions"><button type="button" class="secondary-button" data-remote-subscribe>${ht("订阅远程项目")}</button><button type="button" class="primary-button" data-action="research-open-project">${ht("打开科研项目")}</button>
         <button type="button" class="secondary-button" data-action="research-demo">${ht("创建示例项目")}</button></div>`;
     this.projectPicker.showModal();
   }
@@ -1524,6 +1538,7 @@ export class ResearchWorkspace {
         <button type="button" class="secondary-button" data-research-edit-description aria-label="${ht("编辑项目描述")}">${icon('edit', 14)}${ht("编辑")}</button>
       </div>
       <button type="button" class="research-settings-link" data-research-settings>${icon('timeline', 16)}${ht("时间线设置")}${icon('chevron', 14)}</button>
+      <button type="button" class="research-settings-link" data-research-publish>${icon('export',16)}${ht("发布远程预览")}${icon('chevron',14)}</button>
       <button type="button" class="research-settings-link" data-research-event-types>${icon('calendar', 16)}${ht("事件类型")}${icon('chevron', 14)}</button>
       <details class="research-settings-panel research-rules"${open('rules')}>
         <summary data-research-settings-section="rules">${ht("项目规则")}</summary>
@@ -1712,6 +1727,7 @@ export class ResearchWorkspace {
       }
       return;
     }
+    if ('researchPublish' in data) { await this.remote.publisher(state); return; }
     if ('researchFilter' in data) { this.tools.filter(state, this.recordFilter, filter => this.setRecordFilter(filter)); return; }
     if ('researchSettings' in data || 'researchEventTypes' in data) {
       await this.refresh();

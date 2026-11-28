@@ -23,4 +23,6 @@ npm start
 
 项目字段、模板、视图与阶段都可通过本地 CLI 调整。用 `npm --silent run research -- --help` 查看命令，或阅读[研究项目使用说明](docs/research-workspace.md)。
 
+在另一台设备上查看阶段进展和可视化，可从项目设置发布 WebDAV 快照。[远程预览与服务迁移](docs/remote-preview.md)
+
 项目自有代码、文档和资源采用 [MIT 许可证](LICENSE)。第三方组件见[组件声明](THIRD_PARTY_NOTICES.txt)。
