@@ -8,14 +8,14 @@ import stat
 import subprocess
 import zipfile
 from pathlib import Path, PurePosixPath
+from release_version import VERSION, version_key
 
 EDITIONS = {'Meki': ('main', 'v'), 'mekiR': ('meki-research-dev', 'mekir-v')}
-PART = r'(?:0|[1-9][0-9]{0,5})'
-RELEASE_TAG = re.compile(rf'(mekir-)?v({PART}\.{PART}\.{PART})')
+RELEASE_TAG = re.compile(rf'(mekir-)?v({VERSION})')
 RELEASE_METADATA = (
     'package.json', 'package-lock.json', 'AGENTS.md', 'docs/releases/**', 'docs/updates.md',
     '.github/workflows/checks.yml', '.github/workflows/ci.yml', '.github/workflows/release.yml',
-    'scripts/prepare-release.py', 'scripts/publish-release.py',
+    'scripts/prepare-release.py', 'scripts/publish-release.py', 'scripts/release_version.py',
 )
 
 
@@ -25,10 +25,6 @@ def gh(*args):
 
 def git(*args):
     return subprocess.check_output(['git', *args], text=True).strip()
-
-
-def version_key(version):
-    return tuple(map(int, version.split('.')))
 
 
 def tag_commit(tag):
@@ -47,6 +43,8 @@ def released_versions():
             if not match or not release['published_at'] or release['draft'] or release['prerelease']:
                 continue
             research_only, version = match.groups()
+            if '-beta.' in version:
+                continue
             uploaded = {asset['name'] for asset in release['assets'] if asset['state'] == 'uploaded'}
             for product in EDITIONS:
                 if research_only and product == 'Meki':
@@ -91,7 +89,7 @@ def has_changes(product, commit, released):
 def resolve(tag):
     match = RELEASE_TAG.fullmatch(tag)
     if not match:
-        raise RuntimeError('Provide an explicit release tag (vX.Y.Z or mekir-vX.Y.Z).')
+        raise RuntimeError('Provide a release tag such as vX.Y.Z or mekir-vX.Y.Z-beta.N.')
     research_only, version = match.groups()
     product = 'mekiR' if research_only else 'Meki'
     released = released_versions()
