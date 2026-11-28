@@ -36,8 +36,13 @@ const menuRoot = () => page.locator('.meki-block-menu:not(.meki-block-submenu)')
 const row = id => page.locator(`[data-block-action="${id}"]`);
 async function frames(count = 3) { await page.evaluate(count => new Promise(resolve => { function tick() { if (--count <= 0) resolve(); else requestAnimationFrame(tick); } requestAnimationFrame(tick); }), count); }
 async function hover(block) {
-  await block.scrollIntoViewIfNeeded();
-  await block.evaluate(element => { const scroll = element.closest('.document-scroll'); const rect = element.getBoundingClientRect(); if (rect.height > scroll.clientHeight / 2) scroll.scrollTop += rect.top - scroll.getBoundingClientRect().top - 24; });
+  const tall = await block.evaluate(element => {
+    const scroll = element.closest('.document-scroll'), rect = element.getBoundingClientRect();
+    if (rect.height <= scroll.clientHeight / 2) return false;
+    scroll.scrollBy({top:rect.top - scroll.getBoundingClientRect().top - scroll.clientHeight / 3, behavior:'instant'});
+    return true;
+  });
+  if (!tall) await block.scrollIntoViewIfNeeded();
   await frames();
   const point = await block.evaluate(element => {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT); let text;
