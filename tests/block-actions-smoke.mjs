@@ -253,13 +253,13 @@ try {
 
   const long = paragraph('Long block:'); await dragStart(long);
   assert.ok((await page.locator('.meki-block-drag-preview').boundingBox()).height < 100);
-  const viewport = await page.locator('.document-scroll').boundingBox(), startScroll = await page.locator('.document-scroll').evaluate(node => node.scrollTop);
+  const viewport = await page.locator('#document-scroll').boundingBox(), startScroll = await page.locator('#document-scroll').evaluate(node => node.scrollTop);
   await page.mouse.move(viewport.x + viewport.width / 2, viewport.y + viewport.height - 8, { steps: 10 });
-  await page.waitForFunction(start => document.querySelector('.document-scroll').scrollTop > start + 350, startScroll);
+  await page.waitForFunction(start => document.querySelector('#document-scroll').scrollTop > start + 350, startScroll);
   await page.screenshot({ path: path.join(run, 'edge-scroll.png') }); await page.keyboard.press('Escape'); await page.mouse.up();
   await page.locator('.meki-block-drag-preview').waitFor({ state: 'detached' });
-  const stoppedAt = await page.locator('.document-scroll').evaluate(node => node.scrollTop); await frames(12);
-  assert.ok(Math.abs(await page.locator('.document-scroll').evaluate(node => node.scrollTop) - stoppedAt) < 2, 'cancelling must stop both native and application autoscroll');
+  const stoppedAt = await page.locator('#document-scroll').evaluate(node => node.scrollTop); await frames(12);
+  assert.ok(Math.abs(await page.locator('#document-scroll').evaluate(node => node.scrollTop) - stoppedAt) < 2, 'cancelling must stop both native and application autoscroll');
   assert.equal(await long.textContent(), 'Long block: ' + 'Keep every word and show a compact preview. '.repeat(220).trimEnd());
   pass('large blocks use compact previews and continuous edge scrolling works with a stationary pointer; Escape leaves content intact');
 

@@ -79,7 +79,7 @@ try {
   pass('left gutter and paragraph margins keep controls visible and track the intended block');
   await aligned(paragraphs[0]);
   const scrollFrom = await geometry(paragraphs[0]), scrollTo = await geometry(paragraphs[1]);
-  await page.locator('.document-scroll').evaluate((node, amount) => { node.scrollTop += amount; }, scrollTo.y - scrollFrom.y);
+  await page.locator('#document-scroll').evaluate((node, amount) => { node.scrollTop += amount; }, scrollTo.y - scrollFrom.y);
   await frames(3);
   const scrolledLine = await geometry(paragraphs[1]), scrolledHandle = await page.locator(handle).boundingBox();
   assert.ok(Math.abs(scrolledHandle.y + scrolledHandle.height / 2 - scrolledLine.y) < 2);
@@ -101,7 +101,7 @@ try {
 
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(800, 760)); await frames();
   await page.locator(paragraphs[1]).scrollIntoViewIfNeeded(); await aligned(paragraphs[1]);
-  const visible = await page.locator(handle).evaluate(node => { const r = node.getBoundingClientRect(), parent = document.querySelector('.document-scroll').getBoundingClientRect(); return r.left >= parent.left && r.right <= document.querySelector('.ProseMirror').getBoundingClientRect().left; });
+  const visible = await page.locator(handle).evaluate(node => { const r = node.getBoundingClientRect(), parent = document.querySelector('#document-scroll').getBoundingClientRect(); return r.left >= parent.left && r.right <= document.querySelector('.ProseMirror').getBoundingClientRect().left; });
   assert.equal(visible, true); await page.screenshot({ path: path.join(run, 'narrow.png') });
   await page.emulateMedia({ reducedMotion: 'reduce' }); await aligned(paragraphs[2]);
   assert.equal(await page.locator(handle).evaluate(node => getComputedStyle(node).transitionDuration), '0s');
@@ -112,7 +112,7 @@ try {
   await page.locator(`${handle} .operation-item`).first().click();
   await page.locator('.milkdown-slash-menu[data-show="true"]').waitFor();
   await frames(3);
-  assert.equal(await page.locator('.milkdown-slash-menu').evaluate(node => { const menu = node.getBoundingClientRect(), viewport = document.querySelector('.document-scroll').getBoundingClientRect(); return menu.top >= viewport.top && menu.bottom <= viewport.bottom; }), true, 'insert menu must fit inside the writing viewport');
+  assert.equal(await page.locator('.milkdown-slash-menu').evaluate(node => { const menu = node.getBoundingClientRect(), viewport = document.querySelector('#document-scroll').getBoundingClientRect(); return menu.top >= viewport.top && menu.bottom <= viewport.bottom; }), true, 'insert menu must fit inside the writing viewport');
   await page.locator('.milkdown-slash-menu').getByText('正文', { exact: true }).click();
   await page.keyboard.insertText('Inserted after Beta');
   await page.waitForFunction(() => [...document.querySelectorAll('.ProseMirror > p')].map(p => p.textContent).join('|').includes('Beta 第二段。|Inserted after Beta|Gamma 第三段。'));
