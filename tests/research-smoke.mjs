@@ -551,8 +551,23 @@ try {
   const baselineLink = page.locator('#visual-editor a[href="mekir:baseline-city"]');
   await baselineLink.scrollIntoViewIfNeeded();
   const documentScroll = page.locator('#document-scroll');
-  const tileScroll = await documentScroll.evaluate(element => element.scrollTop);
-  assert.ok(tileScroll > 0);
+  const readingPosition = await baselineLink.evaluateHandle(link => {
+    const viewport = link.closest('.document-scroll');
+    const workspace = link.closest('#editor-workspace');
+    const position = { atClick: 0, shifted: false };
+    link.addEventListener('click', () => {
+      position.atClick = viewport.scrollTop;
+      // Reproduce a layout adjustment while the link is being resolved in the main process.
+      const changed = new MutationObserver(() => {
+        if (!workspace.inert) return;
+        changed.disconnect();
+        viewport.scrollTop -= 47;
+        position.shifted = viewport.scrollTop !== position.atClick;
+      });
+      changed.observe(workspace, { attributes: true, attributeFilter: ['inert'] });
+    }, { once: true });
+    return position;
+  });
   await baselineLink.click();
   const readerTitle = page.locator('#research-reader-title');
   await readerTitle.getByText('城市街区基线', { exact: true }).waitFor();
@@ -560,8 +575,11 @@ try {
   const back = page.getByRole('button', { name: '返回上一份文档' });
   await back.click();
   await readerTitle.getByText(tileTitle, { exact: true }).waitFor();
-  assert.equal(await documentScroll.evaluate(element => element.scrollTop), tileScroll);
-  assert.ok(await baselineLink.evaluate(link => link === document.activeElement));
+  await baselineLink.and(page.locator(':focus')).waitFor();
+  const { atClick, shifted } = await readingPosition.jsonValue();
+  await readingPosition.dispose();
+  assert.ok(atClick > 0 && shifted);
+  assert.equal(await documentScroll.evaluate(element => element.scrollTop), atClick);
   await idle();
   await back.click();
   await readerTitle.getByText('方案探索阶段总结', { exact: true }).waitFor();

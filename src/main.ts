@@ -391,11 +391,10 @@ function remapDocumentPath(filePath: string, from: string, to: string | null): s
   return to === null ? null : to + file.slice(source.length).replace(/\//g,to.includes('\\')?'\\':'/');
 }
 
-async function openLocation(location: OpenLocation, keepReader = false, origin?: HTMLElement) {
+async function openLocation(location: OpenLocation, keepReader = false, previous?: ResearchReaderStep) {
   const inProject = keepReader && researchUI.readerOpen;
   let changedDocument = false;
   if (location.path !== current.path) {
-    const previous = inProject ? captureResearchStep(origin) : undefined;
     if (previous && dirty()) await persistDraft();
     const doc = await window.meki.openDocument(location.path); if (!doc) return;
     if (inProject) {
@@ -624,7 +623,7 @@ async function backResearchReader() {
   if (documents.activeId === step.tabId) {
     const link = step.link && el('#document-surface').querySelectorAll<HTMLElement>(step.link.selector)[step.link.index];
     (link || el('#research-reader-title')).focus({ preventScroll: true });
-    el('#document-scroll').scrollTop = step.scroll;
+    el('#document-scroll').scrollTo({ top: step.scroll, behavior: 'instant' });
   }
 }
 
@@ -779,6 +778,8 @@ async function dispatch(action: string, payload?: unknown, origin?: HTMLElement)
   if (action === 'find' || action === 'replace') { writingTools?.open(action === 'replace'); return; }
   if (action === 'find-close') { writingTools?.close(); editor.focus(); return; }
   if (action === 'find-next' || action === 'find-prev') { editor.search.navigate(action === 'find-next' ? 1 : -1); return; }
+  // Freezing the editor and resolving a link can move the viewport before the new document opens.
+  const linkOrigin = action === 'document-link' ? captureResearchStep(origin) : undefined;
   await perform(async () => {
     if (action === 'new-window') { clearTimeout(draftTimer); editor.flush(); await persistDraft(); await window.meki.newWindow(); }
     if (action === 'detach-document') { clearTimeout(draftTimer); await documents.detach(typeof payload === 'string' ? payload : undefined); }
@@ -805,7 +806,7 @@ async function dispatch(action: string, payload?: unknown, origin?: HTMLElement)
       if (!source) throw new Error(t("请先保存文稿，再打开相对文件链接。"));
       const location = await window.meki.resolveDocumentLink(String(payload), source);
       if ('evidenceId' in location) await researchUI.openEvidence(location.evidenceId, source, origin);
-      else await openLocation(location, true, origin);
+      else await openLocation(location, true, linkOrigin);
     }
     if (action === 'reload-document' && current.path && await mayReplace()) { const doc = await window.meki.openDocument(current.path); if (doc) await documents.reload(doc); }
     if (action === 'import-document') {
