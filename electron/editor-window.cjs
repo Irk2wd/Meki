@@ -5,6 +5,8 @@ const { app, BrowserWindow, Menu, dialog, shell, screen, clipboard, session, nat
 const { windowChromeOptions, fittedWindow } = require('./window-chrome.cjs');
 const bootstrap = globalThis[Symbol.for('meki.bootstrap')];
 const { WorkspaceStore, documentStatus } = require('./workspace-store.cjs');
+const { desktopPreviews } = require('./research-preview-service.cjs');
+const { isSubscribedRoot, subscribedProject } = require('./research-subscribed-project.cjs');
 const { ResearchStore } = require('./research-store.cjs');
 const { previewEvidence, sourceDirectory } = require('./research-evidence.cjs');
 const { DOCUMENT_SCHEME, researchLinkId } = require('./research-links.mjs');
@@ -293,7 +295,12 @@ async function openResearchProject(root) {
   return setWorkspace(project.root, true);
 }
 
+async function subscribed(root) {
+  return subscribedProject(await desktopPreviews(), root);
+}
+
 async function requireResearch(root) {
+  if (isSubscribedRoot(root)) throw new Error(t("远程项目为只读。"));
   const project = await currentResearch(root);
   if (!project) throw new Error(t("请先打开要编辑的研究项目。"));
   return project;
@@ -307,7 +314,8 @@ async function researchLocation(project, selected, documentId) {
   return file ? { path: file.path } : { evidenceId: documentId };
 }
 
-async function researchSnapshot(filter, includeLinked) {
+async function researchSnapshot(filter, includeLinked, root) {
+  if (isSubscribedRoot(root)) return (await subscribed(root)).snapshot(filter);
   const project = await currentResearch();
   if (!project) return null;
   const state = await project.snapshot(filter);
@@ -697,7 +705,6 @@ function registerIpc() {
   });
   register('refresh-workspace', refreshWorkspace);
   register('research-snapshot', researchSnapshot);
-  const {desktopPreviews} = require('./research-preview-service.cjs');
   register('preview-publisher', async root => (await desktopPreviews()).publisher((await requireResearch(root)).root));
   register('preview-publish', async (root,input) => (await desktopPreviews()).configurePublisher(await requireResearch(root),input));
   register('preview-pause', async root => (await desktopPreviews()).pause((await requireResearch(root)).root));
@@ -712,40 +719,45 @@ function registerIpc() {
     if (typeof token!=='string' || !/^[a-zA-Z0-9-]{1,80}$/.test(token)) throw Error('Invalid search token.');
     return id+'-'+token;
   };
+  const readableProject = root => isSubscribedRoot(root) ? subscribed(root) : requireResearch(root);
   register('research-ai-settings', async root => {
-    const state=await preferences.settings(await requireResearch(root));
+    const state=await preferences.settings(await readableProject(root));
     const stored=state.value && await preferences.desktopKey(state.value);
     return {...state,hasKey:Boolean(stored || state.value && preferences.envKey(state.value))};
   });
   register('save-research-ai-settings', async (root,value,key) => {
-    const store=await requireResearch(root);
+    const store=await readableProject(root);
     const selected=preferences.config(value);
     if(key!==undefined) await preferences.desktopKey(selected,key);
     return preferences.save(store,selected);
   });
   register('research-ai-models', async(root,value,key)=>{
-    await requireResearch(root);
+    await readableProject(root);
     const selected=preferences.config({...value,model:value.model || 'model-list'});
     return require('./research-ai-provider.cjs').listModels(selected,key || await preferences.desktopKey(selected) || preferences.envKey(selected));
   });
   register('smart-search-research', async (root,input,token) => {
-    const store=await requireResearch(root), {value}=await preferences.settings(store);
+    const store=await readableProject(root), {value}=await preferences.settings(store);
     const identity=tokenFor(token), service=require('./research-search-service.cjs');
     const key=value ? await preferences.desktopKey(value) || preferences.envKey(value) : '';
     for(const old of activeSearches) service.cancel(old);
     activeSearches.add(identity);
     try{return await service.smart(store.root,input,value,key,identity,(stage,preview)=>{
       if(mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('meki:smart-search-progress',{token,stage,preview});
-    });}finally{activeSearches.delete(identity);}
+    },store.preview);}finally{activeSearches.delete(identity);}
   });
   register('cancel-research-ai', token=>require('./research-search-service.cjs').cancel(tokenFor(token)));
-  register('search-research', async (root, input) => require('./research-search-service.cjs').search((await requireResearch(root)).root, input));
+  register('search-research', async (root, input) => {
+    const project = await readableProject(root);
+    return require('./research-search-service.cjs').search(project.root, input, project.preview);
+  });
   register('list-research-projects', listResearchProjects);
   register('open-research-project', openResearchProject);
   register('create-research-demo', createResearchDemo);
   register('configure-research-project', async (root, input) => { await (await requireResearch(root)).configure(input); });
   register('write-research-batch', async (root, input) => (await requireResearch(root)).writeBatch(input));
   register('read-research-record', async (root, id, sourceDocument) => {
+    if (isSubscribedRoot(root)) return (await subscribed(root)).read(id);
     const active = await requireResearch(root);
     const linked = await linkedDocumentProject(sourceDocument);
     if (!linked) return active.read(id);
@@ -779,6 +791,7 @@ function registerIpc() {
       relativePath: path.relative(directory, file).split(path.sep).join('/') });
   });
   register('open-research-evidence', async (root, id, sourceDocument) => {
+    if (isSubscribedRoot(root)) return (await subscribed(root)).image(id);
     const active = await requireResearch(root);
     const project = await linkedDocumentProject(sourceDocument) || active;
     const { source, reference, file } = await project.evidenceFile(id);

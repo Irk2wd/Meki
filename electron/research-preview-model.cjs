@@ -37,6 +37,18 @@ function validateSnapshot(s, projectId) {
     && (!s.project.start || isDate(s.project.start)) && Array.isArray(s.phases) && Array.isArray(s.items), 'Invalid project preview.');
   assert(!s.mediaTypes || (typeof s.mediaTypes === 'object' && !Array.isArray(s.mediaTypes) &&
     Object.entries(s.mediaTypes).every(([hash,mime]) => validHash(hash) && mime === 'jpeg')), 'Invalid preview media types.');
+  const { timezone, types, views, defaultView } = s.project;
+  if (timezone !== undefined) {
+    assert(text(timezone) && timezone.length <= 100, 'Invalid preview timezone.');
+    new Intl.DateTimeFormat('en', { timeZone: timezone });
+  }
+  assert(types === undefined || strings(types, t => t && validId(t.id) && text(t.label) &&
+    ['entry','event','summary','comparison'].includes(t.kind) && (!t.icon || Object.hasOwn(icons, t.icon))), 'Invalid preview record types.');
+  assert(views === undefined || strings(views, v => v && validId(v.id) && text(v.label) &&
+    ['timeline','journal'].includes(v.layout) && ['oldest','newest'].includes(v.order) &&
+    [v.phaseIds,v.typeIds].every(list => list === undefined || strings(list,validId)) &&
+    (v.tiers === undefined || strings(v.tiers,tier => ['key','standard','log'].includes(tier)))), 'Invalid preview views.');
+  assert(defaultView === undefined || validId(defaultView), 'Invalid default preview view.');
   const ids = new Set();
   for (const p of s.phases) {
     assert(p && (validId(p.id) || p.id === '') && !ids.has(p.id) && text(p.title) && text(p.description)
@@ -48,7 +60,10 @@ function validateSnapshot(s, projectId) {
   const itemIds = new Set();
   for (const i of s.items) {
     assert(i && validId(i.id) && !itemIds.has(i.id) && text(i.title) && text(i.label) && text(i.text) && isDate(i.date)
-      && strings(i.phases, p => ids.has(p)) && ['entry','event','comparison','summary'].includes(i.kind)
+      && (i.type === undefined || validId(i.type))
+      && (i.days === undefined || strings(i.days,isDate)) && (i.sources === undefined || strings(i.sources,validId))
+      && (i.tier === undefined || ['key','standard','log'].includes(i.tier))
+      && strings(i.phases, p => ids.has(p)) && (i.phaseId === undefined || i.phases.includes(i.phaseId)) && ['entry','event','comparison','summary'].includes(i.kind)
       && (!i.icon || Object.hasOwn(icons, i.icon)) && (i.body === undefined || (text(i.body) && Buffer.byteLength(i.body) <= maxBody))
       && (!i.coverage || (isDate(i.coverage.start) && isDate(i.coverage.end))), 'Invalid preview item.');
     itemIds.add(i.id);
@@ -118,7 +133,9 @@ async function projectPreview(store, pinned, makeThumbnail) {
       }
     }
     if (kind === 'entry' && !pinned.includes(r.id)) continue;
-    const item = { id:r.id, phases:assigned, title:r.title, date:r.date, kind, label:type?.label || r.type, icon:type?.icon, text:excerpt };
+    const item = { id:r.id, type:r.type, phaseId:assigned.includes(r.phaseId) ? r.phaseId : assigned[0], tier:r.tier, phases:assigned, title:r.title, date:r.date, kind, label:type?.label || r.type, icon:type?.icon, text:excerpt };
+    if (entry.trials?.length) item.days = [...new Set(entry.trials.map(trial => trial.date))];
+    if (r.sources?.length) item.sources = r.sources;
     if (r.coverage) item.coverage = r.coverage;
     if (pinned.includes(r.id)) {
       item.body = (await store.read(r.id)).body;
@@ -136,8 +153,12 @@ async function projectPreview(store, pinned, makeThumbnail) {
     }
     items.push(item);
   }
+  const sharedIds = new Set(items.map(item => item.id));
+  for (const item of items) if (item.sources) item.sources = item.sources.filter(id => sharedIds.has(id));
+  const publicTypes = [...types.values()].map(({id,label,kind,icon}) => ({id,label:label || id,kind,icon}));
+  const views = (project.views || []).map(({id,label,layout,order,phaseIds,typeIds,tiers}) => ({id,label,layout,order,phaseIds,typeIds,tiers}));
   const snapshot = { format:version, asOf, project:{id:project.id, title:project.title, description:project.description || '',
-    start:project.start, phaseGoals:project.phaseGoals || 'list'}, phases:[...groups.values()].map(({activity,rank,...phase}) =>
+    timezone:project.timezone, types:publicTypes, views, defaultView:project.defaultView, start:project.start, phaseGoals:project.phaseGoals || 'list'}, phases:[...groups.values()].map(({activity,rank,...phase}) =>
     ({...phase,days:[...activity.values()].sort((a,b) => a.date.localeCompare(b.date))})), items:items.sort((a,b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id)) };
   if (Object.keys(mediaTypes).length) snapshot.mediaTypes = mediaTypes;
   // Validate the wire representation; omitted fields on disk must work the same as local values.

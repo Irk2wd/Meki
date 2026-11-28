@@ -1,0 +1,21 @@
+.research-toolbar-actions [data-subscription-status], .research-shared-note {
+  color: var(--muted);
+  font: var(--ui-small-size) / 1.55 var(--ui);
+}
+.research-subscribed.research-reader-open [data-action="research-edit-body"],
+.research-subscribed.research-reader-open #editor-workspace,
+.research-subscribed.research-reader-open #document-surface > .statusbar { display: none; }
+#research-shared-document[hidden] { display: none; }
+#research-shared-document {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  color: var(--text);
+  background: var(--surface);
+}
+#research-shared-document .research-shared-note {
+  padding-inline: var(--editor-gutter-start, 32px);
+  margin: 0 auto 32px;
+}

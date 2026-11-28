@@ -32,8 +32,8 @@ function dispatch(payload, token, progress) {
     catch (error) { requests.delete(id); reject(error); }
   });
 }
-function search(root,input) { return dispatch({root,input}); }
-function smart(root,input,config,key,token,progress) { return dispatch({root,input,config,key,kind:'smart'},token,progress); }
+function search(root,input,preview) { return dispatch({root,input,preview}); }
+function smart(root,input,config,key,token,progress,preview) { return dispatch({root,input,config,key,preview,kind:'smart'},token,progress); }
 function cancel(token) {
   for(const [id,request] of requests) if(request.token===token) worker?.postMessage({id,kind:'cancel'});
 }

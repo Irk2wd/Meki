@@ -138,7 +138,7 @@ export interface MekiAPI extends RemotePreviewAPI {
   openRecentFolder(path: string): Promise<Workspace>;
   changeRecentFolders(input: RecentFolderChange): Promise<RecentFolder[]>;
   refreshWorkspace(): Promise<Workspace | null>;
-  researchSnapshot(filter?: ResearchFilter, includeLinked?: boolean): Promise<ResearchSnapshot | null>;
+  researchSnapshot(filter?: ResearchFilter, includeLinked?: boolean, root?: string): Promise<ResearchSnapshot | null>;
   researchAISettings(root:string): Promise<import('./research-ai').ResearchAISettings>;
   saveResearchAISettings(root:string,value:import('./research-ai').ResearchAIConfig,key?:string|null): Promise<import('./research-ai').ResearchAIConfig>;
   researchAIModels(root:string,value:import('./research-ai').ResearchAIConfig,key?:string): Promise<string[]>;

@@ -123,3 +123,26 @@ test('an external agent batch is picked up automatically and unchanged records d
   assert.equal(current.previous,original.revision);assert.equal(JSON.parse(host.files.get('/snapshots/'+current.revision+'.json')).phases[0].records,2);
   await service.pause(store.root);await external.writeBatch({records:[{id:'next-run',ifRevision:(await external.read('next-run')).revision,title:'Follow-up'}]});await service.tick();assert.deepEqual(JSON.parse(host.files.get('/latest.json')),current);
 });
+
+test('a subscribed workspace exposes published text, custom views and phase totals without local file capabilities', async () => {
+  const {projectFromSnapshot} = require('../electron/research-subscribed-project.cjs');
+  const shared = {...record, id:'shared', title:'Trail baseline'};
+  const store = {snapshot:async()=>({project:meta,comparisonType:{id:'figure',kind:'comparison',label:'Figure'},problems:[],
+    records:[{record:shared,excerpt:'Baseline measured.',trials:[{id:'private-trial',date:'2024-02-04'}]},
+      {record:{...record,id:'internal',date:'2024-02-05'},excerpt:'Replicated.'}]}),read:async()=>({body:'Trail timings.'})};
+  const built = await projectPreview(store,['shared'],async()=>pixel);
+  const pointer = {projectId:meta.id,revision:built.revision,publishedAt:'2024-02-05T12:00:00Z'};
+  const project = projectFromSnapshot('subscription:test',{pointer,snapshot:built.snapshot},()=>assert.fail('unindexed image access'));
+  const state = project.snapshot({query:'timings'});
+  assert.equal(state.project.defaultView,'axis');
+  assert.deepEqual(state.project.views, built.snapshot.project.views);
+  assert.deepEqual(state.matchingIds,['shared']);
+  assert.equal(state.subscription.phases.canopy.records,2);
+  assert.equal(state.records.length,1);
+  assert.equal(state.records[0].trials[0].date,'2024-02-04');
+  assert.equal(project.read('shared').body,'Trail timings.');
+  assert.throws(()=>project.read('internal'));
+  await assert.rejects(project.image(digest(pixel)));
+  assert.equal(project.writeBatch,undefined);
+  assert.equal(project.evidenceFile,undefined);
+});

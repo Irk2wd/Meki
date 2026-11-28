@@ -5,6 +5,7 @@ import { comparisonLimits, evidenceImageMime } from '../electron/research-compar
 import type { ResearchComparison, ResearchDocument, ResearchEvidenceFile, ResearchReference, ResearchWidth } from '../shared/research';
 import { icon } from './icons';
 import { renderMarkdown } from './markdown-render';
+import { sharedMarkdown } from './research-subscribed-reader';
 import { evidenceWipe, supportsWipe } from './research-wipe';
 import { escapeResearch as escape, researchOption as option } from './research-tools';
 import './research-comparison.css';
@@ -141,7 +142,7 @@ export class ComparisonViewer {
     width: ResearchWidth;
     back?(): void;
     evidence(id: string, origin: HTMLElement): Promise<void>;
-    edit(): Promise<void>;
+    edit?(): Promise<void>;
     error(error: unknown): void;
   }) {
     if (!record.comparison || this.dialog.open) return;
@@ -164,20 +165,23 @@ export class ComparisonViewer {
           ${pixelPresets.map(level => `<option value="${level}">${level === 1 ? ht("100%（原始像素）") : `${level * 100}%`}</option>`).join('')}
         </select></div>
         <small data-grid-controls>${ht("滚轮缩放，拖动平移。同一行同步。")}</small>
-        <button type="button" class="secondary-button" data-comparison-edit>${ht("编辑图注")}</button></div>
+        ${actions.edit ? `<button type="button" class="secondary-button" data-comparison-edit>${ht("编辑图注")}</button>` : ''}</div>
       <div class="research-comparison-scroll"><table class="research-comparison-grid" style="--comparison-columns:${columns.length}"><thead><tr><td></td>${columns.map(label => `<th scope="col">${escape(label)}</th>`).join('')}</tr></thead>
         <tbody>${rows.map(({ label, images }) => `<tr><th scope="row">${escape(label)}</th>${images.map((image, column) =>
           `<td><div class="research-comparison-tile"><div class="research-comparison-image"${image ? ` data-image-evidence="${escape(image)}" tabindex="0" aria-label="${escape(`${label} · ${columns[column]}`)}"` : ''}>
-            <span>${image ? ht("正在读取原图…") : ht("未选择原图")}</span></div>${image ? `<button type="button" class="text-button" data-comparison-source="${escape(image)}">${ht("打开原图")}</button>` : ''}</div></td>`).join('')}</tr>`).join('')}</tbody></table>
+            <span>${image ? ht("正在读取原图…") : ht("未选择原图")}</span></div>${image ? `<button type="button" class="text-button" data-comparison-source="${escape(image)}">${actions.edit ? ht("打开原图") : ht("查看共享图片")}</button>` : ''}</div></td>`).join('')}</tr>`).join('')}</tbody></table>
       ${body.trim() ? `<section class="research-comparison-caption"><h3>${ht("图注")}</h3><div></div></section>` : ''}</div>`;
     const caption = this.dialog.querySelector('.research-comparison-caption > div');
-    if (caption) caption.innerHTML = DOMPurify.sanitize(renderMarkdown(body).html);
+    if (caption) {
+      if (actions.edit) caption.innerHTML = DOMPurify.sanitize(renderMarkdown(body).html);
+      else caption.replaceChildren(sharedMarkdown(body));
+    }
     this.dialog.querySelector('[data-comparison-close]')!.addEventListener('click', () => this.dialog.close());
     this.dialog.querySelector('[data-comparison-back]')?.addEventListener('click', () => {
       this.dialog.close();
       actions.back?.();
     });
-    this.dialog.querySelector('[data-comparison-edit]')!.addEventListener('click', () => { this.dialog.close(); void actions.edit().catch(actions.error); });
+    this.dialog.querySelector('[data-comparison-edit]')?.addEventListener('click', () => { this.dialog.close(); void actions.edit?.().catch(actions.error); });
     this.dialog.querySelector('[data-comparison-fit]')!.addEventListener('click', () => this.setAllRowsZoom('fit'));
     this.zoomSlider = this.dialog.querySelector<HTMLInputElement>('[data-comparison-zoom]')!;
     this.zoomPresets = this.dialog.querySelector<HTMLSelectElement>('[data-comparison-preset]')!;
@@ -202,7 +206,7 @@ export class ComparisonViewer {
         });
         grid.after(wipe);
         rowPicker = wipe.querySelector<HTMLSelectElement>('[data-wipe-row]')!;
-        this.dialog.querySelector('[data-comparison-edit]')!.before(rowPicker);
+        this.dialog.querySelector('.research-comparison-toolbar')!.append(rowPicker);
       }
       if (wipe) wipe.hidden = !sliding;
       if (rowPicker) rowPicker.hidden = !sliding;

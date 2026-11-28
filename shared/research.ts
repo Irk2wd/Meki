@@ -180,7 +180,7 @@ export interface ResearchEntry {
   issues: string[];
 }
 
-export interface ResearchDocument extends Omit<ResearchEntry, 'issues'> { body: string; currentFields?: ResearchField[] }
+export interface ResearchDocument extends Omit<ResearchEntry, 'issues'> { body: string; excerptOnly?: boolean; currentFields?: ResearchField[] }
 
 
 export interface ResearchReference {
@@ -198,7 +198,14 @@ export interface LinkedResearchSummary {
   relativePath: string;
 }
 
+export interface SharedPhaseActivity {
+  records: number;
+  days: { date: string; records: number; trials: number }[];
+  latest?: string;
+  finding?: { date: string; text: string };
+}
 export interface ResearchSnapshot {
+  subscription?: { publishedAt: string; asOf: string; phases: Record<string, SharedPhaseActivity>; summaryPhases: Record<string, string[]> };
   root: string;
   project: ResearchProject;
   comparisonType: ResearchType;

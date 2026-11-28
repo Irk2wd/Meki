@@ -24,7 +24,7 @@
     "build": "tsc --noEmit && vite build",
     "start": "electron .",
     "research": "node electron/research-cli.cjs",
-    "test:research": "node tests/research-smoke.mjs && node tests/research-search-smoke.mjs && node tests/research-smart-smoke.mjs",
+    "test:research": "node tests/research-smoke.mjs && node tests/research-search-smoke.mjs && node tests/research-smart-smoke.mjs && node tests/research-subscribed-smoke.mjs",
     "test": "node --test tests/*.test.cjs",
     "check:licenses": "node scripts/notices.mjs --check",
     "check:assets": "node scripts/check-assets.mjs",

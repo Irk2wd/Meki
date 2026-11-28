@@ -1,65 +1,16 @@
-#research-remote-settings, #research-remote-viewer, #research-remote-image, #research-remote-events {
+#research-remote-settings {
   box-sizing: border-box; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
   max-width: calc(100vw - 28px); max-height: calc(100dvh - 76px); inset-block-start: 22px; font-family: var(--ui);
 }
-#research-remote-settings, #research-remote-events { width: 510px; padding: 22px; }
+#research-remote-settings { width: 510px; padding: 22px; }
 #research-remote-settings form { display: grid; gap: 14px; }
-#research-remote-settings :is(p,small), #research-remote-viewer small, .remote-description, .remote-foot { color: var(--soft); }
+#research-remote-settings :is(p,small) { color: var(--soft); }
 #research-remote-settings p { line-height: 1.55; margin: 0; }
 #research-remote-settings label:not(.remote-check) { display: grid; gap: 5px; min-width: 0; }
-#research-remote-settings input:not([type=checkbox]), .remote-actions select { min-width: 0; border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; background: var(--surface); color: var(--text); }
+#research-remote-settings input:not([type=checkbox]) { min-width: 0; border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; background: var(--surface); color: var(--text); }
 .remote-login { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .remote-check { display: flex; align-items: baseline; gap: 7px; }
 .remote-pins { max-height: 180px; overflow: auto; display: grid; gap: 7px; padding: 8px 0; }
-#research-remote-settings summary, .remote-item summary, .remote-wipe summary { cursor: pointer; }
-#research-remote-settings footer, .remote-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
+#research-remote-settings summary { cursor: pointer; }
+#research-remote-settings footer { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
 #research-remote-settings [role=status] { font-size: var(--ui-small-size); color: var(--accent); overflow-wrap: anywhere; }
-.remote-list-title { margin: 15px 0 4px; font: 600 var(--ui-small-size) var(--ui); color: var(--soft); }
-#research-remote-viewer { width: min(1140px, 94vw); height: min(880px, 90dvh); padding: 0; }
-#research-remote-viewer[open] { display: grid; grid-template-rows: auto minmax(0,1fr) auto; }
-.remote-head, .remote-detail > header, .remote-timeline > header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
-.remote-head { padding: 18px clamp(18px,3vw,38px) 12px; border-bottom: 1px solid var(--border); }
-.remote-head h2 { margin: 4px 0 0; font-size: clamp(19px,2.5vw,28px); line-height: 1.3; overflow-wrap: anywhere; }
-.remote-head > div:first-child { flex: 1; min-width: 160px; }
-.remote-content { overflow: auto; padding: 0 clamp(18px,3vw,38px) 24px; }
-.remote-content h3 { font-size: 1.1em; margin: 0; }
-.remote-description { line-height: 1.65; }
-.remote-timeline, .remote-detail { margin: 20px 0; }
-.remote-timeline { --label: min(32%,230px); }
-.remote-scale { margin: 11px 0 5px var(--label); display: flex; justify-content: space-between; font-size: var(--ui-caption-size); color: var(--soft); font-variant-numeric: tabular-nums; }
-.remote-row { display: grid; grid-template-columns: var(--label) minmax(0,1fr); align-items: center; border-top: 1px solid var(--border); }
-.remote-phase { text-align: start; padding: 7px 8px; margin: 2px 6px 2px 0; border: 0; border-radius: 6px; color: inherit; background: transparent; cursor: pointer; }
-.remote-phase :is(strong,small) { display: block; overflow-wrap: anywhere; }
-.remote-phase small { margin-top: 3px; }
-.remote-phase[aria-pressed=true], .remote-phase:hover { background: var(--accent-soft); }
-.remote-track { position: relative; height: 34px; border-inline: 1px solid var(--border); }
-.remote-bar { position: absolute; height: 9px; top: 16px; border-radius: 6px; background: color-mix(in srgb,var(--accent) 33%,var(--surface)); }
-.remote-dot { position: absolute; top: 17px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); transform: translateX(-50%); }
-.remote-track .research-timeline-event { top: -1px; height: 20px; }
-.remote-detail { border-top: 1px solid var(--border); padding-top: 20px; }
-.remote-stage-section { margin-block-start: 14px; }
-.remote-stage-section h4 { font: 600 var(--ui-text-size)/1.5 var(--ui); }
-.remote-detail p, .remote-body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; }
-.remote-finding { border-inline-start: 3px solid var(--accent); padding-inline-start: 12px; margin: 16px 0; }
-.remote-finding p { margin: 4px 0; }
-.remote-goals { padding-inline-start: 21px; }
-.remote-item { border-bottom: 1px solid var(--border); padding: 11px 0; }
-.remote-item > summary { display: flex; align-items: center; gap: 8px; }
-.remote-item > summary:before { content: '›'; color: var(--soft); }
-.remote-item[open] > summary:before { transform: rotate(90deg); }
-.remote-item > summary strong { flex: 1; overflow-wrap: anywhere; }
-.remote-item > summary small { text-align: end; }
-.remote-body { border-inline-start: 2px solid var(--border); padding: 8px 14px; font: inherit; white-space: normal; }
-.remote-body table { border-collapse: collapse; }
-.remote-body :is(td,th) { padding: 4px 9px; border: 1px solid var(--border); text-align: start; }
-.remote-body pre { white-space: pre-wrap; }
-.remote-table { overflow: auto; margin: 12px 0; }
-.remote-table table { width: 100%; border-spacing: 5px; }
-.remote-table th { text-align: start; font: 500 var(--ui-small-size) var(--ui); color: var(--soft); }
-.remote-table td { min-width: 100px; }
-.remote-table button { width: 100%; display: block; cursor: zoom-in; background: var(--accent-soft); padding: 0; border: 0; border-radius: 7px; overflow: hidden; }
-.remote-table img { display: block; width: 100%; max-height: 220px; object-fit: contain; }
-.remote-foot { padding: 6px clamp(18px,3vw,38px); border-top: 1px solid var(--border); font-size: var(--ui-small-size); overflow-wrap: anywhere; }
-#research-remote-image { width: fit-content; padding: 14px; }
-#research-remote-image img { display: block; max-width: 100%; max-height: 65dvh; object-fit: contain; }
-@media(max-width:650px) { .remote-login { grid-template-columns: 1fr; } .remote-item > summary { flex-wrap: wrap; } }

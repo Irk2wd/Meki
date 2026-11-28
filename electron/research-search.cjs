@@ -223,8 +223,8 @@ async function searchProject(store, input, { allProjectSources = false } = {}) {
   const opt = options(input), snap = await store.snapshot();
   if (opt.phase) assert(snap.project.phases.some(p => p.id === opt.phase), 'Unknown phase.');
   const folder = path.join(searchHome(), 'indexes');
-  await fs.mkdir(folder, { recursive: true, mode: 0o700 });
-  const db = new DatabaseSync(path.join(folder, hash(pathKey(store.root)+'\n'+snap.project.id) + '-v1.sqlite'));
+  if (!snap.subscription) await fs.mkdir(folder, { recursive: true, mode: 0o700 });
+  const db = new DatabaseSync(snap.subscription ? ':memory:' : path.join(folder, hash(pathKey(store.root)+'\n'+snap.project.id) + '-v1.sqlite'));
   try {
     catalog(db);
     const docs = await sources(store,snap,allProjectSources ? undefined : snap.project.search?.sourceIds);

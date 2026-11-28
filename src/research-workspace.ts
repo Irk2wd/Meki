@@ -3,14 +3,18 @@ import { getLocale, ht, t } from '../electron/i18n.mjs';
 import { activityDates, latestActivity, monthFilter, overlaps, phaseSpan, projectToday, sortEntries, summaryCoversPhase } from '../electron/research-phases.mjs';
 import { comparisonImages } from '../electron/research-comparison.mjs';
 import { researchReportFormat } from '../electron/research-report-format.mjs';
-import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSearchLocator, ResearchSnapshot, ResearchTier, ResearchType, ResearchValue, ResearchView } from '../shared/research';
+import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField, ResearchFilter, ResearchPhase, ResearchRange, ResearchRelation, ResearchSearchLocator, ResearchSnapshot, ResearchTier, SharedPhaseActivity, ResearchType, ResearchValue, ResearchView } from '../shared/research';
 import { icon } from './icons';
 import { ComparisonGridEditor, ComparisonViewer } from './research-comparison';
 import { ResearchAISettingsDialog } from './research-ai-settings';
 import { RemotePreviewUI } from './research-remote-preview';
+import type { PreviewConnection } from '../shared/research-preview';
+import { SubscribedReader } from './research-subscribed-reader';
 import { ResearchSearchDialog } from './research-search-dialog';
 import { ResearchColumns } from './research-columns';
 import { evidenceWipe, placeReaderFigure, supportsWipe, type WipePosition } from './research-wipe';
+import type { Settings } from '../shared/meki';
+import type { WritingEditor } from './editor';
 import type { EditorView } from '@milkdown/kit/prose/view';
 import { TimelineEventLayout, timelineEventButton, type TimelineEventDay } from './research-timeline-events';
 import { adjustDays, brushDays, datesForDays, dayNumber, isoDay, shiftRange, timelineOverview, type RangeHandle, type TimelineWindow } from './research-timeline-range';
@@ -38,6 +42,7 @@ const pageSizeKey = 'mekir.research.phasesPerPage';
 const widthsKey = 'mekir.research.widths';
 const defaultPageSize = 10;
 const peekItems = '.research-entry-title > [data-research-record], .research-summary-list li > [data-research-record]';
+const projectWrites = '[data-research-new],[data-research-edit],[data-research-new-phase],[data-research-edit-phase],[data-research-add-source],[data-research-bind-source],[data-research-index-evidence],[data-research-import],[data-research-edit-description],[data-research-event-types],[data-research-publish]';
 const peekKey = (button: HTMLButtonElement) => `${button.dataset.researchLinkedProject || ''}/${button.dataset.researchRecord}`;
 const validPageSize = (size: number) => Number.isSafeInteger(size) && size > 0;
 
@@ -153,6 +158,7 @@ interface TimelineOptions {
   presetId?: RangePreset['id'];
   page: number;
   pageSize: number | null;
+  sharedActivity?: Record<string, SharedPhaseActivity>;
   canCreatePhase: boolean;
   canCreateEvent: boolean;
   types: Map<string, ResearchType>;
@@ -187,13 +193,13 @@ function comparePhaseProgress(a: ResearchEntry, b: ResearchEntry, recordTypes: R
   return tierWeight[recordTier(a.record)] - tierWeight[recordTier(b.record)] || a.record.id.localeCompare(b.record.id);
 }
 
-function rankPhases(phases: ResearchPhase[], entries: ResearchEntry[], today: string, recordTypes: ResearchType[], progressByPhase?: Map<string, ResearchEntry[]>, superseded = new Set<string>()) {
+function rankPhases(phases: ResearchPhase[], entries: ResearchEntry[], today: string, recordTypes: ResearchType[], progressByPhase?: Map<string, ResearchEntry[]>, superseded = new Set<string>(), shared?: Record<string, SharedPhaseActivity>) {
   const byPhase = groupByPhase(entries);
   const reportTypes = new Set(recordTypes.filter(type => type.kind === 'entry' || type.kind === 'summary').map(type => type.id));
   return phases.map(phase => {
     const span = phaseSpan(phase, today);
     const assigned = byPhase.get(phase.id) || [];
-    let latest = '';
+    let latest = shared?.[phase.id]?.latest || '';
     let update: ResearchEntry | undefined;
     for (const item of [...assigned, ...(progressByPhase?.get(phase.id) || [])]) {
       const { record, excerpt } = item;
@@ -214,7 +220,7 @@ function rankPhases(phases: ResearchPhase[], entries: ResearchEntry[], today: st
 }
 
 function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByPhase: Map<string, ResearchEntry[]>, eventsByPhase: Map<string, ResearchEntry[]>,
-  { activePhase, today, range, bounds, selectedRange, presetId, page: requestedPage, pageSize, revealPhase, canCreatePhase, canCreateEvent, types, superseded, tierSwitch }: TimelineOptions) {
+  { activePhase, today, range, bounds, selectedRange, presetId, page: requestedPage, pageSize, revealPhase, canCreatePhase, canCreateEvent, types, superseded, tierSwitch, sharedActivity }: TimelineOptions) {
   const start = dayNumber(range.start), end = dayNumber(range.end), span = end - start + 1;
   const dayWidth = 100 / span;
   const fullRange = range.start === bounds.start && range.end === bounds.end;
@@ -223,7 +229,7 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
   const todayLine = containsDay(range, today) ? `<i class="research-today-line" style="--point:${position(today, 0.5)}%"></i>` : '';
   const ticks = [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(start + (end - start) * i / 4)))];
   const tickPosition = (day: number) => (day - start + .5) * 100 / span;
-  const ordered = rankPhases(phases, entries, today, [...types.values()], progressByPhase, superseded);
+  const ordered = rankPhases(phases, entries, today, [...types.values()], progressByPhase, superseded, sharedActivity);
   const focusPhase = activePhase || ordered[0]?.phase.id;
   const selectedIndex = revealPhase ? ordered.findIndex(({ phase }) => phase.id === revealPhase) : -1;
   const limit = pageSize ?? Math.max(1, ordered.length);
@@ -245,11 +251,15 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
         else activity.set(day, [entry]);
       }
     }
+    const shared = sharedActivity?.[phase.id];
+    const counts = new Map(shared?.days.map(d => [d.date, d.records]));
+    for (const day of counts.keys()) if (containsDay(range, day) && !activity.has(day)) activity.set(day, []);
     const dots = [...activity].sort(([a], [b]) => a.localeCompare(b)).map(([day, items]) => {
-      const ended = items.every(({ record }) => experimentEnded(record, group === 'ended'));
-      const label = items.length === 1 ? `${day} · ${escape(items[0].record.title)}` : ht("{0} 的 {1} 条实验记录", day, items.length);
+      const ended = items.length ? items.every(({ record }) => experimentEnded(record, group === 'ended')) : group === 'ended';
+      const total = counts.get(day) ?? items.length;
+      const label = total === 1 && items.length === 1 ? `${day} · ${escape(items[0].record.title)}` : ht("{0} 的 {1} 条实验记录", day, total);
       return `<button type="button" class="research-trial-day" data-research-trial-day="${phase.id}/${day}" data-date="${day}"
-        data-research-trial-records="${items.map(({ record }) => record.id).join(' ')}" style="--point:${position(day, .5)}%;--day-width:${dayWidth}%" aria-label="${label}" title="${label}">
+        ${total > items.length ? `data-shared-day="${phase.id}"` : ''} data-research-trial-records="${items.map(({ record }) => record.id).join(' ')}" style="--point:${position(day, .5)}%;--day-width:${dayWidth}%" aria-label="${label}" title="${label}">
         <i aria-hidden="true" class="research-timeline-dot${ended ? ' is-ended' : ''}"></i></button>`;
     }).join('');
     const phaseEvents = eventsByPhase.get(phase.id) || [];
@@ -267,13 +277,13 @@ function timeline(phases: ResearchPhase[], entries: ResearchEntry[], progressByP
       .map(([date, entries]) => ({ point: position(date, 0.5) / 100, entries: entries.sort(sortEntries), latest: date === latestEventDate })));
     const left = Math.max(0, position(span.start)), right = Math.max(0, 100 - position(span.end, 1));
     const status = group === 'ongoing' ? ht("进行中") : group === 'ended' ? ht("已结束") : ht("未开始");
-    const progress = update?.excerpt || update?.record.title || phase.description;
+    const progress = shared?.finding?.text || update?.excerpt || update?.record.title || phase.description;
     const updateType = update && types.get(update.record.type);
     return `<div class="research-timeline-row" data-status="${group}">
       <button type="button" class="research-timeline-label" data-research-phase="${phase.id}" aria-pressed="${activePhase === phase.id}">
         <strong>${escape(phase.title)} <span class="research-phase-status${group === 'ongoing' ? ' research-phase-ongoing' : ''}">${status}</span></strong>
         ${progress ? `<span class="research-phase-progress" title="${escape(progress)}">${update ? recordMark(recordKind(updateType, update.record), 12, updateType?.icon) : ''}${escape(progress)}</span>` : ''}
-        <small class="research-phase-facts"><span>${escape(phaseDates(phase, today, true))} · ${ht("{0} 条实验", assigned.length)}</span>${latest ? `<span>${ht("最近进展 {0}", escape(formatDay(dayNumber(latest), latest.slice(0, 4) !== today.slice(0, 4))))}</span>` : ''}</small></button>
+        <small class="research-phase-facts"><span>${escape(phaseDates(phase, today, true))} · ${ht("{0} 条实验", shared?.records ?? assigned.length)}</span>${latest ? `<span>${ht("最近进展 {0}", escape(formatDay(dayNumber(latest), latest.slice(0, 4) !== today.slice(0, 4))))}</span>` : ''}</small></button>
       <div class="research-timeline-track" data-research-track${fullRange ? '' : ' data-research-pan'}${phaseEvents.length ? ' data-research-has-events' : ''}>${overlaps(span, range) ? `<i aria-hidden="true" class="research-timeline-bar" style="--left:${left}%;--right:${right}%"></i>` : ''}${dots}
         ${groups.size ? `<div class="research-timeline-events" data-phase="${phase.id}"></div>` : ''}</div>
     </div>`;
@@ -354,6 +364,8 @@ function destinations(project: ResearchSnapshot['project']): Destination[] {
 
 interface Hooks {
   root(): string | undefined;
+  settings(): Settings;
+  readerCreated(editor: WritingEditor): void;
   blocked(): boolean;
   whenIdle(): Promise<void>;
   open(root: string, id: string, origin?: HTMLButtonElement, edit?: boolean, sourceProjectId?: string, locator?: ResearchSearchLocator, revision?:string): Promise<void>;
@@ -384,7 +396,16 @@ export class ResearchWorkspace {
   private rangePicker = document.createElement('dialog');
   private tools: ResearchTools;
   private projectSearch: ResearchSearchDialog;
-  private remote = new RemotePreviewUI();
+  private subscription?: PreviewConnection;
+  private subscriptionRequest = 0;
+  private syncStatus = '';
+  private nextSubscriptionCheck = 0;
+  private syncingSubscription?: Promise<void>;
+  private remote = new RemotePreviewUI(c => this.openSubscription(c), async id => {
+    if (id === this.subscription?.id) { this.useLocalProject(); await this.show(); }
+  });
+  readonly sharedReader = new SubscribedReader(id => this.openReference(id),
+    () => this.hooks.settings(), editor => this.hooks.readerCreated(editor), (message, error) => this.hooks.notify(message, error));
   private readonly aiSettings = new ResearchAISettingsDialog();
   private returnToSearch?: () => void;
   private comparisonViewer = new ComparisonViewer();
@@ -548,7 +569,7 @@ export class ResearchWorkspace {
         this.projectPicker.close();
         void window.meki.previewSubscriptions().then(list => {
           const c = list.find(sub => sub.id === remote.dataset.subscription);
-          if (c) return this.remote.open(c);
+          if (c) return this.openSubscription(c);
         }).catch(error => this.hooks.notify(errorText(error), true));
         return;
       }
@@ -574,11 +595,92 @@ export class ResearchWorkspace {
   }
 
   get visible() { return !this.panel.hidden; }
+  private activeRoot() { return this.subscription ? 'subscription:' + this.subscription.id : this.hooks.root(); }
+  get sharedDocumentPath() {
+    const doc = this.sharedReader.document;
+    return doc && this.root ? this.root + '/' + doc.relativePath : undefined;
+  }
+  get readOnly() { return Boolean(this.subscription); }
+
+  async restoreProject() {
+    const last = localStorage.getItem('mekir.lastSubscription');
+    const saved = last && (await window.meki.previewSubscriptions()).find(c => c.id === last);
+    if (saved) await this.openSubscription(saved);
+    else { localStorage.removeItem('mekir.lastSubscription'); await this.show(); }
+  }
+
+  private async openSubscription(connection: PreviewConnection) {
+    if (this.readerOpen) await this.hooks.closeReader();
+    else this.sharedReader.close();
+    this.subscriptionRequest++;
+    this.subscription = connection;
+    this.syncingSubscription = undefined;
+    this.syncStatus = '';
+    this.nextSubscriptionCheck = Infinity;
+    localStorage.setItem('mekir.lastSubscription', connection.id);
+    await this.show();
+    if (this.subscription === connection) void this.syncSubscription();
+  }
+
+  useLocalProject() {
+    this.subscriptionRequest++;
+    this.closeReader(false);
+    this.subscription = undefined;
+    this.syncingSubscription = undefined;
+    this.syncStatus = '';
+    localStorage.removeItem('mekir.lastSubscription');
+  }
+
+  async syncSubscription() {
+    const connection = this.subscription;
+    if (!connection) return;
+    if (this.syncingSubscription) return this.syncingSubscription;
+    const request = this.subscriptionRequest;
+    const status = (label: string) => {
+      this.syncStatus = label;
+      const node = this.toolbar.querySelector<HTMLElement>('[data-subscription-status]');
+      if (node) node.textContent = label;
+    };
+    this.nextSubscriptionCheck = Date.now() + 60_000;
+    status(t("正在检查远程更新…"));
+    this.syncingSubscription = (async () => {
+      try {
+        const fresh = await window.meki.previewRefresh(connection.id);
+        if (request !== this.subscriptionRequest) return;
+        if (this.snapshot?.revision !== fresh.pointer.revision) await this.refresh(true);
+        if (request !== this.subscriptionRequest || !this.snapshot) return;
+        const reading = this.sharedReader.document;
+        if (reading && !this.snapshot.records.some(entry => entry.record.id === reading.record.id)) {
+          await this.hooks.closeReader();
+        } else if (reading) await this.sharedReader.refresh(this.snapshot);
+        if (request === this.subscriptionRequest) status(t("已同步"));
+      } catch (error) {
+        if (request === this.subscriptionRequest) status(this.snapshot ? t("离线 · 正在查看已保存的快照") : errorText(error));
+      } finally {
+        if (request === this.subscriptionRequest) this.syncingSubscription = undefined;
+      }
+    })();
+    return this.syncingSubscription;
+  }
+
+  async openSharedRecord(id: string, origin?: HTMLButtonElement, locator?: ResearchSearchLocator) {
+    const state = this.snapshot;
+    if (!state?.subscription || !await this.sharedReader.open(state, id, Boolean(origin), locator) || this.snapshot?.root !== state.root) return;
+    this.openReader(origin);
+    this.selectReaderItem(id);
+  }
+
+  async backSharedRecord() {
+    if (!this.snapshot || !await this.sharedReader.back(this.snapshot)) return false;
+    this.selectReaderItem(this.sharedReader.document?.record.id);
+    return true;
+  }
   get readerOpen() { return Boolean(this.readerReturn); }
 
   async show() {
     this.panel.hidden = this.sidebar.hidden = false;
     this.host.classList.add('research-mode');
+    this.host.classList.toggle('research-subscribed', this.readOnly);
     this.host.closest('.shell')?.classList.add('research-shell');
     this.columns.update();
     await this.refresh();
@@ -589,7 +691,7 @@ export class ResearchWorkspace {
     this.clearAxisDrag();
     this.closeReader(false);
     this.panel.hidden = this.sidebar.hidden = true;
-    this.host.classList.remove('research-mode');
+    this.host.classList.remove('research-mode', 'research-subscribed');
     this.host.closest('.shell')?.classList.remove('research-shell');
     this.columns.update();
   }
@@ -689,6 +791,7 @@ export class ResearchWorkspace {
   }
 
   closeReader(focus = true) {
+    this.sharedReader.close();
     const resume = this.returnToSearch; this.returnToSearch = undefined;
     const returning = this.readerReturn;
     if (!returning) return;
@@ -836,7 +939,7 @@ export class ResearchWorkspace {
   }
 
   async openEvidence(id: string, sourceDocument?: string, origin?: HTMLElement) {
-    const root = this.hooks.root();
+    const root = this.activeRoot();
     if (root) await this.tools.evidence(root, id, sourceDocument, undefined, origin, Boolean(this.readerOpen && sourceDocument));
   }
 
@@ -849,11 +952,11 @@ export class ResearchWorkspace {
     const record = state.records.find(item => item.record.id === id)?.record;
     if (record?.comparison) {
       const document = await window.meki.readResearchRecord(state.root, id);
-      if (request !== this.referenceRequest || this.hooks.root() !== state.root) return;
+      if (request !== this.referenceRequest || this.activeRoot() !== state.root) return;
       this.comparisonViewer.show(state.root, document, {
         width: this.widths.comparison, back,
         evidence: (file, trigger) => this.tools.evidence(state.root, file, undefined, t("返回对比"), trigger),
-        edit: () => this.hooks.open(state.root, id, origin, true),
+        edit: state.subscription ? undefined : () => this.hooks.open(state.root, id, origin, true),
         error: error => this.hooks.notify(errorText(error), true),
       });
       return;
@@ -862,7 +965,7 @@ export class ResearchWorkspace {
     if (record && state.project.recordTypes.some(type => type.id === record.type && type.kind === 'event')
       && state.documents.some(file => file.sourceId && researchReportFormat(file.relativePath))) {
       const document = await window.meki.readResearchRecord(state.root, id);
-      if (request !== this.referenceRequest || this.hooks.root() !== state.root || (origin && !origin.isConnected)) return;
+      if (request !== this.referenceRequest || this.activeRoot() !== state.root || (origin && !origin.isConnected)) return;
       const files = reportReferences(document, state.documents);
       if (files.length) {
         this.tools.previewReports(state.root, files, origin, () => this.hooks.open(state.root, id, origin));
@@ -876,9 +979,10 @@ export class ResearchWorkspace {
     const [projects, subscriptions] = await Promise.all([window.meki.listResearchProjects(), window.meki.previewSubscriptions()]);
     if (this.projectPicker.open) return;
     this.projectPicker.innerHTML = `<div class="dialog-heading"><h2>${ht("科研项目")}</h2><form method="dialog"><button class="icon-button" aria-label="${ht("关闭")}">${icon('close', 16)}</button></form></div>
-      ${projects.length ? `<ul class="research-project-list">${projects.map(project => `<li><button type="button" data-research-project="${escape(project.root)}"${project.root === this.root ? ' aria-current="true"' : ''}>
-        ${icon('folder', 17)}<span><strong>${escape(project.title)}</strong><small>${escape(project.root)}</small></span></button></li>`).join('')}</ul>` : ''}
-      ${subscriptions.length ? `<h3 class="remote-list-title">${ht("远程订阅")}</h3><ul class="research-project-list">${subscriptions.map(c => `<li><button type="button" data-subscription="${escape(c.id)}">${icon('link',17)}<span><strong>${escape(c.title)}</strong><small>${escape(c.url)}</small></span></button></li>`).join('')}</ul>` : ''}
+      <ul class="research-project-list">${projects.map(project => `<li><button type="button" data-research-project="${escape(project.root)}"${!this.subscription && project.root === this.root ? ' aria-current="true"' : ''}>
+        ${icon('folder', 17)}<span><strong>${escape(project.title)}</strong><small>${escape(project.root)}</small></span></button></li>`).join('')}
+        ${subscriptions.map(c => `<li><button type="button" data-subscription="${escape(c.id)}"${c.id === this.subscription?.id ? ' aria-current="true"' : ''}>
+        ${icon('link', 17)}<span><strong>${escape(c.title)}</strong><small>${ht("远程订阅 · 只读")} · ${escape(c.url)}</small></span></button></li>`).join('')}</ul>
       <div class="research-picker-actions"><button type="button" class="secondary-button" data-remote-subscribe>${ht("订阅远程项目")}</button><button type="button" class="primary-button" data-action="research-open-project">${ht("打开科研项目")}</button>
         <button type="button" class="secondary-button" data-action="research-demo">${ht("创建示例项目")}</button></div>`;
     this.projectPicker.showModal();
@@ -886,9 +990,12 @@ export class ResearchWorkspace {
 
   closeProjects() { if (this.projectPicker.open) this.projectPicker.close(); }
 
-  async refresh() {
+  async refresh(force = false) {
     if (!this.visible) return;
-    const root = this.hooks.root();
+    const root = this.activeRoot();
+    if (this.subscription && Date.now() >= this.nextSubscriptionCheck) void this.syncSubscription();
+    if (this.readOnly && root === this.root && this.snapshot && !force &&
+      this.renderedDay === projectToday(this.snapshot.project.timezone)) return;
     if (this.root !== root) {
       this.root = root;
       this.snapshot = null;
@@ -915,9 +1022,9 @@ export class ResearchWorkspace {
     if (!this.signature) this.render();
     try {
       const includeLinked = !this.snapshot || this.destination(this.snapshot).page === 'summaries';
-      const snapshot = root ? await window.meki.researchSnapshot(this.recordFilter, includeLinked) : null;
+      const snapshot = root ? await window.meki.researchSnapshot(this.recordFilter, includeLinked, root) : null;
       await this.controlsIdle;
-      if (number !== this.loadNumber || root !== this.hooks.root() || this.axisDrag?.moving) return;
+      if (number !== this.loadNumber || root !== this.activeRoot() || this.axisDrag?.moving) return;
       const shown = snapshot && this.destination(snapshot).page !== 'summaries'
         ? { ...snapshot, linkedSummaries: undefined } : snapshot;
       const signature = JSON.stringify([shown, this.recordFilter]);
@@ -937,7 +1044,7 @@ export class ResearchWorkspace {
       this.render();
     } catch (error) {
       await this.controlsIdle;
-      if (number !== this.loadNumber || root !== this.hooks.root() || this.axisDrag?.moving) return;
+      if (number !== this.loadNumber || root !== this.activeRoot() || this.axisDrag?.moving) return;
       this.loading = false;
       this.snapshot = null;
       const message = errorText(error);
@@ -994,7 +1101,7 @@ export class ResearchWorkspace {
   private async setRecordFilter(filter?: ResearchFilter) {
     if (JSON.stringify(filter) !== JSON.stringify(this.recordFilter)) this.stagePages.reset();
     this.recordFilter = filter;
-    await this.refresh();
+    await this.refresh(true);
     this.content.querySelector<HTMLButtonElement>('[data-research-filter]')?.focus({ preventScroll: true });
   }
 
@@ -1121,6 +1228,7 @@ export class ResearchWorkspace {
   }
 
   private async setGoal(index: number, done: boolean) {
+    if (this.readOnly) return;
     const state = this.snapshot, phase = state?.project.phases.find(phase => phase.id === this.phaseId);
     if (!state || !phase?.goals?.[index] || this.savingGoals) return;
     this.savingGoals = true;
@@ -1157,7 +1265,7 @@ export class ResearchWorkspace {
       aria-pressed="${item.key === active?.key}">${icon(item.glyph, 17)}<span>${escape(item.label)}</span></button>`;
     const group = (title: string, items: string) => items ? `<section class="research-nav-group" aria-label="${title}">
       <h2 class="research-nav-label">${title}</h2><div class="research-nav-list">${items}</div></section>` : '';
-    const phases = state ? rankPhases(state.project.phases, state.records, this.renderedDay, state.project.recordTypes) : [];
+    const phases = state ? rankPhases(state.project.phases, state.records, this.renderedDay, state.project.recordTypes, undefined, undefined, state.subscription?.phases) : [];
     const listed = new Set(reading ? this.stageReaderIds : []);
     const stageRecords = listed.size && state ? `<div class="research-nav-records">${state.records.filter(item => listed.has(item.record.id))
       .sort((a, b) => sortEntries(b, a)).map(({ record }) => {
@@ -1176,7 +1284,7 @@ export class ResearchWorkspace {
       </details>`;
     }).join('');
     const markup = `<button type="button" class="research-project-switch" data-action="research-projects" aria-haspopup="dialog" aria-label="${ht("切换科研项目")}">
-        ${icon('folders', 17)}<span><small>${ht("科研项目")}</small><strong>${escape(state?.project.title || t("选择项目"))}</strong></span>${icon('down', 14)}
+        ${icon('folders', 17)}<span><small>${this.readOnly ? ht("远程订阅 · 只读") : ht("科研项目")}</small><strong>${escape(state?.project.title || t("选择项目"))}</strong></span>${icon('down', 14)}
       </button>
       <div class="research-nav-scroll">
         ${group(ht("项目页面"), navigation.filter(item => !item.key.startsWith('view:') && item.page !== 'rules').map(button).join(''))}
@@ -1202,13 +1310,14 @@ export class ResearchWorkspace {
     const today = state ? projectToday(state.project.timezone) : '';
     this.renderedDay = today;
     this.panel.dataset.width = this.widths.workspace;
+    this.host.classList.toggle('research-subscribed', this.readOnly);
     const expanded = !document.body.classList.contains('sidebar-hidden');
     const toggleLabel = expanded ? ht("收起侧栏") : ht("展开侧栏");
     const toggle = document.getElementById('window-caption') ? '' : `<button type="button" class="icon-button" data-action="sidebar" aria-label="${toggleLabel}" aria-controls="app-sidebar" aria-expanded="${expanded}" title="${toggleLabel}">${icon('layout', 17)}</button>`;
     const phaseCrumb = active?.page === 'timeline' && state?.project.phases.find(phase => phase.id === this.phaseId)?.title;
     this.toolbar.innerHTML = `<div class="research-breadcrumb">${toggle}${state ? `<span title="${escape(state.project.title)}">${escape(state.project.title)}</span><i aria-hidden="true">/</i>` : ''}
       <span>${escape(active?.label || t("科研项目"))}</span>${phaseCrumb ? `<i aria-hidden="true">/</i><span>${escape(phaseCrumb)}</span>` : ''}</div>
-      ${state ? `<div class="research-toolbar-actions"><button type="button" class="secondary-button research-toolbar-search" data-research-search aria-haspopup="dialog" aria-label="${ht("搜索项目")}">${icon('search', 15)}<span>${ht("搜索项目")}</span></button><button type="button" class="icon-button" data-action="refresh" aria-label="${ht("刷新项目")}" title="${ht("刷新项目")}">${icon('refresh', 17)}</button></div>` : ''}`;
+      ${state || this.readOnly ? `<div class="research-toolbar-actions">${this.readOnly ? `<small data-subscription-status role="status">${escape(this.syncStatus)}</small>` : ''}<button type="button" class="secondary-button research-toolbar-search" data-research-search aria-haspopup="dialog" aria-label="${ht("搜索项目")}">${icon('search', 15)}<span>${ht("搜索项目")}</span></button><button type="button" class="icon-button" data-action="refresh" aria-label="${ht("刷新项目")}" title="${ht("刷新项目")}">${icon('refresh', 17)}</button></div>` : ''}`;
     if (!state || !active || !today) {
       this.stageReaderIds = undefined;
       this.stagePages.begin('');
@@ -1291,13 +1400,14 @@ export class ResearchWorkspace {
       .filter(({ record }) => !this.date || record.date === this.date)
       .sort((a, b) => view?.order === 'oldest' ? sortEntries(a, b) : sortEntries(b, a)) : [];
     const summariesByPhase = new Map(projectPage ? phases.map(phase => [phase.id,
-      summaries.filter(({ record }) => summaryCoversPhase(record, phase, project.phases, today))]) : []);
+      summaries.filter(({ record }) => state.subscription?.summaryPhases[record.id]?.includes(phase.id) ?? summaryCoversPhase(record, phase, project.phases, today))]) : []);
     const progressByPhase = new Map(projectPage ? phases.map(phase => [phase.id,
       [...(summariesByPhase.get(phase.id) || []), ...(eventsByPhase.get(phase.id) || [])]]) : []);
     const timelineView = dateRange ? timeline(phases, timelineSequence, progressByPhase, eventsByPhase, {
       activePhase: phase?.id || '', today, range: dateRange, bounds, selectedRange: Boolean(selection),
       presetId: selection && 'id' in selection ? selection.id : undefined, types, superseded,
       tierSwitch: renderTierSwitch(timelineTierScope, projectKeyCount, projectLogCount, sequenceExperiments.length),
+      sharedActivity: !view?.typeIds && !view?.tiers && this.tierScope !== 'key' ? state.subscription?.phases : undefined,
       page: this.phasePage, pageSize: this.phasePageSize, revealPhase, canCreatePhase: !view?.phaseIds,
       canCreateEvent: project.recordTypes.some(type => type.kind === 'event'),
     }) : undefined;
@@ -1307,7 +1417,9 @@ export class ResearchWorkspace {
     ).sort((a, b) => comparePhaseProgress(b, a, project.recordTypes, today, superseded))[0] : undefined;
     const phaseTitle = phase ? `<h2 id="research-journal-title">${escape(phase.title)}</h2><p class="research-phase-range">${escape(phaseDates(phase, today))}</p>`
       : `<h2 id="research-journal-title">${active.page === 'summaries' ? ht("已归档总结") : ht("实验记录")} <span>${entries.length + linkedSummaries.length}</span></h2>`;
-    const lastExperiment = experiments.reduce((latest, item) => {
+    const sharedPhases = Object.values(state.subscription?.phases || {});
+    const sharedLastDay = sharedPhases.flatMap(p => p.days.map(d => d.date)).filter(day => day <= today).sort().at(-1);
+    const lastExperiment = sharedLastDay || experiments.reduce((latest, item) => {
       const day = latestActivity(item, '', today);
       return day > latest ? day : latest;
     }, '');
@@ -1320,10 +1432,17 @@ export class ResearchWorkspace {
     const stageSummaries = stage ? (summariesByPhase.get(stage.id) || []).filter(matches).sort((a, b) => sortEntries(b, a)) : [];
     const summary = stageSummaries.find(item => item.record.date <= today && item.excerpt);
     const latest = latestExperiment && (!summary || comparePhaseProgress(latestExperiment, summary, project.recordTypes, today, superseded) > 0) ? latestExperiment : summary;
-    const otherSummaries = stageSummaries.filter(item => item !== latest);
+    const sharedPhase = stage && state.subscription?.phases[stage.id];
+    const sharedFinding = sharedPhase?.finding && sharedPhase.finding.text !== latest?.excerpt &&
+      (!latest || sharedPhase.finding.date >= latestActivity(latest, '', today)) ? sharedPhase.finding : undefined;
+    const publishedCount = stage ? experiments.filter(item => item.record.phaseId === stage.id).length : experiments.length;
+    const totalCount = sharedPhase?.records ?? sharedPhases.reduce((sum, p) => sum + p.records, 0);
+    const sharedCountNote = state.subscription && (stage || active.page === 'entries') && totalCount > publishedCount
+      ? `<p class="research-shared-note">${ht("共 {0} 条实验，已分享 {1} 条正文。", totalCount, publishedCount)}</p>` : '';
+    const otherSummaries = sharedFinding ? stageSummaries : stageSummaries.filter(item => item !== latest);
     this.stagePages.begin(stage ? `${active.key}/${stage.id}` : '');
     this.stageReaderIds = stage ? [
-      ...(latest && latest !== latestExperiment ? [latest.record.id] : []),
+      ...(!sharedFinding && latest && latest !== latestExperiment ? [latest.record.id] : []),
       ...otherSummaries.map(item => item.record.id), ...entries.map(item => item.record.id),
     ] : undefined;
     const stageEvents = stage ? (eventsByPhase.get(stage.id) || []).filter(matches) : [];
@@ -1351,12 +1470,13 @@ export class ResearchWorkspace {
     this.content.innerHTML = `
       <header class="research-overview"><div><h1 tabindex="-1">${escape(projectPage ? project.title : active.label)}</h1>
         ${projectPage && project.description ? `<p>${escape(project.description)}</p>` : ''}
-        ${projectPage ? `<div class="research-overview-stats"><span>${ht("{0} 条实验", experiments.length)}</span><span>${ht("{0} 份阶段总结", summaries.length)}</span>
+        ${projectPage ? `<div class="research-overview-stats"><span>${ht("{0} 条实验", state.subscription ? sharedPhases.reduce((sum, p) => sum + p.records, 0) : experiments.length)}</span><span>${ht("{0} 份阶段总结", summaries.length)}</span>
           ${lastExperiment ? `<span>${ht("最近实验 {0}", escape(lastExperiment))}</span>` : ''}</div>` : ''}
       </div>${projectPage && !phase ? `<div class="research-actions research-timeline-shortcuts">${newEntry}${newSummary}
         <button type="button" class="secondary-button" data-research-filter aria-haspopup="dialog" aria-pressed="${Boolean(this.recordFilter)}">${icon('search', 14)} ${ht("研究筛选")}</button></div>` : ''}</header>
       ${problems.length ? `<details class="research-problems"><summary>${ht("{0} 份文档无法读取", problems.length)}</summary><ul>${problems.map(item => `<li><code>${escape(item.file)}</code> · ${escape(item.message)}</li>`).join('')}</ul></details>` : ''}
       ${timelineView?.html || ''}
+      ${sharedCountNote}
       ${active.page === 'rules' ? this.renderSettings(state) : active.page === 'sources' ? this.renderSources(state) :
       projectPage && !phase ? '' : `
         <section class="research-journal${stage ? ' research-stage-detail' : ''}" aria-labelledby="research-journal-title">
@@ -1369,12 +1489,13 @@ export class ResearchWorkspace {
           ${stage?.description || goals ? `<div class="research-stage-context">
             ${stage?.description ? `<div class="research-phase-focus">${this.stageSections.render('research-phase-question-title', ht("本阶段要判断什么"), `<p>${escape(stage.description)}</p>`)}</div>` : ''}
             ${goals}</div>` : ''}</header>
-          ${stage ? this.renderStageSummaries(otherSummaries, latest, newSummary, state, today, featuredComparisons) : ''}
+          ${stage ? this.renderStageSummaries(otherSummaries, sharedFinding ? undefined : latest, newSummary, state, today, featuredComparisons, sharedFinding) : ''}
           ${comparisons.length ? this.renderPhaseComparisons(comparisons, types, featuredComparisons, newComparison) : ''}
           ${this.renderPhaseEvents(stageEvents.filter(entry => !entry.record.comparison), types)}
           ${journalRecords()}
         </section>`}
     `;
+    if (state.subscription) this.content.querySelectorAll(projectWrites).forEach(button => button.remove());
     this.renderSidebar(state, active);
     if (optionsOpen) this.content.querySelector('.research-timeline-options')?.setAttribute('open', '');
     this.timelineEvents.show(timelineView?.eventDays, types, previousMarkers);
@@ -1398,7 +1519,7 @@ export class ResearchWorkspace {
     const checklist = mode === 'checklist';
     const title = ht("阶段目标") + (checklist ? ` <span>${goals.filter(goal => goal.done).length}/${goals.length}</span>` : '');
     const list = `<ul${checklist ? ' class="research-goal-checklist"' : ''}>${goals.map((goal, index) => checklist
-          ? `<li><label><input type="checkbox" data-research-goal="${index}"${goal.done ? ' checked' : ''}${this.savingGoals ? ' disabled' : ''}> ${escape(goal.text)}</label></li>`
+          ? `<li><label><input type="checkbox" data-research-goal="${index}"${goal.done ? ' checked' : ''}${this.savingGoals || this.readOnly ? ' disabled' : ''}> ${escape(goal.text)}</label></li>`
           : `<li>${escape(goal.text)}</li>`).join('')}</ul>`;
     return `<div class="research-phase-details">${this.stageSections.render('research-phase-goals-title', title, list)}</div>`;
   }
@@ -1414,8 +1535,8 @@ export class ResearchWorkspace {
       ${this.stageSections.render(heading, ht("阶段事件"), list, { count: entries.length })}</section>`;
   }
 
-  private renderStageSummaries(others: ResearchEntry[], latest: ResearchEntry | undefined, create: string, state: ResearchSnapshot, today: string, featuredComparisons: Set<string>) {
-    if (!others.length && !latest) return '';
+  private renderStageSummaries(others: ResearchEntry[], latest: ResearchEntry | undefined, create: string, state: ResearchSnapshot, today: string, featuredComparisons: Set<string>, sharedFinding?: SharedPhaseActivity['finding']) {
+    if (!others.length && !latest && !sharedFinding) return '';
     const latestKind = latest && recordKind(state.project.recordTypes.find(type => type.id === latest.record.type), latest.record);
     const row = (entry: ResearchEntry, featured = false) => {
       const { record, excerpt } = entry;
@@ -1437,7 +1558,10 @@ export class ResearchWorkspace {
     const archive = others.length ? `<section class="research-stage-section research-phase-summaries" data-record-kind="summary" aria-labelledby="research-phase-summaries-title">
       ${this.stageSections.render('research-phase-summaries-title', latestKind === 'summary' ? ht("其他阶段总结") : ht("阶段总结"),
         this.stagePages.list('summary', 'research-phase-summaries-title', others, rows => `<ul class="research-summary-list">${rows.map(entry => row(entry)).join('')}</ul>`), { actions: latest ? '' : create, count: others.length })}</section>` : '';
-    return progress + archive;
+    const sharedProgress = sharedFinding ? `<section class="research-stage-section research-phase-summaries" aria-labelledby="research-progress-title">
+      ${this.stageSections.render('research-progress-title', ht("最新进展"),
+        `<p class="research-progress-conclusion">${escape(sharedFinding.text)}</p><small>${escape(sharedFinding.date)}</small>`)}</section>` : '';
+    return sharedProgress + progress + archive;
   }
 
   private progressLinks(record: ResearchEntry['record'], state: ResearchSnapshot, featuredComparisons: Set<string>) {
@@ -1508,6 +1632,13 @@ export class ResearchWorkspace {
   }
 
   private renderSources(state: ResearchSnapshot) {
+    if (state.subscription) {
+      const files = state.records.filter(({record}) => record.comparison || state.project.recordTypes.some(type => type.id === record.type && type.kind === 'event'));
+      return `<section class="research-indexed-files">${files.length ? `<ul>${files.map(({record}) =>
+        `<li><button type="button" data-research-record="${escape(record.id)}">${recordMark(recordKind(state.project.recordTypes.find(type => type.id === record.type), record), 18)}
+        <span><strong>${escape(record.title)}</strong><small>${escape(record.date)}</small></span>${icon('chevron', 14)}</button></li>`).join('')}</ul>` :
+        `<p class="research-empty-list">${ht("快照中还没有共享资料。")}</p>`}</section>`;
+    }
     const records = new Set(state.records.map(({ record }) => record.id));
     const sources = state.documents.filter(document => !document.sourceId && !records.has(document.id));
     const external = state.evidenceSources || [];
@@ -1538,7 +1669,13 @@ export class ResearchWorkspace {
     return state.project.recordTypes.flatMap(type => type.fields).find(rule => rule.id === field)?.label || field;
   }
 
-  private renderSettings({ project, root, manifestFile }: ResearchSnapshot) {
+  private renderSettings({ project, root, manifestFile, subscription }: ResearchSnapshot) {
+    if (subscription && this.subscription) return `<section class="research-settings">
+      <div class="research-settings-description"><div><h2>${ht("项目描述")}</h2><p>${escape(project.description || t("未填写"))}</p></div></div>
+      <button type="button" class="research-settings-link" data-research-settings>${icon('timeline', 16)}${ht("时间线设置")}${icon('chevron', 14)}</button>
+      <button type="button" class="research-settings-link" data-subscription-settings>${icon('link', 16)}${ht("订阅设置")}${icon('chevron',14)}</button>
+      <dl class="research-settings-location"><dt>${ht("WebDAV 项目目录地址")}</dt><dd>${escape(this.subscription.url)}</dd>
+      <dt>${ht("快照发布时间")}</dt><dd>${escape(new Date(subscription.publishedAt).toLocaleString(getLocale()))}</dd></dl></section>`;
     const expanded = new Set([...this.content.querySelectorAll<HTMLElement>('details[open] > summary[data-research-settings-section]')]
       .map(summary => summary.dataset.researchSettingsSection));
     const open = (section: string) => expanded.has(section) ? ' open' : '';
@@ -1649,7 +1786,12 @@ export class ResearchWorkspace {
     const button = target.closest<HTMLButtonElement>('button') || (target.closest('[data-research-track]')
       ? target.closest('.research-timeline-row')?.querySelector<HTMLButtonElement>('[data-research-phase]') : null);
     const state = this.snapshot;
-    if (!button || !state) return;
+    if (!button) return;
+    if (this.subscription && button.dataset.action === 'refresh') {
+      event.stopPropagation(); await this.syncSubscription(); return;
+    }
+    if (this.subscription && button.hasAttribute('data-subscription-settings')) { this.remote.subscribe(this.subscription); return; }
+    if (!state || (this.subscription && button.matches(projectWrites))) return;
     if (button.dataset.researchSectionToggle) { this.stageSections.toggle(button); return; }
     if (button.dataset.action === 'refresh') this.samples.show(state, true);
     if (button.dataset.researchStageRecord) {
@@ -1704,6 +1846,11 @@ export class ResearchWorkspace {
       return;
     }
     if (data.researchProgressLink) { await this.openReference(data.researchProgressLink, button); return; }
+    if (data.sharedDay && data.date) {
+      this.phaseId = data.sharedDay; this.date = data.date; this.stagePages.reset('entry'); this.render();
+      this.content.querySelector('.research-journal')?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
     const dayRecords = data.researchTimelineEvents || data.researchTrialRecords;
     if (dayRecords) {
       const ids = new Set(dayRecords.split(' '));

@@ -1,4 +1,4 @@
-import type { ResearchGoal, ResearchGoalMode, ResearchRange } from './research';
+import type { ResearchGoal, ResearchGoalMode, ResearchRange, ResearchTier, ResearchType, ResearchView } from './research';
 
 export interface PreviewPhase {
   id: string;
@@ -13,6 +13,11 @@ export interface PreviewPhase {
   days: { date: string; records: number; trials: number }[];
 }
 export interface PreviewItem {
+  type?: string;
+  phaseId?: string;
+  tier?: ResearchTier;
+  days?: string[];
+  sources?: string[];
   id: string;
   phases: string[];
   kind: 'entry' | 'summary' | 'event' | 'comparison';
@@ -28,7 +33,9 @@ export interface PreviewItem {
 export interface PreviewSnapshot {
   format: string;
   asOf: string;
-  project: { id: string; title: string; description: string; start?: string; phaseGoals: ResearchGoalMode };
+  project: { id: string; title: string; description: string; start?: string; phaseGoals: ResearchGoalMode;
+    timezone?: string; types?: Pick<ResearchType, 'id' | 'label' | 'kind' | 'icon'>[];
+    views?: Omit<ResearchView, 'fieldIds'>[]; defaultView?: string };
   phases: PreviewPhase[];
   items: PreviewItem[];
   mediaTypes?: Record<string, 'jpeg'>;

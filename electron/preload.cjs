@@ -59,7 +59,7 @@ contextBridge.exposeInMainWorld('meki', Object.freeze({
   previewRefresh: id => invoke('preview-refresh',id),
   previewImage: (id,hash) => invoke('preview-image',id,hash),
   previewUnsubscribe: id => invoke('preview-unsubscribe',id),
-  researchSnapshot: (filter, includeLinked) => invoke('research-snapshot', filter, includeLinked),
+  researchSnapshot: (filter, includeLinked, root) => invoke('research-snapshot', filter, includeLinked, root),
   researchAISettings: root => invoke('research-ai-settings',root),
   saveResearchAISettings: (root,value,key) => invoke('save-research-ai-settings',root,value,key),
   researchAIModels: (root,value,key) => invoke('research-ai-models',root,value,key),

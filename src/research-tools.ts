@@ -232,7 +232,7 @@ export class ResearchTools {
     });
   }
 
-  editTimelineSettings({ root, project, revision }: ResearchSnapshot, widths: ResearchWidths, saveWidths: (next: ResearchWidths) => void, focus: () => void) {
+  editTimelineSettings({ root, project, revision, subscription }: ResearchSnapshot, widths: ResearchWidths, saveWidths: (next: ResearchWidths) => void, focus: () => void) {
     if (this.dialog.open) return;
     const widthOptions = (selected: ResearchWidth) => option('comfort', t("舒适"), selected) + option('edge', t("贴边"), selected);
     const goalLabels = [t("隐藏"), t("仅列出"), t("可勾选")];
@@ -240,15 +240,15 @@ export class ResearchTools {
       <div class="research-form-grid">
         <label>${ht("页面宽度")}<select name="workspace" autofocus>${widthOptions(widths.workspace)}</select></label>
         <label>${ht("可视化弹窗宽度")}<select name="comparison">${widthOptions(widths.comparison)}</select></label>
-        <label>${ht("阶段目标")}<select name="goals">${goalModes.map((mode, i) => option(mode, goalLabels[i], project.phaseGoals ?? 'list')).join('')}</select></label>
-        <label>${ht("项目开始日期（可选）")}<input name="start" type="date" value="${escape(project.start || '')}"></label>
+        <label>${ht("阶段目标")}<select name="goals"${subscription ? ' disabled' : ''}>${goalModes.map((mode, i) => option(mode, goalLabels[i], project.phaseGoals ?? 'list')).join('')}</select></label>
+        <label>${ht("项目开始日期（可选）")}<input name="start" type="date" value="${escape(project.start || '')}"${subscription ? ' disabled' : ''}></label>
       </div>${feedback}<div class="research-actions">
         <button type="button" class="secondary-button" data-tools-close>${ht("取消")}</button>
         <button type="submit" class="primary-button">${ht("保存")}</button></div></form>`);
     this.submit(async data => {
       const phaseGoals = data.get('goals') as ResearchGoalMode;
       const start = String(data.get('start'));
-      if (phaseGoals !== (project.phaseGoals ?? 'list') || start !== (project.start ?? '')) {
+      if (!subscription && (phaseGoals !== (project.phaseGoals ?? 'list') || start !== (project.start ?? ''))) {
         const updated = { ...project, phaseGoals };
         if (start) updated.start = start;
         else delete updated.start;
@@ -455,7 +455,7 @@ export class ResearchTools {
     pin.setAttribute('aria-pressed', String(pinned));
     pin.title = pinned ? t("取消固定") : t("固定到右栏");
     pin.querySelector('span')!.textContent = pinned ? t("已固定") : t("固定到右栏");
-    this.inspector.querySelector('[data-evidence-reveal]')!.addEventListener('click', tab.reveal);
+    this.inspector.querySelector('[data-evidence-reveal]')?.addEventListener('click', tab.reveal);
     this.labelEvidenceSize();
     this.evidenceReturn!.origin = tab.origin;
     const selected = this.inspector.querySelector<HTMLButtonElement>('[aria-selected="true"]');
@@ -487,7 +487,7 @@ export class ResearchTools {
     </div><div class="research-evidence-content"></div>
     <div class="research-actions research-evidence-footer"><span>${ht("只读来源")}</span>
       ${besideReader ? `<button type="button" class="secondary-button" data-evidence-pin="${escape(id)}" aria-label="${ht("固定到右栏")}">${icon('pin', 14)}<span></span></button>` : ''}
-      <button type="button" class="secondary-button" data-evidence-reveal>${ht("定位原文件")}</button></div>`;
+      ${root.startsWith('subscription:') ? '' : `<button type="button" class="secondary-button" data-evidence-reveal>${ht("定位原文件")}</button>`}</div>`;
     const reveal = () => { void window.meki.revealResearchEvidence(root, id, sourceDocument).catch(error => this.notify(String(error), true)); };
     if (besideReader) {
       const scroll = document.getElementById('document-scroll')!;
@@ -505,7 +505,7 @@ export class ResearchTools {
       if (locator?.kind === 'cells' && file.revision !== locator.revision) this.notify(t("计时文件已变化，请重新检索以定位数值。"));
       this.dialog.querySelector('.research-evidence-content')!.replaceWith(body);
       if (locator?.kind === 'paragraph' || locator?.kind === 'trial') revealEvidenceLine(body, locator);
-      this.dialog.querySelector('[data-evidence-reveal]')!.addEventListener('click', reveal);
+      this.dialog.querySelector('[data-evidence-reveal]')?.addEventListener('click', reveal);
       if (origin) this.dialog.addEventListener('close', () => {
         if (!this.dialog.open && origin.isConnected) origin.focus({ preventScroll: true });
       }, { once: true });
@@ -576,6 +576,10 @@ export class ResearchTools {
       </div>
     </form>`, 'research-filter-dialog');
     const form = this.dialog.querySelector('form')!;
+    if (state.subscription) {
+      form.querySelector('[name=label]')?.closest('label')?.remove();
+      form.querySelector('[data-save-filter]')?.remove();
+    }
     const fieldRows = form.querySelector('[data-filter-fields]')!;
     const input = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
     const add = (field = '', value = '') => {

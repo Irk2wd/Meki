@@ -3,6 +3,7 @@ import { productName } from '../package.json';
 import type { BootState, DocumentFile, Settings, Workspace, RecentFile, WorkspaceRequest, DocumentStatus } from '../shared/meki';
 import { WorkspaceUI, type OpenLocation } from './workspace-ui';
 import { revealResearchPassage } from './research-search-location';
+import { researchLinkId } from '../electron/research-links.mjs';
 import { ResearchWorkspace } from './research-workspace';
 import { WritingEditor } from './editor';
 import { WritingTools } from './writing-tools';
@@ -181,7 +182,7 @@ let observedReaderTitle: HTMLElement | null = null;
 let readerTitleObserver: IntersectionObserver | undefined;
 function syncReaderTitle(reading: boolean) {
   const title = el('#research-reader-title');
-  const heading = reading ? document.querySelector<HTMLElement>('#visual-editor .ProseMirror > h1:nth-child(1 of :not(.ProseMirror-widget, .prosemirror-virtual-cursor))') : null;
+  const heading = reading ? document.querySelector<HTMLElement>(`${researchUI.readOnly ? '#research-shared-document' : '#visual-editor'} .ProseMirror > h1:nth-child(1 of :not(.ProseMirror-widget, .prosemirror-virtual-cursor))`) : null;
   const target = heading && heading.textContent?.trim() === title.textContent?.trim() ? heading : null;
   if (target === observedReaderTitle) return;
   readerTitleObserver?.disconnect();
@@ -208,8 +209,14 @@ const documents = new DocumentTabs({ editor: () => editor, settings: () => setti
   active: doc => { documentId++; outline?.reset(); current = doc; }, updated: () => { renderOutline(); renderFiles(); updateStatus(); renderExternalStatus(); },
   dispatch: (command, payload) => { void dispatch(command, payload); }, notify });
 const researchUI = new ResearchWorkspace(el('.main-area'), el('#research-sidebar'), {
-  root: () => workspace?.root, blocked: () => !ready || busy, whenIdle,
+  root: () => workspace?.root, settings: () => settings, readerCreated: ed => writingTools?.connect(ed), blocked: () => !ready || busy, whenIdle,
   open: (root, id, origin, edit, sourceProjectId, locator, revision) => perform(async () => {
+    if (researchUI.readOnly) {
+      await researchUI.openSharedRecord(id, origin, locator);
+      setResearchEditing(false);
+      el('#research-reader-title').focus({ preventScroll: true });
+      return;
+    }
     const previous = captureResearchStep();
     if (previous && dirty()) await persistDraft();
     const linked = sourceProjectId ? await window.meki.openLinkedResearchSummary(root, sourceProjectId, id) : null;
@@ -291,21 +298,22 @@ function updateStatus() {
   el('#document-name').textContent = current.name;
   el('#document-name').title = current.path || t("尚未保存到文件");
   if (researchUI.readerOpen) {
-    const label = researchUI.readerLabel(current.path);
+    const shared = researchUI.sharedReader.document;
+    const label = researchUI.readerLabel(shared ? researchUI.sharedDocumentPath || null : current.path);
     researchFieldToggle.hidden = !label?.hasFields;
     researchUI.selectReaderItem(label?.id, label?.linkedProject);
     el('#research-reader-title').textContent = label?.title || current.name;
     el('#research-reader-mark').innerHTML = label?.mark || '';
-    el('#research-reader-context').textContent = [label?.context || t("资料"), dirty() ? t("未保存") : ''].filter(Boolean).join(' · ');
+    el('#research-reader-context').textContent = [label?.context || t("资料"), shared ? t("只读") : dirty() ? t("未保存") : ''].filter(Boolean).join(' · ');
     const back = el<HTMLButtonElement>('[data-action="research-reader-back"]');
-    const backLabel = previousResearchStep() ? t("返回上一份文档") : t("返回研究列表");
+    const backLabel = (shared ? researchUI.sharedReader.canGoBack : previousResearchStep()) ? t("返回上一份文档") : t("返回研究列表");
     back.setAttribute('aria-label', backLabel);
     back.title = backLabel;
   }
   if (researchUI.readerOpen && !researchEditing) {
-    editor.crepe.editor.action(ctx => researchUI.showReaderFigures(current.path, ctx.get(editorViewCtx)));
+    readingEditor().crepe.editor.action(ctx => researchUI.showReaderFigures(researchUI.sharedDocumentPath || current.path, ctx.get(editorViewCtx)));
   } else researchUI.clearReaderFigures();
-  const related = researchUI.readerOpen ? researchUI.readerRelated(current.path) : '';
+  const related = researchUI.readerOpen ? researchUI.readerRelated(researchUI.sharedDocumentPath || current.path) : '';
   if (related !== researchRelatedMarkup) {
     researchRelatedMarkup = related;
     researchRelatedPanel.innerHTML = related;
@@ -427,7 +435,7 @@ async function openResearchProject(path?: string, demo = false) {
     if (researchUI.readerOpen) await persistDraft();
     const result = demo ? await window.meki.createResearchDemo() : await window.meki.openResearchProject(path);
     if (!result) return;
-    researchUI.closeReader(false);
+    researchUI.useLocalProject();
     researchReaderHistory.length = 0;
     setResearchEditing(false);
     workspace = result;
@@ -552,9 +560,13 @@ async function runExport(options: ExportOptions) {
 const exportDialog = new ExportDialog(runExport);
 const editActions = new Set(['save', 'source', 'math', 'insert-math', 'diagram', 'image', 'replace', 'organize-attachments', 'upload-document-images', 'restore-version']);
 const editorActions = new Set([...editActions, 'saveAs', 'find', 'find-next', 'find-prev', 'snapshots', 'history', 'export']);
+function readingEditor() {
+  return researchUI.readerOpen && researchUI.readOnly && researchUI.sharedReader.editor || editor;
+}
 function mayEditDocument() { return !researchUI.visible || (researchUI.readerOpen && researchEditing); }
 
 function setResearchEditing(value: boolean) {
+  value = value && !(researchUI.visible && researchUI.readOnly);
   if (value) researchUI.closeEvidence(false);
   researchEditing = value;
   const toolbar = el('.formatbar');
@@ -568,7 +580,7 @@ function setResearchEditing(value: boolean) {
   toggle.setAttribute('aria-pressed', String(value));
   toggle.querySelector('span')!.textContent = value ? t("完成编辑") : t("编辑正文");
   editor.setReadOnly(researchUI.readerOpen && !value);
-  if (researchUI.readerOpen && !value) {
+  if (researchUI.readerOpen && !value && !researchUI.readOnly) {
     editor.cancelPendingActions();
     switchMode('visual');
   }
@@ -610,6 +622,10 @@ function animateResearchDocument(direction: 1 | -1) {
 
 async function backResearchReader() {
   if (!researchUI.readerOpen) return;
+  if (researchUI.readOnly) {
+    if (await researchUI.backSharedRecord()) updateStatus(); else await closeResearchReader();
+    return;
+  }
   const step = previousResearchStep();
   if (!step) { await closeResearchReader(); return; }
   closePopovers(); writingTools?.close();
@@ -675,12 +691,19 @@ async function dispatch(action: string, payload?: unknown, origin?: HTMLElement)
     await lifecycleSettingsQueue; return;
   }
   if (action === 'research-edit-body' && researchUI.readerOpen) {
+    if (researchUI.readOnly) return;
     const tab = documents.activeId, editing = !researchEditing;
     if (busy) await whenIdle();
     if (researchUI.readerOpen && documents.activeId === tab && researchEditing !== editing) {
       setResearchEditing(editing);
       if (editing) editor.focus();
     }
+    return;
+  }
+  if (action === 'research-projects') {
+    if (busy) await whenIdle();
+    closePopovers();
+    await researchUI.showProjects().catch(error => notify(String(error), true));
     return;
   }
   if (busy) return;
@@ -696,13 +719,19 @@ async function dispatch(action: string, payload?: unknown, origin?: HTMLElement)
   }
   if (action === 'research') { await showResearch(); return; }
   if (action === 'research-ai-settings') { await researchUI.modelSettings().catch(error=>notify(String(error),true)); return; }
-  if (action === 'research-projects') {
-    closePopovers();
-    await researchUI.showProjects().catch(error => notify(String(error), true));
-    return;
-  }
   if (action === 'research-open-project' || action === 'research-demo' || (action === 'folder' && researchUI.visible)) {
     await openResearchProject(undefined, action === 'research-demo'); return;
+  }
+  if (researchUI.visible && researchUI.readOnly) {
+    if (action === 'refresh') { await researchUI.syncSubscription(); return; }
+    if (action === 'quick-open' || action === 'workspace-search') { el<HTMLButtonElement>('[data-research-search]').click(); return; }
+    if (action === 'document-link') {
+      const id = researchLinkId(String(payload));
+      if (id) await researchUI.openReference(id).catch(error => notify(String(error), true));
+      return;
+    }
+    if (action === 'close-tab' || action === 'close-all') { await closeResearchReader(); return; }
+    if (['saveAs','history','snapshots','workspace-operation','reload-document','export'].includes(action) || action.startsWith('export-')) return;
   }
   if (action === 'research-close-reader') { await closeResearchReader(); return; }
   if (action === 'research-reader-back') { await backResearchReader(); return; }
@@ -776,8 +805,8 @@ async function dispatch(action: string, payload?: unknown, origin?: HTMLElement)
     editor.insertMarkdown(block ? `\n$$\n${latex}\n$$\n` : `$${latex}$`, !block); return;
   }
   if (action === 'find' || action === 'replace') { writingTools?.open(action === 'replace'); return; }
-  if (action === 'find-close') { writingTools?.close(); editor.focus(); return; }
-  if (action === 'find-next' || action === 'find-prev') { editor.search.navigate(action === 'find-next' ? 1 : -1); return; }
+  if (action === 'find-close') { writingTools?.close(); readingEditor().focus(); return; }
+  if (action === 'find-next' || action === 'find-prev') { readingEditor().search.navigate(action === 'find-next' ? 1 : -1); return; }
   // Freezing the editor and resolving a link can move the viewport before the new document opens.
   const linkOrigin = action === 'document-link' ? captureResearchStep(origin) : undefined;
   await perform(async () => {
@@ -915,7 +944,7 @@ document.addEventListener('keydown', event => {
   const hadPopover = Boolean(document.querySelector('.popover:not([hidden])'));
   closePopovers();
   if (!hadPopover && researchUI.closeEvidence()) { event.preventDefault(); }
-  else if (!el('#find-panel').hidden) { writingTools?.close(); editor.focus(); }
+  else if (!el('#find-panel').hidden) { writingTools?.close(); readingEditor().focus(); }
   else if (!hadPopover && researchUI.readerOpen && !researchEditing && !busy) {
     event.preventDefault();
     void backResearchReader();
@@ -957,7 +986,7 @@ async function start() {
   } else if (boot.recovery) { await loadDocument(boot.recovery, true); notify(t("已恢复上次的未保存草稿")); }
   else await loadDocument(boot.initialDoc || current);
   ready = true;
-  writingTools = new WritingTools(() => editor, changeSettings, () => busy || !ready);
+  writingTools = new WritingTools(readingEditor, changeSettings, () => busy || !ready);
   writingTools.apply(settings);
   installDiagramActions(notify);
   installMathCopyActions(() => settings, notify, () => busy);
@@ -970,7 +999,11 @@ async function start() {
     dispatch: command => { void dispatch(command); }, save: async input => { settings = await window.meki.updateShortcut(input); applySettings(); } });
   for (const view of panes.views.values()) view.cleanup = connectEditor(view.editor, view.visual);
   applySettings(); updateStatus(); renderOutline(); renderFiles();
-  if (boot.startInProject) await showResearch();
+  if (boot.startInProject) {
+    el('[data-action="research"]').setAttribute('aria-pressed', 'true');
+    document.body.classList.remove('focus-mode');
+    await researchUI.restoreProject();
+  }
   window.meki.onCommand((command, payload) => { if (shortcuts?.allowsNative(command)) void dispatch(command, payload); });
   el('#shell').dataset.ready = 'true';
   setInterval(() => { void synchronizeWorkspace().catch(() => {}); }, 2500);
