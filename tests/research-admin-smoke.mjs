@@ -41,6 +41,15 @@ try {
   await edit.locator('[name=title]').fill('步道项目组');
   await edit.getByRole('checkbox',{name:'lab-reader',exact:true}).check();
   await save();
+  await detail.getByText('尚未分配项目。',{exact:true}).waitFor();
+  await detail.getByRole('button',{name:'复制订阅地址'}).waitFor();
+  const subscriptionUrl = await detail.locator('code').textContent();
+  assert.equal(subscriptionUrl, urls.data+'/');
+  const service = await new PreviewService(temp,{credentials:{seal:async () => 'test-handle',open:async () => 'read-only-test'}}).init();
+  const empty = await service.accounts.login({url:subscriptionUrl,username:'lab-reader',password:'read-only-test'});
+  assert.deepEqual(empty.catalog.groups.map(g => [g.title,g.projects]),[['步道项目组',[]]]);
+  assert.deepEqual(empty.catalog.projects,[]);
+  assert.deepEqual(service.readers(),[]);
   await area('project'); await tab.locator('#create').click();
   await edit.locator('[name=title]').fill('树冠复测');
   await edit.locator('[name=id]').fill('canopy-test');
@@ -55,8 +64,7 @@ try {
     description:'验证订阅组发布权限',phaseGoals:'hidden'},phases:[],items:[]};
   const bytes = Buffer.from(JSON.stringify(snapshot));
   await dav.publish({snapshot,bytes,revision:digest(bytes),media:new Map()});
-  const service = await new PreviewService(temp,{credentials:{seal:async () => 'test-handle',open:async () => 'read-only-test'}}).init();
-  const account = await service.accounts.login({url:urls.data,username:'lab-reader',password:'read-only-test'});
+  const account = await service.accounts.refresh(empty.id);
   assert.deepEqual(account.catalog.projects.map(p => p.id),['canopy-test']);
   assert.deepEqual(service.readers(),[]);
   assert.deepEqual(await service.accounts.pull(account.id,['canopy-test']),{pulled:['canopy-test'],errors:[]});

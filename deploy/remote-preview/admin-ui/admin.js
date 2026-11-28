@@ -48,12 +48,13 @@ function renderDetail(item) {
   const kind = state.view;
   if (!item) { $('#detail').innerHTML = `<p class="empty">请选择${names[kind]}查看详情。</p>`; return; }
   let detail = `<div class="detail-head"><div><h2>${esc(item.title)}</h2>${kind === 'account' ? '' : `<small>${esc(item.id)}</small>`}</div><button type="button" id="edit">编辑</button></div>`;
+  const addressLabel = kind === 'project' ? '发布地址' : '订阅地址';
+  const url = new URL(kind === 'project' ? item.directory + '/' : './', state.data.projectOrigin + '/').href;
+  detail += `<h3>${kind === 'project' ? 'WebDAV 发布地址' : '订阅服务器地址'}</h3><div class="address"><code>${esc(url)}</code><button type="button" id="copy" aria-label="复制${addressLabel}">复制</button></div>`;
   if (kind === 'group') {
     detail += links('组内项目','project',state.data.projects.filter(p => item.projects.includes(p.id)),'尚未分配项目。');
     detail += links('成员','account',item.members.map(id => ({id,title:id})),'尚未添加成员。');
   } else if (kind === 'project') {
-    const url = new URL(item.directory + '/',state.data.projectOrigin + '/').href;
-    detail += `<h3>WebDAV 发布地址</h3><div class="address"><code>${esc(url)}</code><button type="button" id="copy" aria-label="复制发布地址">复制</button></div>`;
     detail += links('所属订阅组','group',groupsFor('projects',item.id),'尚未分配到订阅组。');
     detail += links('可发布账号','account',item.publishers.map(id => ({id,title:id})),'尚未指定发布账号。');
   } else {
@@ -65,10 +66,9 @@ function renderDetail(item) {
   }
   $('#detail').innerHTML = detail;
   $('#edit').onclick = () => form(item);
-  const copy = $('#copy');
-  if (copy) copy.onclick = async () => {
-    try { await navigator.clipboard.writeText($('#detail code').textContent); note('已复制发布地址。'); }
-    catch { note('请选中发布地址后复制。'); }
+  $('#copy').onclick = async () => {
+    try { await navigator.clipboard.writeText(url); note(`已复制${addressLabel}。`); }
+    catch { note(`请选中${addressLabel}后复制。`); }
   };
 }
 function render() {
