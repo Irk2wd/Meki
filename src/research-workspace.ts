@@ -478,7 +478,7 @@ export class ResearchWorkspace {
     for (const element of [this.sidebar, this.panel]) {
       element.addEventListener('click', event => { void this.click(event).catch(error => this.hooks.notify(errorText(error), true)); });
       element.addEventListener('pointerdown', event => {
-        if (event.button !== 0 || this.controlPress || !(event.target as Element).closest('button, summary[data-research-settings-section]')) return;
+        if (event.button !== 0 || this.controlPress || !(event.target as Element).closest('button, summary[data-research-settings-section], summary[data-research-timeline-options]')) return;
         this.controlsIdle = new Promise(release => { this.controlPress = { pointerId: event.pointerId, release }; });
       });
     }
@@ -1866,6 +1866,22 @@ export class ResearchWorkspace {
       });
       return;
     }
+    if ('researchNewPhase' in data || data.researchEditPhase) {
+      const page = this.destination(state).key;
+      await this.hooks.whenIdle();
+      if (!this.visible || this.readOnly || this.activeRoot() !== state.root) return;
+      await this.refresh();
+      const latest = this.snapshot;
+      if (!latest || latest.root !== state.root || this.destination(latest).key !== page || document.querySelector('dialog[open]')) return;
+      const phase = latest.project.phases.find(item => item.id === data.researchEditPhase);
+      if ('researchNewPhase' in data || phase) {
+        const selector = phase ? `[data-research-edit-phase="${CSS.escape(phase.id)}"]` : '[data-research-new-phase]';
+        this.tools.editPhase(latest, projectToday(latest.project.timezone), phase, () => {
+          this.content.querySelector<HTMLButtonElement>(selector)?.focus({ preventScroll: true });
+        });
+      }
+      return;
+    }
     if (this.hooks.blocked() && (data.researchProgressLink || data.researchTrialRecords || data.researchTimelineEvents)) {
       await this.hooks.whenIdle();
       if (!this.visible || !button.isConnected || this.snapshot !== state) return;
@@ -1948,19 +1964,6 @@ export class ResearchWorkspace {
       if (latest?.root === state.root) this.tools.editDescription(latest, () => {
         this.content.querySelector<HTMLButtonElement>('[data-research-edit-description]')?.focus({ preventScroll: true });
       });
-      return;
-    }
-    if ('researchNewPhase' in data || data.researchEditPhase) {
-      await this.refresh();
-      const latest = this.snapshot;
-      if (!latest || latest.root !== state.root) return;
-      const phase = latest.project.phases.find(item => item.id === data.researchEditPhase);
-      if ('researchNewPhase' in data || phase) {
-        const selector = phase ? `[data-research-edit-phase="${CSS.escape(phase.id)}"]` : '[data-research-new-phase]';
-        this.tools.editPhase(latest, projectToday(latest.project.timezone), phase, () => {
-          this.content.querySelector<HTMLButtonElement>(selector)?.focus({ preventScroll: true });
-        });
-      }
       return;
     }
     if (data.researchEdit || data.researchNew) {

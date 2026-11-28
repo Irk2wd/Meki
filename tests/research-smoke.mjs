@@ -1197,7 +1197,13 @@ try {
     if (useRestoredFocus) {
       assert.ok(await open.evaluate(button => button === document.activeElement));
       await page.keyboard.press('Enter');
-    } else await open.click();
+    } else {
+      // Start a real project refresh at activation so a fast click during disk I/O is reproducible.
+      await open.evaluate(button => button.addEventListener('click', () => {
+        document.querySelector('.research-toolbar [data-action="refresh"]').click();
+      }, { once:true }));
+      await open.click();
+    }
     await phaseDialog.waitFor({ state: 'visible' });
     await phaseDialog.getByLabel('阶段名称').fill(title);
     const startDate = phaseDialog.getByLabel('开始日期');
