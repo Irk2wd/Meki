@@ -51,6 +51,23 @@ test('release versions are ordered numerically; drafts, prereleases and malforme
   assert.throws(() => policy.asset({ ...update.release, assets: [...update.release.assets, update.release.assets[0]] }, update.release.assets[0].name));
 });
 
+test('beta installers have signed manifests and can upgrade to the next stable release', () => {
+  const beta = '1.6.2-beta.1', pair = keys();
+  const update = fixture(pair, { version: beta });
+  assert.equal(policy.verifyManifest(update.envelope, pair.publicKey).version, beta);
+  assert.equal(policy.names(beta, 'darwin').installer, 'mekiR-1.6.2-beta.1-macOS-universal.dmg');
+  assert.equal(policy.names(beta, 'win32').installer, 'mekiR-1.6.2-beta.1-Setup-x64.exe');
+  assert.ok(policy.newer(beta, '1.6.1'));
+  assert.ok(policy.newer('1.6.2-beta.10', '1.6.2-beta.2'));
+  assert.ok(policy.newer('1.6.2', beta));
+  assert.equal(policy.newer(beta, '1.6.2'), false);
+  assert.equal(policy.newer(beta, beta), false);
+  for (const invalid of ['1.6.2-beta.0', '1.6.2-beta.01', '1.6.2-beta.1.2']) assert.throws(() => policy.version(invalid));
+  // Both the mirror and GitHub discover updates through stable release tags.
+  assert.throws(() => policy.versionFromTag('mekir-v' + beta));
+  assert.throws(() => policy.releaseInfo({ ...update.release, tag_name: 'mekir-v' + beta, prerelease: false }));
+});
+
 test('signed manifests bind the code, installer, platform and release; substituted signatures fail', () => {
   const pair = keys(), update = fixture(pair);
   assert.deepEqual(policy.verifyManifest(update.envelope, pair.publicKey), update.manifest);

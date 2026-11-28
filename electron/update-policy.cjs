@@ -2,7 +2,7 @@
 const { t } = require('./i18n.mjs');
 
 const crypto = require('node:crypto');
-const { APP_ID, REPOSITORY, UPDATE_PREFIX, installerName } = require('./app-identity.cjs');
+const { APP_ID, REPOSITORY, UPDATE_PREFIX, installerName, parseVersion } = require('./app-identity.cjs');
 // Older updaters cannot compare installed icons, so they must use a full installer.
 const BOOTSTRAP_VERSION = 3;
 const MAX_PAYLOAD = 512 * 1024 * 1024;
@@ -10,13 +10,15 @@ const MAX_DOWNLOAD = 2 * 1024 * 1024 * 1024;
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const hashPattern = /^[a-f0-9]{64}$/;
 function version(value) {
-  if (typeof value !== 'string' || !/^(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})$/.test(value)) throw new Error(t("更新版本号无效。"));
-  return value.split('.').map(Number);
+  const parts = parseVersion(value);
+  if (!parts) throw new Error(t("更新版本号无效。"));
+  return parts;
 }
 function newer(left, right) {
   const a = version(left), b = version(right);
   for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
-  return false;
+  // The final release follows all betas with the same major, minor and patch.
+  return (a[3] ?? Infinity) > (b[3] ?? Infinity);
 }
 function names(value, platform) {
   version(value);

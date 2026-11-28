@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from release_version import VERSION
 
 # The workflow runs this tool from the pinned default-branch checkout.
 ROOT = pathlib.Path.cwd().resolve()
@@ -69,7 +70,9 @@ def collect_delivery(directory, output, edition, version, combined_release):
 
 def publish(plan, directory):
     version, editions, tag = plan['version'], plan['editions'], plan['tag']
-    require(re.fullmatch(r'\d+\.\d+\.\d+', version), 'Invalid release version')
+    require(re.fullmatch(VERSION, version), 'Invalid release version')
+    prerelease = '-beta.' in version
+    channel = '--prerelease=' + str(prerelease).lower()
     source_tags = {'Meki': 'v' + version, 'mekiR': 'mekir-v' + version}
     products = [edition['product'] for edition in editions]
     require(products and set(products) <= source_tags.keys() and len(set(products)) == len(products), 'Invalid release editions')
@@ -78,8 +81,9 @@ def publish(plan, directory):
     require(tag == source_tags['Meki' if 'Meki' in products else 'mekiR'], 'Release plan has a mismatched publication tag')
     combined_release = len(products) == 2
     title = ' / '.join(products) + ' ' + version
-    existing = gh('release', 'view', tag, '--json', 'isDraft', check=False)
+    existing = gh('release', 'view', tag, '--json', 'isDraft,isPrerelease', check=False)
     if existing.returncode == 0 and not json.loads(existing.stdout)['isDraft']:
+        require(json.loads(existing.stdout)['isPrerelease'] == prerelease, 'Published release is on the wrong channel')
         print(tag + ' is already published.')
         return
 
@@ -102,15 +106,15 @@ def publish(plan, directory):
             body = '标准版的安装包以 `Meki-` 开头，研究版以 `mekiR-` 开头。\n\n' + body
         notes.write_text(body, encoding='utf-8')
         if existing.returncode:
-            gh('release', 'create', tag, '--verify-tag', '--draft', '--title', title, '--notes-file', str(notes))
+            gh('release', 'create', tag, '--verify-tag', '--draft', channel, '--title', title, '--notes-file', str(notes))
         else:
-            gh('release', 'edit', tag, '--title', title, '--notes-file', str(notes))
+            gh('release', 'edit', tag, channel, '--title', title, '--notes-file', str(notes))
         gh('release', 'upload', tag, *(str(output / name) for name in sorted(checksums)), '--clobber')
 
         repository = gh('repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner').stdout.strip()
         release = json.loads(gh('api', '--paginate', 'repos/' + repository + '/releases?per_page=100',
                                 '--jq', '.[] | select(.tag_name == "' + tag + '")').stdout)
-        require(release['draft'] and not release['prerelease'], 'Release must remain a draft during upload')
+        require(release['draft'] and release['prerelease'] == prerelease, 'Wrong draft state or release channel during upload')
         assets = release['assets']
         require(len(assets) == len(checksums) and {asset['name'] for asset in assets} == set(checksums),
                 'Release asset inventory differs from the verified delivery')
@@ -119,10 +123,10 @@ def publish(plan, directory):
             require(asset['state'] == 'uploaded' and asset['size'] == file.stat().st_size, 'Incomplete release upload')
             require(asset.get('digest') == 'sha256:' + checksums[file.name], 'Uploaded release checksum mismatch: ' + file.name)
 
-        latest = '--latest' if 'Meki' in products else '--latest=false'
-        gh('release', 'edit', tag, '--draft=false', latest)
+        latest = '--latest' if 'Meki' in products and not prerelease else '--latest=false'
+        gh('release', 'edit', tag, '--draft=false', channel, latest)
         published = json.loads(gh('release', 'view', tag, '--json', 'isDraft,isPrerelease,url').stdout)
-        require(not published['isDraft'] and not published['isPrerelease'], 'Release was not published')
+        require(not published['isDraft'] and published['isPrerelease'] == prerelease, 'Unexpected published release channel')
         print(published['url'])
 
 
