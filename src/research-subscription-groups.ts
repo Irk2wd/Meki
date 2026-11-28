@@ -14,7 +14,8 @@ export class SubscriptionGroups {
   private checked = new Set<string>();
   private session = 0;
 
-  constructor(private openProject: (c: PreviewConnection) => Promise<void>) {
+  constructor(private openProject: (c: PreviewConnection) => Promise<void>,
+    private copiesRemoved: (ids: string[]) => Promise<void>) {
     this.dialog.id = 'research-subscription-groups';
     this.dialog.setAttribute('aria-labelledby', 'subscription-groups-title');
     this.dialog.addEventListener('close', () => { this.session++; this.dialog.replaceChildren(); });
@@ -85,6 +86,7 @@ export class SubscriptionGroups {
       if (button.dataset.upgrade) void connect(() => window.meki.previewAccountUpgrade(button.dataset.upgrade!));
       if (button.hasAttribute('data-logout') && edit) void this.work(async () => {
         await window.meki.previewAccountLogout(edit.id);
+        await this.copiesRemoved(edit.selected.map(copy => copy.id));
         if (seq === this.session) await this.show();
       });
     };
@@ -197,6 +199,7 @@ export class SubscriptionGroups {
           else await this.reload(account.id,seq);
         } else if (button.dataset.removeCopy) {
           await window.meki.previewUnsubscribe(button.dataset.removeCopy);
+          await this.copiesRemoved([button.dataset.removeCopy]);
           await this.reload(account.id,seq);
         }
       });

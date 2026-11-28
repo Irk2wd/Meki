@@ -402,10 +402,8 @@ export class ResearchWorkspace {
   private syncStatus = '';
   private nextSubscriptionCheck = 0;
   private syncingSubscription?: Promise<void>;
-  private groups = new SubscriptionGroups(c => this.openSubscription(c));
-  private remote = new RemotePreviewUI(c => this.openSubscription(c), async id => {
-    if (id === this.subscription?.id) { this.useLocalProject(); await this.show(); }
-  });
+  private groups = new SubscriptionGroups(c => this.openSubscription(c), ids => this.closeRemovedProject(ids));
+  private remote = new RemotePreviewUI(c => this.openSubscription(c), id => this.closeRemovedProject([id]));
   readonly sharedReader = new SubscribedReader(id => this.openReference(id),
     () => this.hooks.settings(), editor => this.hooks.readerCreated(editor), (message, error) => this.hooks.notify(message, error));
   private readonly aiSettings = new ResearchAISettingsDialog();
@@ -564,12 +562,7 @@ export class ResearchWorkspace {
     });
     this.dialog.addEventListener('submit', event => { event.preventDefault(); void this.submit(); });
     window.meki.onPreviewRemoved(ids => {
-      if (!this.subscription || !ids.includes(this.subscription.id)) return;
-      this.comparisonViewer.close();
-      this.projectSearch.close();
-      this.returnToSearch = undefined;
-      this.useLocalProject();
-      void this.show().catch(error => this.hooks.notify(errorText(error),true));
+      void this.closeRemovedProject(ids).catch(error => this.hooks.notify(errorText(error),true));
     });
     this.projectPicker.addEventListener('click', event => {
       const target = event.target as HTMLElement;
@@ -635,6 +628,15 @@ export class ResearchWorkspace {
     localStorage.setItem('mekir.lastSubscription', connection.id);
     await this.show();
     if (this.subscription === connection) void this.syncSubscription();
+  }
+
+  private async closeRemovedProject(ids: string[]) {
+    if (!this.subscription || !ids.includes(this.subscription.id)) return;
+    this.comparisonViewer.close();
+    this.projectSearch.close();
+    this.returnToSearch = undefined;
+    this.useLocalProject();
+    await this.show();
   }
 
   useLocalProject() {

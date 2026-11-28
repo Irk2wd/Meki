@@ -75,6 +75,7 @@ try {
   await row('forest').locator('summary').click();
   await row('forest').locator('[data-remove-copy]').click();
   await row('forest').getByText('仅云端').waitFor();
+  await page.locator('#research-workspace [data-subscription-status]').waitFor({state:'detached'});
   assert.deepEqual(await page.evaluate(() => window.meki.previewSubscriptions()),[]);
   assert.equal((await page.evaluate(() => window.meki.previewAccounts()))[0].catalog.groups.length,2);
   assert.equal(await page.evaluate(() => localStorage.getItem('mekir.lastSubscription')),null);
