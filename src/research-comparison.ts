@@ -89,6 +89,8 @@ export class ComparisonViewer {
     this.updateZoomControls();
   });
 
+  close() { this.dialog.close(); }
+
   constructor() {
     this.dialog.id = 'research-comparison-dialog';
     this.dialog.setAttribute('aria-labelledby', 'research-comparison-title');

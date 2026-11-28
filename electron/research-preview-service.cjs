@@ -3,6 +3,9 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const {randomUUID} = require('node:crypto');
+const {EventEmitter} = require('node:events');
+const {PreviewAccounts, denied} = require('./research-preview-accounts.cjs');
+const {validateCatalog, accountName} = require('./research-preview-catalog.cjs');
 const {atomicWrite, digest, pathKey, readBytes} = require('./file-store.cjs');
 const {ResearchStore} = require('./research-store.cjs');
 const {assert, RECORD_FILE} = require('./research-model.cjs');
@@ -54,9 +57,11 @@ const vault = {
   },
 };
 
-class PreviewService {
+class PreviewService extends EventEmitter {
   constructor(directory, {credentials = vault, thumbnail = nativeThumbnail} = {}) {
+    super();
     this.directory = directory;
+    this.accounts = new PreviewAccounts(this);
     this.credentials = credentials;
     this.thumbnail = thumbnail;
     this.connections = new Map();
@@ -66,12 +71,29 @@ class PreviewService {
   }
   async init() {
     await privateDir(this.directory);
+    let configurationIntact = true;
     for (const f of await fs.readdir(this.directory)) {
       if (!/^(?:[a-f0-9-]{36}|[a-f0-9]{64})\.json$/.test(f)) continue;
       try {
         const c = JSON.parse(await fs.readFile(path.join(this.directory,f),'utf8'));
-        if (f === `${c.id}.json` && (c.role === 'reader' ? uuid.test(c.id) : c.role === 'publisher' && validHash(c.id))) this.connections.set(c.id,c);
-      } catch (error) { console.warn('Could not load remote preview connection',f,error.code || error.name); }
+        if (c.role === 'account') {
+          if (f === c.id + '.json' && uuid.test(c.id) && accountName(c.username) && endpoint(c.url) === c.url &&
+              Array.isArray(c.selected) && c.selected.every(item => uuid.test(item.id) && validId(item.projectId))) {
+            c.catalog = validateCatalog(c.catalog);
+            this.connections.set(c.id,c);
+          } else configurationIntact = false;
+          continue;
+        }
+        if (f === `${c.id}.json` && (c.role === 'reader' ? uuid.test(c.id) : c.role === 'publisher' && validHash(c.id))) {
+          this.connections.set(c.id,c);
+        } else configurationIntact = false;
+      } catch (error) { configurationIntact = false; console.warn('Could not load remote preview connection',f,error.code || error.name); }
+    }
+    for (const c of this.accounts.readers()) await this.accounts.retireLegacy(c.id);
+    if (!configurationIntact) return this;
+    const live = new Set(this.readers().map(c => c.id));
+    for (const f of await fs.readdir(this.directory,{withFileTypes:true})) {
+      if (f.isDirectory() && uuid.test(f.name) && !live.has(f.name)) await fs.rm(this.cache(f.name).dir,{recursive:true,force:true});
     }
     return this;
   }
@@ -111,9 +133,13 @@ class PreviewService {
     return {...view, error:this.errors.get(c.id)?.message || ''};
   }
   publisher(root) { return this.info(this.connections.get(publisherId(root))); }
-  readers() { return [...this.connections.values()].filter(c => c.role === 'reader').map(c => this.info(c)); }
+  readers() {
+    const managed = this.accounts.readers(), ids = new Set(managed.map(c => c.id));
+    const direct = [...this.connections.values()].filter(c => c.role === 'reader' && !ids.has(c.id));
+    return [...direct,...managed].map(c => this.info(c));
+  }
   reader(id) {
-    const c = this.connections.get(id);
+    const c = this.accounts.reader(id) || this.connections.get(id);
     assert(c?.role === 'reader', '找不到这项远程订阅。');
     return c;
   }
@@ -129,7 +155,10 @@ class PreviewService {
     else if (username) throw Error('请为这个地址填写密码。');
     return {...old,url,username,secret};
   }
-  async dav(c) { return new PreviewDAV(c.url, c.username, await this.credentials.open(c.secret)); }
+  async dav(c) {
+    const credentials = c.accountId ? this.accounts.get(c.accountId) : c;
+    return new PreviewDAV(c.url, c.username, await this.credentials.open(credentials.secret));
+  }
   async save(c) {
     await writeJSON(path.join(this.directory,`${c.id}.json`),c);
     this.connections.set(c.id,c);
@@ -188,7 +217,9 @@ class PreviewService {
   }
   async cached(id) {
     this.reader(id);
-    return this.readCache(id);
+    const state = await this.readCache(id);
+    this.reader(id);
+    return state;
   }
   async readCache(id) {
     const saved = await readBytes(this.cache(id).file,maxSnapshot+4096).catch(absent);
@@ -206,7 +237,7 @@ class PreviewService {
     const old = await this.readCache(c.id);
     const state = await (await this.dav(c)).download(c.projectId,cache,old);
     if (state !== old) await writeJSON(cache.file,state);
-    await this.save({...c,title:state.snapshot.project.title,projectId:state.pointer.projectId,publishedAt:state.pointer.publishedAt});
+    if (!c.accountId) await this.save({...c,title:state.snapshot.project.title,projectId:state.pointer.projectId,publishedAt:state.pointer.publishedAt});
     const keep = mediaHashes(state.snapshot);
     for (const f of await fs.readdir(cache.dir)) {
       if (/^[\da-f]{64}\.(thumb|png)$/.test(f) && (f.endsWith('.png') || !keep.has(f.slice(0,64)))) await fs.unlink(path.join(cache.dir,f)).catch(absent);
@@ -216,12 +247,24 @@ class PreviewService {
   subscribe(input,id) {
     if (!id) {
       const url = endpoint(input.url);
-      return this.run('subscribe:'+url,() => {
-        const existing = [...this.connections.values()].find(c => c.role === 'reader' && c.url === url);
+      return this.run('subscribe:'+url,async () => {
+        const username = input.username?.trim() || '';
+        const managed = this.accounts.readers().find(c => c.url === url && c.username === username);
+        if (managed) {
+          if (input.password) {
+            const account = this.accounts.get(managed.accountId);
+            await this.accounts.login({url:account.url,username,password:input.password},account.id);
+          }
+          await this.refresh(managed.id);
+          return this.info(this.reader(managed.id));
+        }
+        const existing = [...this.connections.values()].find(c => c.role === 'reader' && c.url === url && c.username === username);
         return this.connectReader(input,existing?.id || randomUUID());
       });
     }
-    return this.connectReader(input,this.reader(id).id);
+    const reader = this.reader(id);
+    assert(!reader.accountId, '请在订阅账号中修改连接地址。');
+    return this.connectReader(input,reader.id);
   }
   connectReader(input,id) {
     return this.run(id,async () => {
@@ -232,14 +275,26 @@ class PreviewService {
       return this.info(this.reader(id));
     });
   }
-  refresh(id) { return this.run(this.reader(id).id,() => this.pull(this.reader(id))); }
+  refresh(id) {
+    const c = this.reader(id);
+    if (c.accountId) return this.accounts.refreshProject(c);
+    return this.run(id,async () => {
+      try { return await this.pull(this.reader(id)); }
+      catch (error) {
+        if (denied(error)) await this.accounts.purge([id]);
+        throw error;
+      }
+    });
+  }
   async image(id,hash) {
     this.reader(id);
     const bytes = await this.cache(id).get(hash);
+    this.reader(id);
     return bytes ? `data:image/${imageFormat(bytes)};base64,${bytes.toString('base64')}` : null;
   }
   remove(id) {
-    this.reader(id);
+    const c = this.reader(id);
+    if (c.accountId) return this.accounts.removeProject(c);
     return this.run(id,async () => {
       await fs.rm(path.join(this.directory,`${id}.json`),{force:true});
       this.connections.delete(id);
@@ -253,6 +308,9 @@ function desktopPreviews() {
   if (!desktop) {
     const {app} = require('electron');
     desktop = new PreviewService(path.join(app.getPath('userData'),'remote-previews')).init().then(service => {
+      service.on('readers-removed', ids => {
+        for (const win of require('electron').BrowserWindow.getAllWindows()) if (!win.webContents.isDestroyed()) win.webContents.send('meki:preview-removed',ids);
+      });
       service.start(); app.once('will-quit',() => service.stop()); return service;
     });
   }

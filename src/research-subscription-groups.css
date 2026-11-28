@@ -1,0 +1,68 @@
+#research-subscription-groups {
+  box-sizing: border-box;
+  width: min(580px, calc(100vw - 32px));
+  max-height: calc(100dvh - 76px);
+  inset-block-start: 22px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--ui);
+  overflow: auto;
+}
+#research-subscription-groups :is(select, input:not([type=checkbox])) {
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+#research-subscription-groups :is(.groups-account, .groups-filter, footer, .group-project-actions) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.groups-account { padding-block: 6px 14px; }
+.groups-account > :first-child, .groups-filter select { margin-inline-end: auto; }
+.groups-filter { border-block-start: 1px solid var(--border); padding-block: 14px 8px; }
+#research-subscription-groups :is(small, .groups-hint, .groups-saved > span) {
+  font-size: var(--ui-small-size);
+  line-height: 1.5;
+  color: var(--muted);
+}
+.group-project-list { list-style: none; padding: 0; margin: 0; }
+.group-project-list > li {
+  display: flex;
+  align-items: start;
+  gap: 12px;
+  border-block-end: 1px solid var(--border);
+  padding: 12px 2px;
+}
+.group-project-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  cursor: pointer;
+}
+.group-project-name span { display: grid; gap: 2px; overflow-wrap: anywhere; }
+.group-project-name strong { font-weight: 550; }
+.group-project-actions small { padding: 6px 4px; }
+.group-project-actions details summary { display: grid; place-items: center; padding: 6px; cursor: pointer; border-radius: 6px; }
+.group-project-actions details summary:hover { background: var(--hover); }
+.group-project-actions details[open] { flex-basis: 100%; }
+.group-project-actions details[open] summary { width: fit-content; margin-inline-start: auto; }
+.group-project-actions details > div { display: grid; gap: 8px; padding: 6px 0; }
+.group-project-actions details label { display: flex; align-items: center; gap: 5px; font-size: var(--ui-small-size); }
+.groups-login, .groups-login label, .groups-saved { display: grid; gap: 6px; min-width: 0; }
+.groups-login { gap: 12px; }
+.groups-saved button { justify-self: start; }
+#research-subscription-groups [role=status] { white-space: pre-line; overflow-wrap: anywhere; color: var(--accent); font-size: var(--ui-small-size); }
+#research-subscription-groups footer { justify-content: flex-end; margin-top: 12px; }
+#research-subscription-groups footer > small, #research-subscription-groups [data-logout] { margin-inline-end: auto; }

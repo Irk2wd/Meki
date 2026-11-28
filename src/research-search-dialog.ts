@@ -56,6 +56,8 @@ export class ResearchSearchDialog {
     });
   }
 
+  close() { this.dialog.close(); }
+
   private open(doc:ResearchSearchDocument,hit:ResearchSearchHit,button:HTMLElement,returnToResults:boolean) {
     const root = this.root, scroll = this.dialog.scrollTop;
     const resume = () => {

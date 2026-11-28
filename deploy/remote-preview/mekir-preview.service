@@ -8,6 +8,7 @@ Group=mekir-preview
 EnvironmentFile=/etc/mekir-preview/endpoint
 RuntimeDirectory=mekir-preview
 ExecStart=/usr/sbin/apache2 -DFOREGROUND -f /etc/mekir-preview/httpd.conf
+ExecReload=/usr/sbin/apache2 -k graceful -f /etc/mekir-preview/httpd.conf
 Restart=on-failure
 NoNewPrivileges=yes
 ProtectSystem=strict

@@ -708,6 +708,17 @@ function registerIpc() {
   register('preview-publisher', async root => (await desktopPreviews()).publisher((await requireResearch(root)).root));
   register('preview-publish', async (root,input) => (await desktopPreviews()).configurePublisher(await requireResearch(root),input));
   register('preview-pause', async root => (await desktopPreviews()).pause((await requireResearch(root)).root));
+  const previewAccounts = async () => (await desktopPreviews()).accounts;
+  register('preview-accounts', async () => (await previewAccounts()).list());
+  register('preview-account-login', async (input,id) => (await previewAccounts()).login(input,id));
+  register('preview-account-upgrade', async id => (await previewAccounts()).upgrade(id));
+  register('preview-account-refresh', async id => (await previewAccounts()).refresh(id));
+  register('preview-account-pull', async (id,projects) => (await previewAccounts()).pull(id,projects));
+  register('preview-account-auto', async (id,value) => {
+    const service = await desktopPreviews(), reader = service.reader(id);
+    return service.accounts.setAuto(reader,value);
+  });
+  register('preview-account-logout', async id => (await previewAccounts()).logout(id));
   register('preview-subscriptions', async () => (await desktopPreviews()).readers());
   register('preview-subscribe', async (input,id) => (await desktopPreviews()).subscribe(input,id));
   register('preview-cached', async id => (await desktopPreviews()).cached(id));

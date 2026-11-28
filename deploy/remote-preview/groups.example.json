@@ -1,0 +1,9 @@
+{
+  "library": {"id": "research-library", "title": "科研项目库"},
+  "groups": [
+    {"id": "rendering", "title": "渲染研究组", "members": ["reader", "publisher"], "projects": ["forest-canopy-reading-demo"]}
+  ],
+  "projects": [
+    {"id": "forest-canopy-reading-demo", "title": "实时渲染性能研究", "directory": "render-research", "publishers": ["publisher"]}
+  ]
+}

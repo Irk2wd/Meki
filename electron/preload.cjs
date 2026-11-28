@@ -53,6 +53,18 @@ contextBridge.exposeInMainWorld('meki', Object.freeze({
   previewPublisher: root => invoke('preview-publisher',root),
   previewPublish: (root,input) => invoke('preview-publish',root,input),
   previewPause: root => invoke('preview-pause',root),
+  previewAccounts: () => invoke('preview-accounts'),
+  previewAccountLogin: (input,id) => invoke('preview-account-login',input,id),
+  previewAccountUpgrade: id => invoke('preview-account-upgrade',id),
+  previewAccountRefresh: id => invoke('preview-account-refresh',id),
+  previewAccountPull: (id,projects) => invoke('preview-account-pull',id,projects),
+  previewAccountAuto: (id,value) => invoke('preview-account-auto',id,value),
+  previewAccountLogout: id => invoke('preview-account-logout',id),
+  onPreviewRemoved: callback => {
+    const listener = (_,ids) => callback(ids);
+    ipcRenderer.on('meki:preview-removed',listener);
+    return () => ipcRenderer.removeListener('meki:preview-removed',listener);
+  },
   previewSubscriptions: () => invoke('preview-subscriptions'),
   previewSubscribe: (input,id) => invoke('preview-subscribe',input,id),
   previewCached: id => invoke('preview-cached',id),

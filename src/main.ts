@@ -723,7 +723,7 @@ async function dispatch(action: string, payload?: unknown, origin?: HTMLElement)
     await openResearchProject(undefined, action === 'research-demo'); return;
   }
   if (researchUI.visible && researchUI.readOnly) {
-    if (action === 'refresh') { await researchUI.syncSubscription(); return; }
+    if (action === 'refresh') { await researchUI.syncSubscription(true); return; }
     if (action === 'quick-open' || action === 'workspace-search') { el<HTMLButtonElement>('[data-research-search]').click(); return; }
     if (action === 'document-link') {
       const id = researchLinkId(String(payload));

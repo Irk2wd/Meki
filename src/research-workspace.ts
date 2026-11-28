@@ -7,6 +7,7 @@ import type { LinkedResearchSummary, ResearchBatch, ResearchEntry, ResearchField
 import { icon } from './icons';
 import { ComparisonGridEditor, ComparisonViewer } from './research-comparison';
 import { ResearchAISettingsDialog } from './research-ai-settings';
+import { SubscriptionGroups } from './research-subscription-groups';
 import { RemotePreviewUI } from './research-remote-preview';
 import type { PreviewConnection } from '../shared/research-preview';
 import { SubscribedReader } from './research-subscribed-reader';
@@ -401,6 +402,7 @@ export class ResearchWorkspace {
   private syncStatus = '';
   private nextSubscriptionCheck = 0;
   private syncingSubscription?: Promise<void>;
+  private groups = new SubscriptionGroups(c => this.openSubscription(c));
   private remote = new RemotePreviewUI(c => this.openSubscription(c), async id => {
     if (id === this.subscription?.id) { this.useLocalProject(); await this.show(); }
   });
@@ -561,8 +563,21 @@ export class ResearchWorkspace {
       if (target.name === 'phaseId' && !this.editing) this.fillCoverage();
     });
     this.dialog.addEventListener('submit', event => { event.preventDefault(); void this.submit(); });
+    window.meki.onPreviewRemoved(ids => {
+      if (!this.subscription || !ids.includes(this.subscription.id)) return;
+      this.comparisonViewer.close();
+      this.projectSearch.close();
+      this.returnToSearch = undefined;
+      this.useLocalProject();
+      void this.show().catch(error => this.hooks.notify(errorText(error),true));
+    });
     this.projectPicker.addEventListener('click', event => {
       const target = event.target as HTMLElement;
+      if (target.closest('[data-subscription-groups]')) {
+        this.projectPicker.close();
+        void this.groups.show().catch(error => this.hooks.notify(errorText(error),true));
+        return;
+      }
       if (target.closest('[data-remote-subscribe]')) { this.projectPicker.close(); this.remote.subscribe(); return; }
       const remote = target.closest<HTMLButtonElement>('[data-subscription]');
       if (remote) {
@@ -631,10 +646,15 @@ export class ResearchWorkspace {
     localStorage.removeItem('mekir.lastSubscription');
   }
 
-  async syncSubscription() {
+  async syncSubscription(manual = false): Promise<void> {
     const connection = this.subscription;
     if (!connection) return;
-    if (this.syncingSubscription) return this.syncingSubscription;
+    if (this.syncingSubscription) {
+      if (!manual) return this.syncingSubscription;
+      await this.syncingSubscription;
+      if (this.subscription !== connection) return;
+      if (this.syncingSubscription) return this.syncingSubscription;
+    }
     const request = this.subscriptionRequest;
     const status = (label: string) => {
       this.syncStatus = label;
@@ -645,6 +665,19 @@ export class ResearchWorkspace {
     status(t("正在检查远程更新…"));
     this.syncingSubscription = (async () => {
       try {
+        if (!manual) {
+          const saved = (await window.meki.previewSubscriptions()).find(c => c.id === connection.id);
+          if (saved?.accountId && !saved.auto) {
+            await window.meki.previewAccountRefresh(saved.accountId);
+            if (request === this.subscriptionRequest) {
+              Object.assign(connection,saved);
+              await this.refresh(true);
+              if (request === this.subscriptionRequest) status(t("已拉取 · 按需更新"));
+            }
+            return;
+          }
+          if (saved) Object.assign(connection,saved);
+        }
         const fresh = await window.meki.previewRefresh(connection.id);
         if (request !== this.subscriptionRequest) return;
         if (this.snapshot?.revision !== fresh.pointer.revision) await this.refresh(true);
@@ -983,7 +1016,7 @@ export class ResearchWorkspace {
         ${icon('folder', 17)}<span><strong>${escape(project.title)}</strong><small>${escape(project.root)}</small></span></button></li>`).join('')}
         ${subscriptions.map(c => `<li><button type="button" data-subscription="${escape(c.id)}"${c.id === this.subscription?.id ? ' aria-current="true"' : ''}>
         ${icon('link', 17)}<span><strong>${escape(c.title)}</strong><small>${ht("远程订阅 · 只读")} · ${escape(c.url)}</small></span></button></li>`).join('')}</ul>
-      <div class="research-picker-actions"><button type="button" class="secondary-button" data-remote-subscribe>${ht("订阅远程项目")}</button><button type="button" class="primary-button" data-action="research-open-project">${ht("打开科研项目")}</button>
+      <div class="research-picker-actions"><button type="button" class="secondary-button" data-subscription-groups>${ht("订阅组")}</button><button type="button" class="text-button" data-remote-subscribe>${ht("按项目地址订阅")}</button><button type="button" class="primary-button" data-action="research-open-project">${ht("打开科研项目")}</button>
         <button type="button" class="secondary-button" data-action="research-demo">${ht("创建示例项目")}</button></div>`;
     this.projectPicker.showModal();
   }
@@ -1788,9 +1821,14 @@ export class ResearchWorkspace {
     const state = this.snapshot;
     if (!button) return;
     if (this.subscription && button.dataset.action === 'refresh') {
-      event.stopPropagation(); await this.syncSubscription(); return;
+      event.stopPropagation(); await this.syncSubscription(true); return;
     }
-    if (this.subscription && button.hasAttribute('data-subscription-settings')) { this.remote.subscribe(this.subscription); return; }
+    if (this.subscription && button.hasAttribute('data-subscription-settings')) {
+      const active = (await window.meki.previewSubscriptions()).find(c => c.id === this.subscription?.id);
+      if (active?.accountId) await this.groups.show(active.accountId);
+      else if (active) this.remote.subscribe(active);
+      return;
+    }
     if (!state || (this.subscription && button.matches(projectWrites))) return;
     if (button.dataset.researchSectionToggle) { this.stageSections.toggle(button); return; }
     if (button.dataset.action === 'refresh') this.samples.show(state, true);

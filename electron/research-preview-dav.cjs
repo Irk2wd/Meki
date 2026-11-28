@@ -26,7 +26,7 @@ class PreviewDAV {
     if (!res.ok && !options.allow?.includes(res.status)) {
       await res.body?.cancel();
       const message = res.status === 401 || res.status === 403 ? '请检查账号和目录权限。' : res.status === 412 ? '发布期间远端已更新，请刷新后重试。' : '';
-      throw Error(`WebDAV ${method} · HTTP ${res.status} ${message}`.trim());
+      throw Object.assign(Error(`WebDAV ${method} · HTTP ${res.status} ${message}`.trim()), { status: res.status });
     }
     return res;
   }
