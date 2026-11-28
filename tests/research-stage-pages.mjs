@@ -57,6 +57,25 @@ export async function checkStagePages({ page, command, open, closeReader, archiv
     assert.ok(await nav.getByRole('button', { name: '上一页', exact: true }).isDisabled());
     assert.ok(await nav.getByRole('button', { name: '下一页', exact: true }).isDisabled());
   }
+  async function checkFoldedPagers() {
+    const saved = [];
+    for (const kind of Object.keys(types)) {
+      const nav = page.locator(`nav.research-record-pages:has([data-research-record-size="${kind}"])`);
+      const heading = await nav.getAttribute('aria-labelledby');
+      const toggle = header(heading);
+      saved.push({ nav, toggle, number: await current(kind), size: await nav.getByRole('combobox').inputValue() });
+      await toggle.click();
+      assert.ok(await nav.isHidden(), `Folded ${kind} still shows its pager`);
+      assert.equal(await stage.locator('#' + heading).getAttribute('aria-describedby'), null);
+    }
+    assert.equal(await page.locator('nav.research-record-pages:visible').count(), 0);
+    for (const { nav, toggle, number, size } of saved) {
+      await toggle.click();
+      assert.ok(await nav.isVisible());
+      assert.equal(await nav.locator('[aria-current=page]').innerText(), number);
+      assert.equal(await nav.getByRole('combobox').inputValue(), size);
+    }
+  }
   for (const kind of Object.keys(types)) {
     assert.equal(await rows(kind).count(), 10);
     assert.equal(await list(kind).getByRole('combobox').inputValue(), '10');
@@ -70,6 +89,7 @@ export async function checkStagePages({ page, command, open, closeReader, archiv
   await turn('summary', '下一页');
   await turn('event', '下一页');
   await turn('comparison', '下一页');
+  await checkFoldedPagers();
   assert.equal(await rows('event').count(), 2);
   assert.equal(await rows('comparison').count(), 3);
   await list('comparison').locator('.research-sample-image img').first().waitFor();
@@ -132,12 +152,14 @@ export async function checkStagePages({ page, command, open, closeReader, archiv
     await size(kind, 'all');
     await checkOnlyPage(kind);
   }
+  await checkFoldedPagers();
   await figures.click();
   await page.reload();
   await page.waitForSelector('#shell[data-ready="true"]');
   await phase.click();
   assert.equal(await figures.getAttribute('aria-expanded'), 'false');
   assert.ok(await list('comparison').isHidden());
+  assert.ok(await page.locator('nav.research-record-pages[aria-labelledby="research-phase-comparisons-title"]').isHidden());
   assert.ok(await list('entry').isVisible());
   await figures.click();
   await phase.click();

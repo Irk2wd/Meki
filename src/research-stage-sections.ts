@@ -35,6 +35,11 @@ export class StageSections {
     const collapsed = !body.hidden;
     body.hidden = collapsed;
     button.setAttribute('aria-expanded', String(!collapsed));
+    // A heading can still announce a hidden page range through aria-describedby.
+    const heading = button.parentElement;
+    if (collapsed && heading?.getAttribute('aria-describedby') === `${id}-range`) {
+      heading.removeAttribute('aria-describedby');
+    }
     if (!remember) return;
     const key = this.prefix + id;
     // Independent keys keep simultaneous changes to different sections in separate windows.
