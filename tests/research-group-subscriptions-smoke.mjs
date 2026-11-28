@@ -15,16 +15,18 @@ const env = {...process.env,MEKI_TEST:'1',MEKI_USER_DATA:path.join(temp,'profile
   MEKI_TEST_RESEARCH_PARENT:temp,MEKI_TEST_DISCARD:'discard'};
 delete env.ELECTRON_RUN_AS_NODE;
 let app, page;
-const errors = [];
+const results = [], errors = [];
 const catalogOnly = () => assert.ok(host.calls.length > 0 && host.calls.every(p => p === '/_mekir/accounts/member.json'),host.calls.join(', '));
 try {
   app = await electron.launch({executablePath:process.env.MEKI_EXECUTABLE || require('electron'),args:process.env.MEKI_EXECUTABLE ? [] : [root],env});
-  // Use the isolated test process's credential provider without prompting the user's keychain.
-  await app.evaluate(({safeStorage}) => {
-    safeStorage.isAsyncEncryptionAvailable = async () => true;
-    safeStorage.encryptStringAsync = async text => Buffer.from(text);
-    safeStorage.decryptStringAsync = async bytes => ({result:bytes.toString()});
-  });
+  // Windows runners can exercise the native vault. Other hosts may require an interactive keychain.
+  if (process.platform !== 'win32') {
+    await app.evaluate(({safeStorage}) => {
+      safeStorage.isAsyncEncryptionAvailable = async () => true;
+      safeStorage.encryptStringAsync = async text => Buffer.from(text);
+      safeStorage.decryptStringAsync = async bytes => ({result:bytes.toString()});
+    });
+  }
   page = await app.firstWindow();
   page.setDefaultTimeout(10000);
   page.on('pageerror', e => errors.push(e.message));
@@ -42,6 +44,7 @@ try {
   assert.equal(await dialog.locator('[data-group-project]').count(),2);
   assert.ok(await dialog.locator('[data-pull]').isDisabled());
   catalogOnly();
+  results.push('Signing in lists projects from both groups without downloading project data');
   await dialog.locator('[data-group]').selectOption('graphics');
   assert.equal(await dialog.locator('[data-group-project]').count(),1);
   await row('forest').getByRole('checkbox').check();
@@ -53,6 +56,7 @@ try {
   assert.equal(host.calls.filter(p => p.includes('/snapshots/')).length,1);
   assert.equal(host.calls.filter(p => p.includes('/media/')).length,1);
   assert.ok(!host.calls.some(p => p.startsWith('/camera/')));
+  results.push('Only the selected project downloads a snapshot and thumbnails, across group filters');
   host.calls.length=0;
   await row('forest').locator('[data-open-copy]').click();
   await page.getByRole('heading',{name:'森林树冠',exact:true}).waitFor();
@@ -63,6 +67,7 @@ try {
   await page.locator('#research-workspace [data-action=refresh]').click();
   await page.locator('[data-subscription-status]').filter({hasText:'已同步'}).waitFor();
   assert.deepEqual(host.calls,['/_mekir/accounts/member.json','/trees/latest.json']);
+  results.push('The installed read-only timeline opens the local copy and refreshes only the current project');
   await picker();
   assert.equal(await page.locator('[data-subscription]').count(),1);
   await page.locator('[data-subscription-groups]').click();
@@ -77,6 +82,11 @@ try {
   await library();
   await row('trail').waitFor();
   assert.deepEqual(errors,[]);
+  results.push('Removing a local copy preserves the account and both group memberships');
+  const output = path.join(root,'test-results');
+  await fs.mkdir(output,{recursive:true});
+  const folder = await fs.mkdtemp(path.join(output,'group-subscriptions-'));
+  await fs.writeFile(path.join(folder,'results.json'),JSON.stringify({results,errors},null,2) + '\n');
   console.log('Group browser: one login, group filtering, selective download, read-only timeline and local removal passed.');
 } catch (error) {
   console.error('Requests:',host.calls,'status:',await page?.locator('dialog[open] [role=status]').allTextContents().catch(() => []),'renderer:',errors);
