@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>订阅管理 · mekiR</title>
+  <link rel="stylesheet" href="/admin.css">
+  <script src="/admin.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <div class="brand"><span class="mark" aria-hidden="true">m<sub>R</sub></span><span>mekiR</span></div>
+      <div class="library" id="library">订阅管理</div>
+      <nav aria-label="订阅管理">
+        <button data-view="group" aria-current="page">订阅组 <span></span></button>
+        <button data-view="project">项目 <span></span></button>
+        <button data-view="account">账号 <span></span></button>
+      </nav>
+      <div class="operator" id="operator"></div>
+    </aside>
+    <main>
+      <header class="page-head"><h1 id="heading">订阅组</h1><div class="actions">
+        <button id="refresh" type="button">刷新</button><button id="create" class="primary" disabled>新建订阅组</button>
+      </div></header>
+      <p role="status" class="notice" id="status" aria-live="polite">正在读取清单…</p>
+      <div class="workspace">
+        <section class="index" aria-label="条目列表">
+          <input type="search" id="filter" placeholder="筛选名称或 ID" aria-label="筛选名称或 ID">
+          <div id="items"></div>
+        </section>
+        <section id="detail" aria-label="条目详情"></section>
+      </div>
+    </main>
+  </div>
+  <dialog id="editor" aria-labelledby="edit-title">
+    <form id="edit-form">
+      <header><h2 id="edit-title"></h2><button data-close type="button" class="quiet" aria-label="关闭">×</button></header>
+      <div id="fields"></div>
+      <p role="alert" id="error"></p>
+      <footer><button id="remove" class="danger" type="button">移除</button><button type="button" data-close>取消</button><button class="primary" type="submit">保存</button></footer>
+    </form>
+  </dialog>
+  <dialog id="confirm" aria-labelledby="confirm-title"><form id="confirm-form">
+    <header><h2 id="confirm-title">确认移除</h2></header><p id="consequence"></p>
+    <footer><button data-cancel type="button" autofocus>取消</button><button class="destructive" type="submit">确认移除</button></footer>
+  </form></dialog>
+</body>
+</html>

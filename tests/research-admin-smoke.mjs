@@ -1,0 +1,90 @@
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+import {createInterface} from 'node:readline';
+import {fileURLToPath} from 'node:url';
+import {chromium} from 'playwright';
+
+const require = createRequire(import.meta.url);
+const {PreviewDAV} = require('../electron/research-preview-dav.cjs');
+const {PreviewService} = require('../electron/research-preview-service.cjs');
+const {digest} = require('../electron/file-store.cjs');
+const cwd = fileURLToPath(new URL('..',import.meta.url));
+const fixture = spawn('python3',['tests/research-admin-server.py','--serve'],{cwd,
+  env:{...process.env,PYTHONDONTWRITEBYTECODE:'1'},stdio:['pipe','pipe','inherit']});
+const finished = once(fixture,'exit');
+const lines = createInterface({input:fixture.stdout});
+const temp = await fs.mkdtemp(path.join(os.tmpdir(),'mekir-admin-client-'));
+let browser;
+try {
+  const [line] = await Promise.race([once(lines,'line'),finished.then(() => { throw Error('Apache fixture did not start'); })]);
+  const urls = JSON.parse(line);
+  browser = await chromium.launch({channel:process.platform === 'darwin' ? 'chrome' : undefined,headless:true});
+  const tab = await browser.newPage({viewport:{width:1190,height:810},httpCredentials:{username:'boss',password:'test-only-password',origin:urls.admin}});
+  const errors = [];
+  tab.on('pageerror', e => errors.push(String(e)));
+  await tab.goto(urls.admin);
+  const detail = tab.locator('#detail'), edit = tab.locator('#editor');
+  const area = kind => tab.locator(`[data-view="${kind}"]`).click();
+  const save = async () => { await edit.getByRole('button',{name:'保存',exact:true}).click(); await edit.waitFor({state:'hidden'}); };
+  await detail.getByRole('heading',{name:'渲染组',exact:true}).waitFor();
+  if (process.env.MEKIR_ADMIN_SCREENSHOT) await tab.screenshot({path:process.env.MEKIR_ADMIN_SCREENSHOT});
+  await area('account'); await tab.locator('#create').click();
+  await edit.locator('[name=id]').fill('lab-reader');
+  await edit.locator('[name=password]').fill('read-only-test');
+  await save();
+  await area('group'); await tab.locator('#create').click();
+  await edit.locator('[name=title]').fill('步道项目组');
+  await edit.getByRole('checkbox',{name:'lab-reader',exact:true}).check();
+  await save();
+  await area('project'); await tab.locator('#create').click();
+  await edit.locator('[name=title]').fill('树冠复测');
+  await edit.locator('[name=id]').fill('canopy-test');
+  await edit.locator('[name=directory]').fill('canopy');
+  await edit.getByRole('checkbox',{name:'步道项目组',exact:true}).check();
+  await edit.getByRole('checkbox',{name:'writer',exact:true}).check();
+  await save();
+  assert.equal(await detail.locator('code').textContent(),urls.data+'/canopy/');
+
+  const dav = new PreviewDAV(urls.data+'/canopy/','writer','test-only-password');
+  const snapshot = {format:'mekir-preview/1',asOf:'2026-11-14',project:{id:'canopy-test',title:'树冠复测',
+    description:'验证订阅组发布权限',phaseGoals:'hidden'},phases:[],items:[]};
+  const bytes = Buffer.from(JSON.stringify(snapshot));
+  await dav.publish({snapshot,bytes,revision:digest(bytes),media:new Map()});
+  const service = await new PreviewService(temp,{credentials:{seal:async () => 'test-handle',open:async () => 'read-only-test'}}).init();
+  const account = await service.accounts.login({url:urls.data,username:'lab-reader',password:'read-only-test'});
+  assert.deepEqual(account.catalog.projects.map(p => p.id),['canopy-test']);
+  assert.deepEqual(service.readers(),[]);
+  assert.deepEqual(await service.accounts.pull(account.id,['canopy-test']),{pulled:['canopy-test'],errors:[]});
+
+  await area('group');
+  await tab.locator('#filter').fill('步道');
+  await detail.getByRole('heading',{name:'步道项目组',exact:true}).waitFor();
+  await tab.locator('#edit').click();
+  await edit.locator('[name=title]').fill('步道复测组');
+  await edit.getByRole('checkbox',{name:'lab-reader',exact:true}).uncheck();
+  await save();
+  const fresh = await service.accounts.refresh(account.id);
+  assert.deepEqual(fresh.catalog.projects,[]);
+  assert.deepEqual(service.readers(),[]);
+  const stored = await dav.pointer();
+  assert.equal(stored.pointer.projectId,'canopy-test');
+  await tab.setViewportSize({width:375,height:760});
+  assert.ok(await tab.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await tab.locator('#edit').click();
+  await edit.locator('#remove').click();
+  await tab.locator('#confirm').getByRole('button',{name:'取消',exact:true}).click();
+  assert.ok(await edit.isVisible());
+  await edit.locator('#remove').click();
+  await tab.locator('#confirm').getByRole('button',{name:'确认移除',exact:true}).click();
+  await edit.waitFor({state:'hidden'});
+  assert.deepEqual(errors,[]);
+  console.log('Browser-created accounts, groups and project rights reached a real mekiR publisher and selective desktop reader; mobile layout and removal passed.');
+} finally {
+  await browser?.close(); lines.close(); fixture.stdin.end('\n'); await finished;
+  await fs.rm(temp,{recursive:true,force:true});
+}

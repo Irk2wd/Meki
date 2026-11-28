@@ -51,7 +51,7 @@ def quoted(path, directory=False):
     return f'"{value}"'
 
 
-def compile_policy(config, users, root, destination, users_path):
+def project_access(config, users, root):
     library = {'id': checked(config['library']['id'], ID), 'title': title(config['library']['title'])}
     projects = indexed(config['projects'])
     groups = indexed(config['groups'])
@@ -77,6 +77,11 @@ def compile_policy(config, users, root, destination, users_path):
         visible = {key for group in memberships for key in group['projects']}
         catalogs[user] = {'format': FORMAT, 'library': library, 'groups': memberships,
                           'projects': [{k: p[k] for k in ('id', 'title', 'directory')} for key, p in projects.items() if key in visible]}
+    return catalogs, readers
+
+
+def compile_policy(config, users, root, destination, users_path):
+    catalogs, readers = project_access(config, users, root)
     rules = [f'Alias /_mekir/accounts/ {quoted(destination / "catalogs", directory=True)}',
              f'<Directory {quoted(destination / "catalogs")}>', '  Options None', '  AllowOverride None',
              '  AuthType Basic', '  AuthzSendForbiddenOnFailure On', '  AuthName "mekiR subscriptions"', f'  AuthUserFile {quoted(users_path)}', '  Require all denied']
@@ -84,7 +89,8 @@ def compile_policy(config, users, root, destination, users_path):
         rules.extend([f'  <Files "{user}.json">', '    <RequireAll>', '      Require method GET',
                       f'      Require user {user}', '    </RequireAll>', '  </Files>'])
     rules.append('</Directory>')
-    for key, project in projects.items():
+    for project in config['projects']:
+        key = project['id']
         writers = set(project['publishers'])
         def require(names):
             return 'Require user ' + ' '.join(sorted(names)) if names else 'Require all denied'
@@ -95,13 +101,7 @@ def compile_policy(config, users, root, destination, users_path):
     return catalogs, '\n'.join(rules) + '\n'
 
 
-def generate(config_path, users_path, root, output):
-    config = json.loads(config_path.read_bytes())
-    users = {checked(line.split(':', 1)[0], ACCOUNT) for line in users_path.read_text().splitlines() if line}
-    seed = json.dumps([config, sorted(users), str(root.resolve()), str(output.resolve()), str(users_path.resolve())], sort_keys=True).encode()
-    generation = hashlib.sha256(Path(__file__).read_bytes() + seed).hexdigest()
-    destination = output / generation
-    catalogs, rules = compile_policy(config, users, root, destination, users_path)
+def ensure_directories(config, root):
     # Apache applies directory-specific WebDAV rules after the project directory exists.
     owner = root.stat()
     for project in config['projects']:
@@ -119,6 +119,16 @@ def generate(config_path, users_path, root, output):
                 except OSError:
                     directory.rmdir()
                     raise
+
+
+def generate(config_path, users_path, root, output):
+    config = json.loads(config_path.read_bytes())
+    users = {checked(line.split(':', 1)[0], ACCOUNT) for line in users_path.read_text().splitlines() if line}
+    seed = json.dumps([config, sorted(users), str(root.resolve()), str(output.resolve()), str(users_path.resolve())], sort_keys=True).encode()
+    generation = hashlib.sha256(Path(__file__).read_bytes() + seed).hexdigest()
+    destination = output / generation
+    catalogs, rules = compile_policy(config, users, root, destination, users_path)
+    ensure_directories(config, root)
     output.mkdir(mode=0o755, parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(dir=output))
     try:
@@ -155,4 +165,6 @@ if __name__ == '__main__':
     parser.add_argument('--root', type=Path, default=Path('/srv/mekir-previews'))
     parser.add_argument('--output', type=Path, default=Path('/etc/mekir-preview/policy'))
     args = parser.parse_args()
+    if args.config == Path('/etc/mekir-preview/groups.json') and args.output == Path('/etc/mekir-preview/policy') and Path('/etc/mekir-preview/admin.conf').exists():
+        parser.exit(2, '此服务器已启用订阅管理后台，请在管理页面中保存变更。\n')
     generate(args.config, args.users, args.root, args.output)

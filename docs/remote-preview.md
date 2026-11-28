@@ -1,5 +1,7 @@
 # 远程项目预览
 
+管理员在独立的网页后台维护账号、项目和订阅组。组内成员用桌面端选择要拉取的项目。
+
 电脑 A 在「项目设置 → 发布远程预览」里填写 WebDAV **项目目录**和发布账号，选择「保存并发布」。管理员将项目加入订阅组后，组内成员即可在自己的设备上发现它。
 
 电脑 B 打开「切换科研项目 → 订阅组」，用**订阅服务器根地址**和自己的账号登录。登录和「刷新清单」只读取组名和项目列表。可以按组筛选，跨组勾选想看的项目，然后点「拉取所选项目」。拉取范围是整个项目已发布的快照和缩略图。项目属于多个组时，同一个账号在本机共用一份副本。
@@ -27,7 +29,7 @@ project/
 
 发布器先上传内容，再用 WebDAV MOVE 切换 `latest.json`。订阅端核对项目 ID、快照和图片的 SHA-256，在下载完成后替换本地缓存。一个目录由一台 A 发布，可供多台 B 订阅。
 
-1. 在 A 暂停自动发布。迁移订阅组服务时，复制 `/srv/mekir-previews/`、`/etc/mekir-preview/groups.json` 和私有的 `/etc/mekir-preview/users`，保留订阅库 ID 和项目 ID。在新主机恢复相同权限，配置新 HTTPS 地址，按下节步骤重新生成权限配置。
+1. 在 A 暂停自动发布。复制 `/srv/mekir-previews/`。启用后台后，用 `readlink -f /var/lib/mekir-preview-admin/current` 取得当前版本目录，从**同一目录**备份 `groups.json` 和 `users`，另存 `/etc/mekir-preview/admin-users`。在新主机把组清单和订阅账号文件恢复到 `/etc/mekir-preview/`，把管理员文件恢复为 `root:mekir-preview`、模式 `0640`。启动基础服务后安装下方后台，已有账号、组和项目 ID 即可继续使用。仅使用命令行的旧服务直接从 `/etc/mekir-preview/` 备份组清单与账号文件。
 2. B 在「订阅组 → 账号设置」填写新根地址和此地址的密码。确认新服务的订阅库 ID 后，mekiR 会把现有副本连接到新地址。按单个项目地址订阅的设备可在该项目的「订阅设置」更换项目地址。
 3. A 在「发布远程预览」中换到新项目地址并恢复自动发布。用 B 拉取一次并核对最新进展，再退役旧服务。
 
@@ -35,7 +37,7 @@ project/
 
 ## 自建私有服务
 
-仓库的 [Apache 配置和 systemd 单元](../deploy/remote-preview/) 适用于 Debian 或 Ubuntu。样例采用 Tailscale Serve 终止 HTTPS，Apache 只监听回环地址。使用其他 HTTPS 反向代理时，在 `endpoint` 填对外地址即可。以下命令在服务器上运行，当前目录为仓库根目录。
+仓库的 [Apache 配置和 systemd 单元](../deploy/remote-preview/) 适用于 Debian 或 Ubuntu。样例采用 Tailscale Serve 终止 HTTPS，Apache 只监听回环地址。使用其他 HTTPS 反向代理时，在 `endpoint` 填对外地址即可。以下命令在服务器上运行，当前目录为仓库根目录。迁移已有服务时，保留恢复的 `users` 和 `groups.json`，跳过创建示例账号和复制示例清单的步骤。
 
 ```sh
 apt-get install --no-install-recommends apache2-bin apache2-utils python3
@@ -60,11 +62,31 @@ tailscale serve --bg --https=9443 http://127.0.0.1:17841
 
 把 `your-node.your-tailnet.ts.net` 换成服务器的实际 Tailscale DNS 名称。读者填 `https://your-node.your-tailnet.ts.net:9443/`，发布者填具体项目路径，例如 `https://your-node.your-tailnet.ts.net:9443/render-research/`。
 
-### 管理组与项目
+### 安装网页管理后台
 
-在 `users` 中用 `htpasswd -B` 添加账号。在 `groups.json` 的 `projects` 中登记项目的稳定 `id`、展示名称 `title`、服务器子目录 `directory` 和发布账号列表 `publishers`。每个组的 `members` 填用户名，`projects` 填项目 ID。一个账号可加入多个组，项目也可加入多个组。读权限取所有组的并集，写权限按项目的 `publishers` 单独指定。
+在运行预览服务的 Linux 主机上执行以下命令。后台共用现有 Apache，管理请求通过 CGI 调用 Python 标准库。安装器首次从现有组清单和订阅账号文件导入数据，并重启一次预览服务。再次运行安装器会沿用当前数据。日常增删成员、登记项目和重置密码在保存时生效。
 
-每次修改成员、项目或密码文件中的账号后，在服务器执行以下命令。编译器会校验账号引用和已发布的项目 ID，为新登记的项目建立目录，并生成每个账号的清单与相应的 WebDAV 读写规则。Apache 同时对项目原始地址和账号清单执行授权。
+```sh
+umask 077
+admin_accounts=$(mktemp)
+htpasswd -B "$admin_accounts" admin
+python3 deploy/remote-preview/install-admin.py \
+  --origin https://your-node.your-tailnet.ts.net:9444 --admin-users "$admin_accounts"
+rm "$admin_accounts"
+tailscale serve --bg --https=9444 http://127.0.0.1:17842
+```
+
+迁移时如果已恢复 `admin-users`，直接执行安装器并省略 `--admin-users` 即可。替换实际的 Tailscale 主机名后，在浏览器打开配置的管理网址，用独立管理员账号登录。订阅端继续连接原来的 `9443`。使用其他反向代理时，将管理域名或独立 HTTPS 端口指向 `127.0.0.1:17842`，同步调整 `--origin`。管理员和发布者上传的文档位于两个浏览器来源，即使发布内容包含网页，浏览器也会隔离它和管理页面。
+
+**账号**页可以创建账号、重置密码、调整加入的组，或移除账号及其发布授权。**项目**页可以登记发布端的项目 ID 和目录、复制 WebDAV 发布地址、选择所属组及可写入的发布账号。取消登记会保留项目快照。**订阅组**页可以创建组、改名，或同时调整组内的项目和成员。项目的阅读权限取各组并集，写入权限由该项目的可发布账号名单决定。
+
+后台把账号、成员关系、项目清单和 WebDAV 权限写入同一版本，再一次切换生效。两个管理员同时编辑时，较早打开的表单会提示刷新核对。磁盘保留当前和上一个管理版本。项目快照继续遵循原有保留计划。添加或重置后台管理员时，在主机运行 `htpasswd -B /etc/mekir-preview/admin-users 用户名`，保留文件原有权限。
+
+**管理接口**与网页使用相同的管理员认证。`GET /api` 返回可管理的账号名、组、项目和 `revision`。`POST /api` 提交 `revision`、`action` 和 `data`，使用 `Content-Type: application/json`、管理网址的 `Origin` 和 `X-MekiR-Request: admin`。`action` 包括 `group`、`project`、`account` 的 `create`、`update`、`remove`。版本过期返回 HTTP 409。发布账号和订阅读者使用各自原有的接口。
+
+### 仅使用文件管理的部署
+
+未安装后台时，可以用 `htpasswd -B /etc/mekir-preview/users 用户名` 维护订阅账号，并在 `groups.json` 中编辑 `projects`、每个组的 `members` 和项目 ID 列表。修改后执行以下命令。
 
 ```sh
 python3 /etc/mekir-preview/groups.py &&
@@ -72,6 +94,6 @@ python3 /etc/mekir-preview/groups.py &&
   systemctl reload mekir-preview
 ```
 
-组变更在客户端下次连上服务器检查清单时生效。项目移出一个组后，只要另一个已加入的组仍包含它，就能继续阅读。失去最后一个组的权限，或服务器拒绝该账号后，客户端会从项目列表移除相应项目并清理本机副本。离线设备将在重新联网检查时收到变更。
+客户端在下次刷新清单时收到组变更。项目移出一个组后，只要另一个已加入的组仍包含它，就可以继续阅读。设备重新联网并确认失去最后一项组权限时，会清理对应副本。
 
 每天的清理任务保留当前版、上一版和两版引用的图片。其他快照、缩略图和未完成的上传至少保留 24 小时，避免打断正在阅读或上传的设备。接入其他 WebDAV 时，可在其存储主机使用同一个 `prune.py <数据根目录>` 执行清理。
